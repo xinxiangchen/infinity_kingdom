@@ -25,7 +25,7 @@ func open(choices: Array[Dictionary], actor: Node, reason: String = "Relic Offer
 	active_choices = choices
 	active_actor = actor
 	title_label.text = reason
-	subtitle_label.text = "Equip one accessory. The current relic is replaced immediately."
+	subtitle_label.text = "Equip one relic. The current relic is replaced immediately."
 	_refresh_current()
 	_rebuild_choices()
 	visible = true
@@ -38,9 +38,9 @@ func close() -> void:
 func _apply_skin() -> void:
 	backdrop.color = Color(0.015, 0.018, 0.026, 0.76)
 	var panel := $Backdrop/CenterContainer/PanelContainer as PanelContainer
-	panel.add_theme_stylebox_override("panel", UISkin.red_panel_style())
+	panel.add_theme_stylebox_override("panel", UISkin.choice_panel_style())
 	var current_panel := $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/CurrentRow as PanelContainer
-	current_panel.add_theme_stylebox_override("panel", UISkin.texture_style(UISkin.asset("menu/menu_content_panel.png"), 34, 10))
+	current_panel.add_theme_stylebox_override("panel", UISkin.content_panel_style())
 	var icon_slot := $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/CurrentRow/IconSlot as PanelContainer
 	icon_slot.add_theme_stylebox_override("panel", UISkin.icon_slot_style())
 	UISkin.label(title_label, 28, Color(0.98, 0.90, 0.67))
@@ -68,14 +68,25 @@ func _rebuild_choices() -> void:
 func _choice_card(accessory: Dictionary) -> Button:
 	var button := Button.new()
 	button.text = ""
-	button.custom_minimum_size = Vector2(292, 320)
+	button.custom_minimum_size = Vector2(304, 336)
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	button.add_theme_stylebox_override("normal", UISkin.texture_style(UISkin.asset("choice/choice_card_normal.png"), 30, 12))
 	button.add_theme_stylebox_override("hover", UISkin.texture_style(UISkin.asset("choice/choice_card_hover.png"), 30, 12))
 	button.add_theme_stylebox_override("pressed", UISkin.texture_style(UISkin.asset("choice/choice_card_selected.png"), 30, 12))
+
+	var margin := MarginContainer.new()
+	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	margin.offset_left = 16
+	margin.offset_top = 16
+	margin.offset_right = -16
+	margin.offset_bottom = -16
+	button.add_child(margin)
+
 	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 8)
-	button.add_child(box)
+	box.add_theme_constant_override("separation", 7)
+	box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	margin.add_child(box)
+
 	var slot := PanelContainer.new()
 	slot.custom_minimum_size = Vector2(86, 86)
 	slot.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
@@ -91,25 +102,40 @@ func _choice_card(accessory: Dictionary) -> Button:
 	name_label.text = String(accessory.get("name", "Accessory"))
 	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	UISkin.label(name_label, 20, Color.WHITE)
+	name_label.custom_minimum_size = Vector2(0, 48)
+	UISkin.label(name_label, 18, Color.WHITE)
 	box.add_child(name_label)
+
+	var divider := TextureRect.new()
+	divider.custom_minimum_size = Vector2(0, 8)
+	divider.texture = UISkin.tex(UISkin.asset("frame/divider_gold_h_long.png"))
+	divider.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	divider.stretch_mode = TextureRect.STRETCH_SCALE
+	box.add_child(divider)
+
 	var rarity_label := Label.new()
 	rarity_label.text = String(accessory.get("rarity", "Common"))
 	rarity_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	UISkin.label(rarity_label, 14, _rarity_color(String(accessory.get("rarity", "Common"))))
 	box.add_child(rarity_label)
+
 	var summary_label := Label.new()
 	summary_label.text = String(accessory.get("summary", ""))
 	summary_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	summary_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	UISkin.label(summary_label, 14, Color(0.78, 0.84, 0.92))
+	summary_label.custom_minimum_size = Vector2(0, 58)
+	summary_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	UISkin.label(summary_label, 13, Color(0.78, 0.84, 0.92))
 	box.add_child(summary_label)
+
 	var effects_label := Label.new()
 	effects_label.text = AccessoryManager.describe_effects(accessory)
 	effects_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	effects_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	UISkin.label(effects_label, 13, Color(0.72, 0.92, 0.78))
+	effects_label.custom_minimum_size = Vector2(0, 42)
+	UISkin.label(effects_label, 12, Color(0.72, 0.92, 0.78))
 	box.add_child(effects_label)
+	UISkin.ignore_mouse_recursive(margin)
 	button.pressed.connect(func() -> void:
 		var accessory_id := String(accessory.get("id", ""))
 		AccessoryManager.equip(accessory_id, active_actor)

@@ -1,4 +1,4 @@
-[gd_scene load_steps=10 format=3 uid="uid://d1aya10kl4ab4"]
+[gd_scene load_steps=12 format=3 uid="uid://d1aya10kl4ab4"]
 
 [ext_resource type="PackedScene" path="res://ui/knight_hud.tscn" id="1"]
 [ext_resource type="Script" path="res://world.gd" id="2"]
@@ -7,6 +7,8 @@
 [ext_resource type="PackedScene" path="res://ui/audio_settings_panel.tscn" id="5"]
 [ext_resource type="PackedScene" path="res://ui/audio_shortcut_hint.tscn" id="6"]
 [ext_resource type="PackedScene" path="res://ui/accessory_choice.tscn" id="7"]
+[ext_resource type="PackedScene" path="res://ui/pause_menu.tscn" id="8"]
+[ext_resource type="PackedScene" path="res://ui/result_screen.tscn" id="9"]
 
 [sub_resource type="RectangleShape2D" id="1"]
 size = Vector2(1380, 12)
@@ -52,6 +54,10 @@ position = Vector2(700, 300)
 [node name="AudioShortcutHint" parent="." instance=ExtResource("6")]
 
 [node name="AccessoryChoice" parent="." instance=ExtResource("7")]
+
+[node name="PauseMenu" parent="." instance=ExtResource("8")]
+
+[node name="ResultScreen" parent="." instance=ExtResource("9")]
 
 [node name="Bounds" type="Node2D" parent="." unique_id=924020288]
 

@@ -43,6 +43,7 @@ Useful script options:
 ```powershell
 godot --headless --path . --quit --verbose
 godot --headless --path . --script res://tests/smoke_accessory_flow.gd
+godot --headless --path . --script res://tests/smoke_ui_screens.gd
 ```
 
 GitHub Actions runs the same smoke checks on every push and pull request.

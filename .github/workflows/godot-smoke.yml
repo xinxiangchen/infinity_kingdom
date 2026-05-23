@@ -29,3 +29,6 @@ jobs:
 
       - name: Accessory flow smoke test
         run: Godot_v4.6.3-stable_linux.x86_64 --headless --path . --script res://tests/smoke_accessory_flow.gd
+
+      - name: UI screens smoke test
+        run: Godot_v4.6.3-stable_linux.x86_64 --headless --path . --script res://tests/smoke_ui_screens.gd

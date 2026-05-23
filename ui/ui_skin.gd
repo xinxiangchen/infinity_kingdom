@@ -45,6 +45,15 @@ static func red_panel_style() -> StyleBox:
 static func gold_panel_style() -> StyleBox:
 	return texture_style(asset("frame/panel_large_gold.png"), 42, 16)
 
+static func menu_panel_style() -> StyleBox:
+	return texture_style(asset("menu/menu_panel_tall.png"), 40, 16)
+
+static func choice_panel_style() -> StyleBox:
+	return texture_style(asset("choice/choice_panel_bg.png"), 36, 14)
+
+static func content_panel_style() -> StyleBox:
+	return texture_style(asset("menu/menu_content_panel.png"), 34, 10)
+
 static func icon_slot_style() -> StyleBox:
 	return texture_style(asset("frame/icon_slot_gold.png"), 24, 5)
 
@@ -70,9 +79,30 @@ static func button_styles(button: Button, size: String = "medium") -> void:
 static func label(label: Label, size: int, color: Color = Color(0.91, 0.89, 0.82)) -> void:
 	label.add_theme_font_size_override("font_size", size)
 	label.add_theme_color_override("font_color", color)
+	label.add_theme_constant_override("line_spacing", 2)
+
+static func texture_bar(bar: TextureProgressBar, meter: String) -> void:
+	var prefix := "hp"
+	if meter == "defense":
+		prefix = "defense"
+	elif meter == "inspiration" or meter == "mana":
+		prefix = "mana"
+	bar.texture_under = tex(asset("bar/%s_bar_base.png" % prefix))
+	bar.texture_progress = tex(asset("bar/%s_bar_fill.png" % prefix))
+	bar.texture_over = tex(asset("bar/%s_bar_frame.png" % prefix))
+	bar.nine_patch_stretch = true
+	bar.min_value = 0.0
+	bar.max_value = 1.0
+	bar.value = 1.0
+
+static func ignore_mouse_recursive(node: Node) -> void:
+	if node is Control:
+		(node as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for child in node.get_children():
+		ignore_mouse_recursive(child)
 
 static func _apply_button_text(button: Button) -> void:
-	button.add_theme_font_size_override("font_size", 16)
+	button.add_theme_font_size_override("font_size", 15)
 	button.add_theme_color_override("font_color", Color(0.94, 0.86, 0.64))
 	button.add_theme_color_override("font_hover_color", Color(1.0, 0.93, 0.74))
 	button.add_theme_color_override("font_pressed_color", Color(0.78, 0.65, 0.42))

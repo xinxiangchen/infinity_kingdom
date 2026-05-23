@@ -20,6 +20,8 @@ const CONTROL_HINT := "Controls: WASD move, J attack, K / L / I skills. F10 audi
 @onready var audio_settings_panel: CanvasLayer = $AudioSettingsPanel
 @onready var audio_shortcut_hint: CanvasLayer = $AudioShortcutHint
 @onready var accessory_choice: CanvasLayer = $AccessoryChoice
+@onready var pause_menu: CanvasLayer = $PauseMenu
+@onready var result_screen: CanvasLayer = $ResultScreen
 
 var player_character: Node = null
 var current_encounter: Node = null
@@ -33,6 +35,12 @@ func _ready() -> void:
 		character_select.character_selected.connect(_on_character_selected)
 	if accessory_choice != null and accessory_choice.has_signal("accessory_choice_made"):
 		accessory_choice.accessory_choice_made.connect(_on_accessory_choice_made)
+	if pause_menu != null:
+		pause_menu.resume_requested.connect(_on_pause_resume_requested)
+		pause_menu.audio_requested.connect(_on_pause_audio_requested)
+		pause_menu.restart_requested.connect(_on_pause_restart_requested)
+	if result_screen != null and result_screen.has_signal("closed"):
+		result_screen.closed.connect(_on_result_closed)
 	if battle_status != null and battle_status.has_method("set_message"):
 		battle_status.set_message(
 			"Town Boss Trial",
@@ -69,11 +77,25 @@ func _unhandled_input(event: InputEvent) -> void:
 				_sync_audio_hint_state()
 				get_viewport().set_input_as_handled()
 				return
+			if pause_menu != null and pause_menu.has_method("is_open") and bool(pause_menu.is_open()):
+				pause_menu.close()
+				get_viewport().set_input_as_handled()
+				return
+			if accessory_choice != null and accessory_choice.visible:
+				return
+			if pause_menu != null and pause_menu.has_method("open"):
+				pause_menu.open()
+				get_viewport().set_input_as_handled()
+				return
 
 func _on_character_selected(character_id: StringName) -> void:
 	_cancel_scheduled_title_music()
+	if result_screen != null:
+		result_screen.visible = false
 	if audio_settings_panel != null and audio_settings_panel.has_method("hide_panel"):
 		audio_settings_panel.hide_panel()
+	if pause_menu != null and pause_menu.has_method("close") and bool(pause_menu.is_open()):
+		pause_menu.close()
 	if Sfx != null:
 		Sfx.play_event(&"ui_confirm")
 	AccessoryManager.reset_run()
@@ -117,6 +139,13 @@ func _start_next_encounter() -> void:
 			)
 		if character_select != null:
 			character_select.visible = true
+		if result_screen != null and result_screen.has_method("show_result"):
+			result_screen.show_result(
+				"victory",
+				"Town Cleared",
+				"All enemy waves and bosses are defeated.",
+				"Your relic build survived the trial. Continue to select a new champion."
+			)
 		return
 	_play_audio_profile_for_encounter(encounter_index)
 	current_encounter = ENCOUNTER_SCENES[encounter_index].instantiate()
@@ -150,6 +179,13 @@ func _on_player_died() -> void:
 		)
 	if character_select != null:
 		character_select.visible = true
+	if result_screen != null and result_screen.has_method("show_result"):
+		result_screen.show_result(
+			"defeat",
+			"Defeated",
+			"The town boss rush resets after death.",
+			"Continue to return to champion selection and try a different relic path."
+		)
 	waiting_for_accessory_choice = false
 
 func _offer_accessory(reason: String) -> void:
@@ -271,3 +307,48 @@ func _sync_audio_hint_state() -> void:
 		return
 	audio_panel_was_open = panel_open
 	audio_shortcut_hint.set_panel_open(panel_open)
+
+func _on_pause_resume_requested() -> void:
+	if pause_menu != null and pause_menu.has_method("close"):
+		pause_menu.close()
+
+func _on_pause_audio_requested() -> void:
+	if pause_menu != null and pause_menu.has_method("close"):
+		pause_menu.close()
+	if audio_settings_panel != null and audio_settings_panel.has_method("show_panel"):
+		audio_settings_panel.show_panel()
+	_sync_audio_hint_state()
+
+func _on_pause_restart_requested() -> void:
+	if pause_menu != null and pause_menu.has_method("close"):
+		pause_menu.close()
+	_reset_to_character_select()
+
+func _on_result_closed() -> void:
+	_reset_to_character_select()
+
+func _reset_to_character_select() -> void:
+	_cancel_scheduled_title_music()
+	if audio_settings_panel != null and audio_settings_panel.has_method("hide_panel"):
+		audio_settings_panel.hide_panel()
+	if accessory_choice != null and accessory_choice.has_method("close") and accessory_choice.visible:
+		accessory_choice.close()
+	if current_encounter != null and is_instance_valid(current_encounter):
+		current_encounter.queue_free()
+	current_encounter = null
+	if player_character != null and is_instance_valid(player_character):
+		player_character.queue_free()
+	player_character = null
+	encounter_index = -1
+	waiting_for_accessory_choice = false
+	AccessoryManager.reset_run()
+	if character_select != null:
+		character_select.visible = true
+	if battle_status != null and battle_status.has_method("set_message"):
+		battle_status.set_message(
+			"Town Boss Trial",
+			"Pick a champion, then claim relics between encounters.",
+			_detail_text("")
+		)
+	if Music != null:
+		Music.play_profile(&"title")

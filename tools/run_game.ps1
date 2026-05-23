@@ -38,6 +38,8 @@ try {
         & $Godot --headless --path . --quit --verbose
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         & $Godot --headless --path . --script res://tests/smoke_accessory_flow.gd
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        & $Godot --headless --path . --script res://tests/smoke_ui_screens.gd
         exit $LASTEXITCODE
     }
 

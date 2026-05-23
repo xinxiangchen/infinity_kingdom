@@ -5,6 +5,7 @@ const BUS_AMBIENCE := "Ambience"
 const BUS_SFX := "SFX"
 const BUS_UI := "UI"
 const MASTER_LABEL := "Master"
+const UISkin := preload("res://ui/ui_skin.gd")
 
 const BUS_ORDER := [BUS_MUSIC, BUS_AMBIENCE, BUS_SFX, BUS_UI]
 const BUS_LABELS := {
@@ -29,6 +30,8 @@ const BUS_DESCRIPTIONS := {
 @onready var close_button: Button = $Backdrop/MarginContainer/PanelContainer/MarginContainer/VBoxContainer/ButtonRow/CloseButton
 @onready var status_label: Label = $Backdrop/MarginContainer/PanelContainer/MarginContainer/VBoxContainer/StatusLabel
 @onready var hint_label: Label = $Backdrop/MarginContainer/PanelContainer/MarginContainer/VBoxContainer/Hint
+@onready var panel: PanelContainer = $Backdrop/MarginContainer/PanelContainer
+@onready var master_panel: PanelContainer = $Backdrop/MarginContainer/PanelContainer/MarginContainer/VBoxContainer/MasterPanel
 
 var slider_map: Dictionary = {}
 var value_label_map: Dictionary = {}
@@ -38,6 +41,7 @@ var suppress_slider_events: bool = false
 var hint_tween: Tween = null
 
 func _ready() -> void:
+	_apply_skin()
 	_build_rows()
 	master_slider.value_changed.connect(_on_master_slider_value_changed)
 	master_mute_button.toggled.connect(_on_master_mute_toggled)
@@ -46,6 +50,15 @@ func _ready() -> void:
 	visible = false
 	refresh_values()
 	_set_status_text("Reset restores the chapter mix. Mute keeps the current slider level in memory.")
+
+func _apply_skin() -> void:
+	panel.add_theme_stylebox_override("panel", UISkin.menu_panel_style())
+	master_panel.add_theme_stylebox_override("panel", UISkin.content_panel_style())
+	UISkin.button_styles(master_mute_button, "thin")
+	UISkin.button_styles(reset_button, "thin")
+	UISkin.button_styles(close_button, "thin")
+	UISkin.label(status_label, 13, Color(0.93, 0.85, 0.68))
+	UISkin.label(hint_label, 12, Color(0.84, 0.88, 0.96))
 
 func toggle_panel() -> void:
 	set_panel_visible(not visible)
@@ -86,6 +99,7 @@ func refresh_values() -> void:
 func _build_rows() -> void:
 	for bus_name in BUS_ORDER:
 		var panel := PanelContainer.new()
+		panel.add_theme_stylebox_override("panel", UISkin.content_panel_style())
 		rows_container.add_child(panel)
 
 		var margin := MarginContainer.new()
@@ -104,14 +118,17 @@ func _build_rows() -> void:
 		column.add_child(header_row)
 
 		var label := Label.new()
-		label.custom_minimum_size = Vector2(96.0, 0.0)
+		label.custom_minimum_size = Vector2(82.0, 0.0)
 		label.text = String(BUS_LABELS[bus_name])
+		UISkin.label(label, 14, Color(0.98, 0.90, 0.66))
 		header_row.add_child(label)
 
 		var description := Label.new()
 		description.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		description.modulate = Color(0.78, 0.84, 0.92, 0.92)
 		description.text = String(BUS_DESCRIPTIONS[bus_name])
+		description.clip_text = true
+		UISkin.label(description, 12, Color(0.78, 0.84, 0.92))
 		header_row.add_child(description)
 
 		var controls_row := HBoxContainer.new()
@@ -127,21 +144,24 @@ func _build_rows() -> void:
 		controls_row.add_child(slider)
 
 		var value_label := Label.new()
-		value_label.custom_minimum_size = Vector2(122.0, 0.0)
+		value_label.custom_minimum_size = Vector2(106.0, 0.0)
 		value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		value_label.text = "100% | 0.0 dB"
+		UISkin.label(value_label, 12, Color(0.86, 0.88, 0.92))
 		controls_row.add_child(value_label)
 
 		var mute_button := Button.new()
-		mute_button.custom_minimum_size = Vector2(76.0, 34.0)
+		mute_button.custom_minimum_size = Vector2(72.0, 34.0)
 		mute_button.toggle_mode = true
 		mute_button.toggled.connect(_on_mute_toggled.bind(bus_name))
+		UISkin.button_styles(mute_button, "thin")
 		controls_row.add_child(mute_button)
 
 		var preview_button := Button.new()
 		preview_button.custom_minimum_size = Vector2(82.0, 34.0)
 		preview_button.text = "Preview"
 		preview_button.pressed.connect(_on_preview_pressed.bind(bus_name))
+		UISkin.button_styles(preview_button, "thin")
 		controls_row.add_child(preview_button)
 
 		slider_map[bus_name] = slider

@@ -5,18 +5,35 @@ const UISkin := preload("res://ui/ui_skin.gd")
 var player_character: Node = null
 
 var title_label: Label
-var hp_bar: ProgressBar
+var hp_bar: TextureProgressBar
 var hp_label: Label
-var defense_bar: ProgressBar
+var defense_bar: TextureProgressBar
 var defense_label: Label
-var inspiration_bar: ProgressBar
+var inspiration_bar: TextureProgressBar
 var inspiration_label: Label
 var shield_label: Label
 var state_label: Label
-var cooldown_label: Label
 var accessory_icon: TextureRect
 var accessory_name_label: Label
 var accessory_summary_label: Label
+var skill_slots: Dictionary = {}
+var skill_icon_paths := {
+	"Knight": [
+		"res://assets/ui/skill/knight_charge_slash.png",
+		"res://assets/ui/skill/knight_counter_shock.png",
+		"res://assets/ui/skill/knight_holy_field.png"
+	],
+	"Ranger": [
+		"res://assets/ui/skill/ranger_wind_arrow.png",
+		"res://assets/ui/skill/ranger_shadow_step.png",
+		"res://assets/ui/skill/ranger_hunt_rush.png"
+	],
+	"Mage": [
+		"res://assets/ui/skill/mage_blade_whirl.png",
+		"res://assets/ui/skill/mage_arcane_burst.png",
+		"res://assets/ui/skill/mage_silence_decree.png"
+	]
+}
 
 func _ready() -> void:
 	_build_ui()
@@ -29,6 +46,7 @@ func bind_character(target: Node) -> void:
 	if player_character == null:
 		return
 	title_label.text = "%s Combat Frame" % String(player_character.get_character_name())
+	_refresh_skill_icons()
 	_connect_character_signal("hp_changed", _on_hp_changed)
 	_connect_character_signal("defense_changed", _on_defense_changed)
 	_connect_character_signal("inspiration_changed", _on_inspiration_changed)
@@ -47,12 +65,7 @@ func _process(_delta: float) -> void:
 	if player_character == null or not is_instance_valid(player_character):
 		return
 	state_label.text = "State  %s" % String(player_character.state_machine.get_state_name())
-	cooldown_label.text = "ATK %.1f  S1 %.1f  S2 %.1f  S3 %.1f" % [
-		float(player_character.cooldowns["attack"]),
-		float(player_character.cooldowns["skill1"]),
-		float(player_character.cooldowns["skill2"]),
-		float(player_character.cooldowns["skill3"])
-	]
+	_update_skill_slots()
 
 func _build_ui() -> void:
 	layer = 5
@@ -60,8 +73,8 @@ func _build_ui() -> void:
 	margin.anchor_top = 1.0
 	margin.anchor_bottom = 1.0
 	margin.offset_left = 18.0
-	margin.offset_top = -368.0
-	margin.offset_right = 448.0
+	margin.offset_top = -428.0
+	margin.offset_right = 470.0
 	margin.offset_bottom = -18.0
 	margin.add_theme_constant_override("margin_left", 10)
 	margin.add_theme_constant_override("margin_top", 10)
@@ -73,9 +86,16 @@ func _build_ui() -> void:
 	panel.add_theme_stylebox_override("panel", UISkin.panel_style())
 	margin.add_child(panel)
 
+	var inner_margin := MarginContainer.new()
+	inner_margin.add_theme_constant_override("margin_left", 12)
+	inner_margin.add_theme_constant_override("margin_top", 12)
+	inner_margin.add_theme_constant_override("margin_right", 12)
+	inner_margin.add_theme_constant_override("margin_bottom", 12)
+	panel.add_child(inner_margin)
+
 	var content := VBoxContainer.new()
 	content.add_theme_constant_override("separation", 8)
-	panel.add_child(content)
+	inner_margin.add_child(content)
 
 	title_label = Label.new()
 	title_label.text = "Character Combat Frame"
@@ -94,11 +114,25 @@ func _build_ui() -> void:
 	status_row.add_child(shield_label)
 	status_row.add_child(state_label)
 
-	cooldown_label = _make_label("ATK 0.0  S1 0.0  S2 0.0  S3 0.0", 14, Color(0.78, 0.82, 0.88))
-	content.add_child(cooldown_label)
+	var skills_panel := PanelContainer.new()
+	skills_panel.add_theme_stylebox_override("panel", UISkin.content_panel_style())
+	content.add_child(skills_panel)
+
+	var skill_row := HBoxContainer.new()
+	skill_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	skill_row.add_theme_constant_override("separation", 8)
+	skills_panel.add_child(skill_row)
+	for key in ["attack", "skill1", "skill2", "skill3"]:
+		var label_text := "J" if key == "attack" else ("K" if key == "skill1" else ("L" if key == "skill2" else "I"))
+		var icon_path := "res://assets/ui/icon/stat_attack_pixel.png"
+		if key != "attack":
+			icon_path = "res://assets/ui/icon/ui_unknown.png"
+		var slot_data := _skill_slot(key, label_text, icon_path)
+		skill_slots[key] = slot_data
+		skill_row.add_child(slot_data["root"])
 
 	var accessory_panel := PanelContainer.new()
-	accessory_panel.add_theme_stylebox_override("panel", UISkin.texture_style(UISkin.asset("menu/menu_content_panel.png"), 32, 8))
+	accessory_panel.add_theme_stylebox_override("panel", UISkin.content_panel_style())
 	content.add_child(accessory_panel)
 
 	var accessory_row := HBoxContainer.new()
@@ -125,18 +159,14 @@ func _build_ui() -> void:
 	accessory_text.add_child(accessory_name_label)
 	accessory_text.add_child(accessory_summary_label)
 
-func _meter(meter_id: String, label_text: String, fill_color: Color) -> VBoxContainer:
+func _meter(meter_id: String, label_text: String, _fill_color: Color) -> VBoxContainer:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 3)
 	var label := _make_label("%s 0 / 0" % label_text, 13, Color(0.86, 0.88, 0.92))
 	box.add_child(label)
-	var bar := ProgressBar.new()
-	bar.custom_minimum_size = Vector2(360, 18)
-	bar.show_percentage = false
-	bar.max_value = 1.0
-	bar.value = 1.0
-	bar.add_theme_stylebox_override("background", UISkin.flat_style(Color(0.06, 0.065, 0.08, 0.96), Color(0.24, 0.20, 0.16), 1, 3))
-	bar.add_theme_stylebox_override("fill", UISkin.flat_style(fill_color, fill_color, 0, 3))
+	var bar := TextureProgressBar.new()
+	bar.custom_minimum_size = Vector2(386, 22)
+	UISkin.texture_bar(bar, meter_id)
 	box.add_child(bar)
 	match meter_id:
 		"hp":
@@ -149,6 +179,32 @@ func _meter(meter_id: String, label_text: String, fill_color: Color) -> VBoxCont
 			inspiration_bar = bar
 			inspiration_label = label
 	return box
+
+func _skill_slot(key: String, hotkey: String, icon_path: String) -> Dictionary:
+	var root := PanelContainer.new()
+	root.custom_minimum_size = Vector2(92, 76)
+	root.add_theme_stylebox_override("panel", UISkin.texture_style(UISkin.asset("frame/icon_slot_dark.png"), 22, 5))
+
+	var stack := VBoxContainer.new()
+	stack.add_theme_constant_override("separation", 2)
+	root.add_child(stack)
+
+	var icon := TextureRect.new()
+	icon.custom_minimum_size = Vector2(44, 44)
+	icon.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	icon.texture = load(icon_path) as Texture2D
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	stack.add_child(icon)
+
+	var label := Label.new()
+	label.text = "%s Ready" % hotkey
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.clip_text = true
+	UISkin.label(label, 11, Color(0.86, 0.88, 0.92))
+	stack.add_child(label)
+
+	return {"root": root, "icon": icon, "label": label, "hotkey": hotkey, "key": key}
 
 func _make_label(text: String, size: int, color: Color) -> Label:
 	var label := Label.new()
@@ -187,3 +243,30 @@ func _on_accessory_equipped(accessory: Dictionary) -> void:
 	accessory_icon.texture = load(String(accessory.get("icon", "res://assets/ui/icon/ui_unknown.png"))) as Texture2D
 	accessory_name_label.text = String(accessory.get("name", "No Accessory"))
 	accessory_summary_label.text = String(accessory.get("summary", ""))
+
+func _refresh_skill_icons() -> void:
+	if player_character == null or not is_instance_valid(player_character):
+		return
+	var character_name := String(player_character.get_character_name())
+	var icons: Array = skill_icon_paths.get(character_name, [])
+	for index in range(icons.size()):
+		var slot_key := "skill%d" % (index + 1)
+		if not skill_slots.has(slot_key):
+			continue
+		var slot: Dictionary = skill_slots[slot_key]
+		var icon: TextureRect = slot["icon"]
+		icon.texture = load(String(icons[index])) as Texture2D
+
+func _update_skill_slots() -> void:
+	if player_character == null or not is_instance_valid(player_character):
+		return
+	for key in skill_slots.keys():
+		var slot: Dictionary = skill_slots[key]
+		var label: Label = slot["label"]
+		var cooldown := float(player_character.cooldowns.get(key, 0.0))
+		if cooldown <= 0.05:
+			label.text = "%s Ready" % String(slot["hotkey"])
+			label.modulate = Color(0.78, 1.0, 0.78)
+		else:
+			label.text = "%s %.1f" % [String(slot["hotkey"]), cooldown]
+			label.modulate = Color(1.0, 0.80, 0.62)
