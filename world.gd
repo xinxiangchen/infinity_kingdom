@@ -3,6 +3,7 @@ extends Node2D
 const KNIGHT_SCENE := preload("res://characters/knight/knight.tscn")
 const RANGER_SCENE := preload("res://characters/ranger/ranger.tscn")
 const MAGE_SCENE := preload("res://characters/mage/mage.tscn")
+const RunEffects := preload("res://systems/run/run_effects.gd")
 const ENCOUNTER_SCENES := [
 	preload("res://actors/encounters/town_mob_encounter.tscn"),
 	preload("res://actors/bosses/town/judicator_boss.tscn"),
@@ -20,8 +21,11 @@ const CONTROL_HINT := "Controls: WASD move, J attack, K / L / I skills. F10 audi
 @onready var audio_settings_panel: CanvasLayer = $AudioSettingsPanel
 @onready var audio_shortcut_hint: CanvasLayer = $AudioShortcutHint
 @onready var accessory_choice: CanvasLayer = $AccessoryChoice
+@onready var run_event_panel: CanvasLayer = $RunEventPanel
 @onready var pause_menu: CanvasLayer = $PauseMenu
 @onready var result_screen: CanvasLayer = $ResultScreen
+@onready var settings_panel: CanvasLayer = $SettingsPanel
+@onready var debug_panel: CanvasLayer = $DebugPanel
 
 var player_character: Node = null
 var current_encounter: Node = null
@@ -35,12 +39,17 @@ func _ready() -> void:
 		character_select.character_selected.connect(_on_character_selected)
 	if accessory_choice != null and accessory_choice.has_signal("accessory_choice_made"):
 		accessory_choice.accessory_choice_made.connect(_on_accessory_choice_made)
+	if run_event_panel != null and run_event_panel.has_signal("event_choice_made"):
+		run_event_panel.event_choice_made.connect(_on_run_event_choice_made)
 	if pause_menu != null:
 		pause_menu.resume_requested.connect(_on_pause_resume_requested)
 		pause_menu.audio_requested.connect(_on_pause_audio_requested)
+		pause_menu.settings_requested.connect(_on_pause_settings_requested)
 		pause_menu.restart_requested.connect(_on_pause_restart_requested)
 	if result_screen != null and result_screen.has_signal("closed"):
 		result_screen.closed.connect(_on_result_closed)
+	if debug_panel != null and debug_panel.has_method("bind_world"):
+		debug_panel.bind_world(self)
 	if battle_status != null and battle_status.has_method("set_message"):
 		battle_status.set_message(
 			"Town Boss Trial",
@@ -65,6 +74,11 @@ func _process(_delta: float) -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
+		if InputMap.has_action("debug_toggle") and event.is_action_pressed("debug_toggle"):
+			if debug_panel != null and debug_panel.has_method("toggle"):
+				debug_panel.toggle()
+				get_viewport().set_input_as_handled()
+			return
 		if event.keycode == KEY_F10:
 			if audio_settings_panel != null and audio_settings_panel.has_method("toggle_panel"):
 				audio_settings_panel.toggle_panel()
@@ -77,11 +91,17 @@ func _unhandled_input(event: InputEvent) -> void:
 				_sync_audio_hint_state()
 				get_viewport().set_input_as_handled()
 				return
+			if settings_panel != null and settings_panel.visible:
+				settings_panel.close()
+				get_viewport().set_input_as_handled()
+				return
 			if pause_menu != null and pause_menu.has_method("is_open") and bool(pause_menu.is_open()):
 				pause_menu.close()
 				get_viewport().set_input_as_handled()
 				return
 			if accessory_choice != null and accessory_choice.visible:
+				return
+			if run_event_panel != null and run_event_panel.visible:
 				return
 			if pause_menu != null and pause_menu.has_method("open"):
 				pause_menu.open()
@@ -99,6 +119,7 @@ func _on_character_selected(character_id: StringName) -> void:
 	if Sfx != null:
 		Sfx.play_event(&"ui_confirm")
 	AccessoryManager.reset_run()
+	RunDirector.reset_run()
 	if player_character != null and is_instance_valid(player_character):
 		player_character.queue_free()
 	if current_encounter != null and is_instance_valid(current_encounter):
@@ -118,6 +139,7 @@ func _on_character_selected(character_id: StringName) -> void:
 	if character_hud != null and character_hud.has_method("bind_character"):
 		character_hud.bind_character(player_character)
 	AccessoryManager.apply_to_actor(player_character)
+	RunEffects.refresh_persistent_modifiers(player_character)
 	_bind_actor_audio(player_character)
 	if player_character.has_signal("died"):
 		player_character.died.connect(_on_player_died)
@@ -157,11 +179,12 @@ func _start_next_encounter() -> void:
 		current_encounter.defeated.connect(_on_encounter_defeated)
 
 func _on_encounter_defeated() -> void:
+	RunDirector.reward_encounter(encounter_index)
 	current_encounter = null
 	var timer := get_tree().create_timer(1.1)
 	timer.timeout.connect(func() -> void:
 		if is_instance_valid(self) and player_character != null and is_instance_valid(player_character) and float(player_character.hp) > 0.0:
-			_offer_accessory("Victory Relic")
+			_offer_next_run_event()
 	)
 
 func _on_player_died() -> void:
@@ -202,8 +225,23 @@ func _offer_accessory(reason: String) -> void:
 			_detail_text("Current: %s" % String(AccessoryManager.get_equipped_accessory().get("name", "No Accessory")))
 		)
 
+func _offer_next_run_event() -> void:
+	var kind := RunDirector.next_event_kind()
+	if kind == "relic" or run_event_panel == null or not run_event_panel.has_method("open"):
+		_offer_accessory("Victory Relic")
+		return
+	run_event_panel.open(kind, int(RunDirector.gold))
+	if battle_status != null and battle_status.has_method("set_message"):
+		battle_status.set_message(
+			"Run Event",
+			"Choose a reward before the next fight.",
+			_detail_text("Gold: %d" % int(RunDirector.gold))
+		)
+
 func _on_accessory_choice_made(_accessory_id: String, kept_current: bool) -> void:
 	waiting_for_accessory_choice = false
+	if player_character != null and is_instance_valid(player_character):
+		RunEffects.refresh_persistent_modifiers(player_character)
 	if Sfx != null:
 		Sfx.play_event(&"ui_confirm")
 	var accessory_name := String(AccessoryManager.get_equipped_accessory().get("name", "No Accessory"))
@@ -214,6 +252,29 @@ func _on_accessory_choice_made(_accessory_id: String, kept_current: bool) -> voi
 			_detail_text("The next encounter begins now.")
 		)
 	_start_next_encounter()
+
+func _on_run_event_choice_made(choice_id: String) -> void:
+	_apply_run_event_choice(choice_id)
+	if Sfx != null:
+		Sfx.play_event(&"ui_confirm")
+	if battle_status != null and battle_status.has_method("set_message"):
+		battle_status.set_message(
+			"Event Complete",
+			_run_event_summary(choice_id),
+			_detail_text("Gold: %d" % int(RunDirector.gold))
+		)
+	_start_next_encounter()
+
+func _apply_run_event_choice(choice_id: String) -> void:
+	if player_character == null or not is_instance_valid(player_character):
+		return
+	var cost := RunEffects.cost_for(choice_id)
+	if cost > 0 and not RunDirector.spend_gold(cost):
+		return
+	RunEffects.apply_choice(choice_id, player_character)
+
+func _run_event_summary(choice_id: String) -> String:
+	return RunEffects.summary(choice_id)
 
 func _bind_actor_audio(actor: Node) -> void:
 	if actor == null:
@@ -263,6 +324,8 @@ func _on_actor_took_damage(_amount: float, _remaining_hp: float, actor: Node) ->
 		return
 	var event_id := "%s_hit" % String(actor.get_character_name()).to_lower()
 	Sfx.play_event(StringName(event_id), actor.global_position, -2.0)
+	if Feedback != null:
+		Feedback.hitstop(0.035)
 
 func _on_actor_died(actor: Node) -> void:
 	if actor == null or not actor.has_method("get_character_name") or Sfx == null:
@@ -319,6 +382,12 @@ func _on_pause_audio_requested() -> void:
 		audio_settings_panel.show_panel()
 	_sync_audio_hint_state()
 
+func _on_pause_settings_requested() -> void:
+	if pause_menu != null and pause_menu.has_method("close"):
+		pause_menu.close()
+	if settings_panel != null and settings_panel.has_method("open"):
+		settings_panel.open()
+
 func _on_pause_restart_requested() -> void:
 	if pause_menu != null and pause_menu.has_method("close"):
 		pause_menu.close()
@@ -333,6 +402,8 @@ func _reset_to_character_select() -> void:
 		audio_settings_panel.hide_panel()
 	if accessory_choice != null and accessory_choice.has_method("close") and accessory_choice.visible:
 		accessory_choice.close()
+	if run_event_panel != null and run_event_panel.has_method("close") and run_event_panel.visible:
+		run_event_panel.close()
 	if current_encounter != null and is_instance_valid(current_encounter):
 		current_encounter.queue_free()
 	current_encounter = null
@@ -342,6 +413,7 @@ func _reset_to_character_select() -> void:
 	encounter_index = -1
 	waiting_for_accessory_choice = false
 	AccessoryManager.reset_run()
+	RunDirector.reset_run()
 	if character_select != null:
 		character_select.visible = true
 	if battle_status != null and battle_status.has_method("set_message"):

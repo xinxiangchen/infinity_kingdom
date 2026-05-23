@@ -3,6 +3,8 @@ extends Node
 signal accessory_equipped(accessory: Dictionary)
 signal choices_generated(choices: Array[Dictionary])
 
+const ACCESSORY_DATA_PATH := "res://systems/accessories/accessories.json"
+
 const EMPTY_ACCESSORY := {
 	"id": "none",
 	"name": "No Accessory",
@@ -13,7 +15,7 @@ const EMPTY_ACCESSORY := {
 	"tags": []
 }
 
-const ACCESSORIES := [
+const FALLBACK_ACCESSORIES := [
 	{
 		"id": "ember_talisman",
 		"name": "Ember Talisman",
@@ -140,6 +142,20 @@ var equipped_accessory: Dictionary = EMPTY_ACCESSORY.duplicate(true)
 var current_choices: Array[Dictionary] = []
 var base_stats_by_actor: Dictionary = {}
 var choice_cursor: int = 0
+var accessory_catalog: Array[Dictionary] = []
+
+func _ready() -> void:
+	reload_catalog()
+
+func reload_catalog() -> void:
+	accessory_catalog = _load_catalog_from_json()
+	if accessory_catalog.is_empty():
+		accessory_catalog = FALLBACK_ACCESSORIES.duplicate(true)
+
+func get_catalog() -> Array[Dictionary]:
+	if accessory_catalog.is_empty():
+		reload_catalog()
+	return accessory_catalog.duplicate(true)
 
 func reset_run() -> void:
 	equipped_accessory = EMPTY_ACCESSORY.duplicate(true)
@@ -152,7 +168,7 @@ func get_equipped_accessory() -> Dictionary:
 	return equipped_accessory.duplicate(true)
 
 func generate_choices(count: int = 3) -> Array[Dictionary]:
-	var pool := ACCESSORIES.duplicate(true)
+	var pool := get_catalog()
 	var choices: Array[Dictionary] = []
 	if pool.is_empty():
 		return choices
@@ -196,10 +212,34 @@ func keep_current(actor: Node = null) -> Dictionary:
 func get_accessory(accessory_id: String) -> Dictionary:
 	if accessory_id == "none":
 		return EMPTY_ACCESSORY.duplicate(true)
-	for accessory in ACCESSORIES:
+	for accessory in get_catalog():
 		if String(accessory.get("id", "")) == accessory_id:
 			return accessory.duplicate(true)
 	return {}
+
+func _load_catalog_from_json() -> Array[Dictionary]:
+	var catalog: Array[Dictionary] = []
+	if not FileAccess.file_exists(ACCESSORY_DATA_PATH):
+		return catalog
+	var raw := FileAccess.get_file_as_string(ACCESSORY_DATA_PATH)
+	var parsed: Variant = JSON.parse_string(raw)
+	if not (parsed is Array):
+		push_warning("Accessory data is not an array: %s" % ACCESSORY_DATA_PATH)
+		return catalog
+	for entry in parsed:
+		if not (entry is Dictionary):
+			continue
+		var accessory: Dictionary = (entry as Dictionary).duplicate(true)
+		if _is_valid_accessory(accessory):
+			catalog.append(accessory)
+	return catalog
+
+func _is_valid_accessory(accessory: Dictionary) -> bool:
+	for required in ["id", "name", "rarity", "icon", "summary", "effects", "tags"]:
+		if not accessory.has(required):
+			push_warning("Accessory missing field '%s': %s" % [required, accessory])
+			return false
+	return true
 
 func apply_to_actor(actor: Node) -> void:
 	if actor == null:

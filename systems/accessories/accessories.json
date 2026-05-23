@@ -1,0 +1,101 @@
+[
+  {
+    "id": "ember_talisman",
+    "name": "Ember Talisman",
+    "rarity": "Uncommon",
+    "icon": "res://assets/ui/accessory/ember_talisman.png",
+    "summary": "+20 max inspiration, +1 inspiration on every hit.",
+    "effects": {"max_inspiration": 20.0, "inspiration_gain_on_attack_hit": 1.0},
+    "tags": ["resource", "tempo"]
+  },
+  {
+    "id": "wind_knot",
+    "name": "Wind Knot",
+    "rarity": "Uncommon",
+    "icon": "res://assets/ui/accessory/wind_knot.png",
+    "summary": "+18% move speed and slightly faster normal attacks.",
+    "effects": {"move_speed_pct": 0.18, "attack_interval_pct": -0.08},
+    "tags": ["speed", "attack"]
+  },
+  {
+    "id": "wolf_pendant",
+    "name": "Wolf Pendant",
+    "rarity": "Rare",
+    "icon": "res://assets/ui/accessory/wolf_pendant.png",
+    "summary": "+15% attack damage and +6% critical chance.",
+    "effects": {"attack_damage_pct": 0.15, "crit_rate": 0.06},
+    "tags": ["damage", "crit"]
+  },
+  {
+    "id": "echo_silver_ring",
+    "name": "Echo Silver Ring",
+    "rarity": "Rare",
+    "icon": "res://assets/ui/accessory/echo_silver_ring.png",
+    "summary": "Skills recover faster and basic hits restore more inspiration.",
+    "effects": {"skill_cooldown_pct": -0.12, "inspiration_gain_on_attack_hit": 1.5},
+    "tags": ["skill", "resource"]
+  },
+  {
+    "id": "iron_branch_pendant",
+    "name": "Iron Branch Pendant",
+    "rarity": "Uncommon",
+    "icon": "res://assets/ui/accessory/iron_branch_pendant.png",
+    "summary": "+18 max hp, +18 max defense.",
+    "effects": {"max_hp": 18.0, "max_defense": 18.0},
+    "tags": ["survival", "defense"]
+  },
+  {
+    "id": "shadow_charm",
+    "name": "Shadow Charm",
+    "rarity": "Rare",
+    "icon": "res://assets/ui/accessory/shadow_charm.png",
+    "summary": "+12% move speed, +10% critical chance.",
+    "effects": {"move_speed_pct": 0.12, "crit_rate": 0.10},
+    "tags": ["speed", "crit"]
+  },
+  {
+    "id": "fate_reversal_ring",
+    "name": "Fate Reversal Ring",
+    "rarity": "Epic",
+    "icon": "res://assets/ui/accessory/fate_reversal_ring.png",
+    "summary": "+30 max hp, +12% attack damage, but skills cost more inspiration.",
+    "effects": {"max_hp": 30.0, "attack_damage_pct": 0.12, "skill_cost_pct": 0.10},
+    "tags": ["power", "risk"]
+  },
+  {
+    "id": "old_king_crest",
+    "name": "Old King Crest",
+    "rarity": "Epic",
+    "icon": "res://assets/ui/accessory/old_king_crest.png",
+    "summary": "+25 max defense, +18% skill damage.",
+    "effects": {"max_defense": 25.0, "skill_damage_pct": 0.18},
+    "tags": ["skill", "defense"]
+  },
+  {
+    "id": "hunter_bone_charm",
+    "name": "Hunter Bone Charm",
+    "rarity": "Rare",
+    "icon": "res://assets/ui/accessory/hunter_bone_charm.png",
+    "summary": "+10% attack damage, +14% move speed.",
+    "effects": {"attack_damage_pct": 0.10, "move_speed_pct": 0.14},
+    "tags": ["damage", "speed"]
+  },
+  {
+    "id": "nameless_astrolabe",
+    "name": "Nameless Astrolabe",
+    "rarity": "Epic",
+    "icon": "res://assets/ui/accessory/nameless_astrolabe.png",
+    "summary": "+25 max inspiration, -15% skill cooldowns.",
+    "effects": {"max_inspiration": 25.0, "skill_cooldown_pct": -0.15},
+    "tags": ["skill", "resource"]
+  },
+  {
+    "id": "throne_remnant",
+    "name": "Throne Remnant",
+    "rarity": "Legendary",
+    "icon": "res://assets/ui/accessory/throne_remnant.png",
+    "summary": "+20% attack and skill damage, +20 max defense.",
+    "effects": {"attack_damage_pct": 0.20, "skill_damage_pct": 0.20, "max_defense": 20.0},
+    "tags": ["damage", "skill", "defense"]
+  }
+]

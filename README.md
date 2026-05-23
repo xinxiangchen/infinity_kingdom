@@ -37,12 +37,16 @@ Useful script options:
 - `K`, `L`, `I`: skills
 - `F10`: audio mix panel
 - `Esc`: close audio panel
+- `` ` ``: debug panel
+- Gamepad: left stick move, south button attack, west/north/east buttons skills
 
 ## Test
 
 ```powershell
 godot --headless --path . --quit --verbose
 godot --headless --path . --script res://tests/smoke_accessory_flow.gd
+godot --headless --path . --script res://tests/smoke_accessory_catalog.gd
+godot --headless --path . --script res://tests/smoke_run_effects.gd
 godot --headless --path . --script res://tests/smoke_ui_screens.gd
 ```
 
@@ -57,6 +61,13 @@ Export presets are committed for:
 
 Install the matching Godot export templates, then export from the Godot editor or CLI.
 
+On Windows:
+
+```powershell
+.\export_game.bat
+.\export_game.bat -Preset Web
+```
+
 ## Structure
 
 - `characters/`: playable character scenes and state machines
@@ -64,6 +75,8 @@ Install the matching Godot export templates, then export from the Godot editor o
 - `combat/`: shared health and defense component
 - `effects/`: damage numbers and projectiles
 - `systems/accessories/`: accessory data, equip logic, and stat application
+- `systems/run/`: run rewards, event sequencing, and run event effects
+- `systems/feedback/`: combat feedback helpers such as hitstop
 - `ui/`: HUD, character select, accessory choice, and UI skin helpers
 - `assets/`: committed gameplay and UI art assets
 - `audio/`: music, ambience, SFX managers, generated placeholder audio

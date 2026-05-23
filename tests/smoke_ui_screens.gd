@@ -44,6 +44,30 @@ func _run() -> void:
 		return
 	world.audio_settings_panel.hide_panel()
 
+	if world.settings_panel == null or not world.settings_panel.has_method("open"):
+		push_error("Settings panel missing")
+		quit(1)
+		return
+	world.settings_panel.open()
+	await process_frame
+	if not world.settings_panel.visible:
+		push_error("Settings panel did not open")
+		quit(1)
+		return
+	world.settings_panel.close()
+
+	if world.run_event_panel == null or not world.run_event_panel.has_method("open"):
+		push_error("Run event panel missing")
+		quit(1)
+		return
+	world.run_event_panel.open("shop", 100)
+	await process_frame
+	if not world.run_event_panel.visible:
+		push_error("Run event panel did not open")
+		quit(1)
+		return
+	world.run_event_panel.close()
+
 	if world.result_screen == null or not world.result_screen.has_method("show_result"):
 		push_error("Result screen missing")
 		quit(1)

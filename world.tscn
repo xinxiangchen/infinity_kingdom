@@ -1,4 +1,4 @@
-[gd_scene load_steps=12 format=3 uid="uid://d1aya10kl4ab4"]
+[gd_scene load_steps=15 format=3 uid="uid://d1aya10kl4ab4"]
 
 [ext_resource type="PackedScene" path="res://ui/knight_hud.tscn" id="1"]
 [ext_resource type="Script" path="res://world.gd" id="2"]
@@ -9,6 +9,9 @@
 [ext_resource type="PackedScene" path="res://ui/accessory_choice.tscn" id="7"]
 [ext_resource type="PackedScene" path="res://ui/pause_menu.tscn" id="8"]
 [ext_resource type="PackedScene" path="res://ui/result_screen.tscn" id="9"]
+[ext_resource type="PackedScene" path="res://ui/run_event_panel.tscn" id="10"]
+[ext_resource type="PackedScene" path="res://ui/debug_panel.tscn" id="11"]
+[ext_resource type="PackedScene" path="res://ui/settings_panel.tscn" id="12"]
 
 [sub_resource type="RectangleShape2D" id="1"]
 size = Vector2(1380, 12)
@@ -55,9 +58,15 @@ position = Vector2(700, 300)
 
 [node name="AccessoryChoice" parent="." instance=ExtResource("7")]
 
+[node name="RunEventPanel" parent="." instance=ExtResource("10")]
+
 [node name="PauseMenu" parent="." instance=ExtResource("8")]
 
 [node name="ResultScreen" parent="." instance=ExtResource("9")]
+
+[node name="SettingsPanel" parent="." instance=ExtResource("12")]
+
+[node name="DebugPanel" parent="." instance=ExtResource("11")]
 
 [node name="Bounds" type="Node2D" parent="." unique_id=924020288]
 
