@@ -10,7 +10,13 @@ func _run() -> void:
 	var knight := KNIGHT_SCENE.instantiate()
 	root.add_child(knight)
 	await process_frame
-	RunDirector.reset_run()
+	var run_director := root.get_node_or_null("/root/RunDirector")
+	var accessory_manager := root.get_node_or_null("/root/AccessoryManager")
+	if run_director == null or accessory_manager == null:
+		push_error("Required run autoloads are missing")
+		quit(1)
+		return
+	run_director.reset_run()
 	var base_damage := float(knight.attack_damage)
 	var base_speed := float(knight.move_speed)
 	var base_crit := float(knight.crit_rate)
@@ -30,7 +36,7 @@ func _run() -> void:
 		quit(1)
 		return
 	var modified_damage := float(knight.attack_damage)
-	AccessoryManager.equip("iron_branch_pendant", knight)
+	accessory_manager.equip("iron_branch_pendant", knight)
 	RunEffects.refresh_persistent_modifiers(knight)
 	if float(knight.attack_damage) < modified_damage - 0.01:
 		push_error("Run modifiers were lost after accessory reapply")
