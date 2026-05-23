@@ -2,7 +2,6 @@
 .godot/
 /android/
 /.import/
-export_presets.cfg
 *.translation
 
 # Build and generated files
@@ -10,7 +9,6 @@ build/
 bin/
 *.tmp
 *.log
-*.uid
 
 # OS/editor noise
 .DS_Store

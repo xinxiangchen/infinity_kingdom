@@ -1,0 +1,31 @@
+name: Godot Smoke
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Godot
+        run: |
+          curl -L -o godot.zip https://github.com/godotengine/godot/releases/download/4.6.3-stable/Godot_v4.6.3-stable_linux.x86_64.zip
+          unzip -q godot.zip -d godot
+          chmod +x godot/Godot_v4.6.3-stable_linux.x86_64
+          echo "$PWD/godot" >> "$GITHUB_PATH"
+
+      - name: Import project
+        run: Godot_v4.6.3-stable_linux.x86_64 --headless --editor --path . --quit
+
+      - name: Boot check
+        run: Godot_v4.6.3-stable_linux.x86_64 --headless --path . --quit --verbose
+
+      - name: Accessory flow smoke test
+        run: Godot_v4.6.3-stable_linux.x86_64 --headless --path . --script res://tests/smoke_accessory_flow.gd
