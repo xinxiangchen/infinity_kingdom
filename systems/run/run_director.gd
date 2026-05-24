@@ -3,13 +3,14 @@ extends Node
 signal state_changed(state: Dictionary)
 
 const EVENT_POOL := [
+	"bounty",
 	"rest",
 	"training",
 	"pact",
 	"attunement"
 ]
 
-const EVENTS_PER_RUN := 3
+const EVENTS_PER_RUN := 4
 
 var gold: int = 0
 var cleared_encounters: int = 0
@@ -17,6 +18,8 @@ var event_cursor: int = 0
 var run_modifiers: Dictionary = {}
 var last_reward_gold: int = 0
 var event_deck: Array[String] = []
+var reward_flat_bonus: int = 0
+var reward_multiplier: float = 1.0
 var rng := RandomNumberGenerator.new()
 
 func _ready() -> void:
@@ -29,13 +32,15 @@ func reset_run() -> void:
 	run_modifiers.clear()
 	last_reward_gold = 0
 	event_deck = _build_event_deck()
+	reward_flat_bonus = 0
+	reward_multiplier = 1.0
 	_emit_state()
 
 func reward_encounter(encounter_index: int, actor: Node = null) -> int:
 	cleared_encounters += 1
 	var base_reward: int = 35 + maxi(encounter_index, 0) * 15
 	var performance_bonus: int = _performance_bonus(actor)
-	last_reward_gold = base_reward + performance_bonus
+	last_reward_gold = int(round((base_reward + performance_bonus) * reward_multiplier)) + reward_flat_bonus
 	gold += last_reward_gold
 	_emit_state()
 	return last_reward_gold
@@ -48,6 +53,12 @@ func spend_gold(amount: int) -> bool:
 	gold -= amount
 	_emit_state()
 	return true
+
+func grant_gold(amount: int) -> void:
+	if amount <= 0:
+		return
+	gold += amount
+	_emit_state()
 
 func next_event_kind() -> String:
 	if event_deck.is_empty():
@@ -66,6 +77,8 @@ func describe_event_kind(kind: String) -> String:
 	match kind:
 		"shop":
 			return "Black Market"
+		"bounty":
+			return "Bounty Board"
 		"rest":
 			return "Church Refuge"
 		"training":
@@ -90,6 +103,18 @@ func add_run_modifier(field: String, add_value: float = 0.0, multiplier: float =
 	if floor_value != -INF:
 		modifier["floor"] = maxf(float(modifier.get("floor", -INF)), floor_value)
 	run_modifiers[field] = modifier
+	_emit_state()
+
+func add_reward_flat_bonus(amount: int) -> void:
+	if amount == 0:
+		return
+	reward_flat_bonus += amount
+	_emit_state()
+
+func add_reward_multiplier(multiplier: float) -> void:
+	if is_equal_approx(multiplier, 1.0):
+		return
+	reward_multiplier *= multiplier
 	_emit_state()
 
 func apply_run_modifiers(actor: Node) -> void:
@@ -119,7 +144,9 @@ func get_state() -> Dictionary:
 		"last_reward_gold": last_reward_gold,
 		"next_event_kind": peek_next_event_kind(),
 		"event_deck": event_deck.duplicate(),
-		"run_modifiers": get_run_modifiers()
+		"run_modifiers": get_run_modifiers(),
+		"reward_flat_bonus": reward_flat_bonus,
+		"reward_multiplier": reward_multiplier
 	}
 
 func _emit_state() -> void:
@@ -159,7 +186,7 @@ func _performance_bonus(actor: Node) -> int:
 	return bonus
 
 func _build_event_deck() -> Array[String]:
-	var pool: Array[String] = ["rest", "training", "pact", "attunement"]
+	var pool: Array[String] = ["bounty", "rest", "training", "pact", "attunement"]
 	var deck: Array[String] = ["shop"]
 	while deck.size() < EVENTS_PER_RUN and not pool.is_empty():
 		var next_index := rng.randi_range(0, pool.size() - 1)

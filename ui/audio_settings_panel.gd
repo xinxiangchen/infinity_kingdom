@@ -28,6 +28,13 @@ const BUS_DESCRIPTIONS := {
 	BUS_UI: "Menu confirms and interface sounds"
 }
 
+const BUS_SHORT_DESCRIPTIONS := {
+	BUS_MUSIC: "Score and stingers",
+	BUS_AMBIENCE: "Wind and space",
+	BUS_SFX: "Combat feedback",
+	BUS_UI: "Menu sounds"
+}
+
 @onready var title_label: Label = $Backdrop/MarginContainer/PanelContainer/MarginContainer/VBoxContainer/Title
 @onready var subtitle_label: Label = $Backdrop/MarginContainer/PanelContainer/MarginContainer/VBoxContainer/Subtitle
 @onready var master_slider: HSlider = $Backdrop/MarginContainer/PanelContainer/MarginContainer/VBoxContainer/MasterPanel/MarginContainer/VBoxContainer/ControlsRow/MasterSlider
@@ -49,6 +56,8 @@ var mute_button_map: Dictionary = {}
 var preview_button_map: Dictionary = {}
 var bus_label_map: Dictionary = {}
 var bus_description_map: Dictionary = {}
+var bus_header_row_map: Dictionary = {}
+var bus_buttons_row_map: Dictionary = {}
 var suppress_slider_events: bool = false
 var hint_tween: Tween = null
 var layout_size_override: Vector2 = Vector2.ZERO
@@ -150,7 +159,6 @@ func _build_rows() -> void:
 		description.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		description.modulate = Color(0.78, 0.84, 0.92, 0.92)
 		description.text = String(BUS_DESCRIPTIONS[bus_name])
-		description.clip_text = true
 		description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		UISkin.label(description, 12, Color(0.78, 0.84, 0.92))
 		header_row.add_child(description)
@@ -203,6 +211,8 @@ func _build_rows() -> void:
 		preview_button_map[bus_name] = preview_button
 		bus_label_map[bus_name] = label
 		bus_description_map[bus_name] = description
+		bus_header_row_map[bus_name] = header_row
+		bus_buttons_row_map[bus_name] = buttons_row
 
 func _on_master_slider_value_changed(value: float) -> void:
 	if suppress_slider_events:
@@ -394,7 +404,9 @@ func _refresh_layout() -> void:
 	master_mute_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	reset_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	close_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	reset_button.text = "Reset Mix" if very_compact else "Chapter Default"
+	master_mute_button.text = "Master Off" if very_compact and Music.is_master_muted() else ("Master Mute" if not very_compact and not Music.is_master_muted() else ("Master On" if very_compact else "Master Muted"))
+	reset_button.text = "Reset" if very_compact else ("Reset Mix" if compact else "Chapter Default")
+	close_button.text = "Close"
 	hint_label.text = "F10 toggle  |  Esc close" if very_compact else "F10 toggle panel  |  Esc close"
 	for bus_name in BUS_ORDER:
 		if bus_label_map.has(bus_name):
@@ -403,7 +415,11 @@ func _refresh_layout() -> void:
 			UISkin.label(bus_label, 13 if compact else 14, Color(0.98, 0.90, 0.66))
 		if bus_description_map.has(bus_name):
 			var description: Label = bus_description_map[bus_name]
+			description.text = String(BUS_SHORT_DESCRIPTIONS[bus_name]) if very_compact else String(BUS_DESCRIPTIONS[bus_name])
 			UISkin.label(description, 11 if compact else 12, Color(0.78, 0.84, 0.92))
+		if bus_header_row_map.has(bus_name):
+			var header_row: HBoxContainer = bus_header_row_map[bus_name]
+			header_row.add_theme_constant_override("separation", 8 if compact else 12)
 		if value_label_map.has(bus_name):
 			var value_label: Label = value_label_map[bus_name]
 			value_label.custom_minimum_size = Vector2(84.0 if very_compact else (94.0 if compact else 106.0), 0.0)
@@ -411,6 +427,12 @@ func _refresh_layout() -> void:
 		if mute_button_map.has(bus_name):
 			var mute_button: Button = mute_button_map[bus_name]
 			mute_button.custom_minimum_size = Vector2(0.0, 32.0 if compact else 34.0)
+			mute_button.text = "Off" if very_compact and Music.is_bus_muted(StringName(bus_name)) else ("On" if very_compact else ("Muted" if Music.is_bus_muted(StringName(bus_name)) else "Mute"))
 		if preview_button_map.has(bus_name):
 			var preview_button: Button = preview_button_map[bus_name]
 			preview_button.custom_minimum_size = Vector2(0.0, 32.0 if compact else 34.0)
+			preview_button.text = "Test" if very_compact else "Preview"
+		if bus_buttons_row_map.has(bus_name):
+			var buttons_row: HBoxContainer = bus_buttons_row_map[bus_name]
+			buttons_row.add_theme_constant_override("separation", 8 if compact else 10)
+			buttons_row.alignment = BoxContainer.ALIGNMENT_CENTER if very_compact else BoxContainer.ALIGNMENT_END

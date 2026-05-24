@@ -196,6 +196,13 @@ func _run() -> void:
 		quit(1)
 		return
 	world.run_event_panel.close()
+	world.run_event_panel.open("bounty", 100)
+	await process_frame
+	if not world.run_event_panel.visible:
+		push_error("Bounty panel did not open")
+		quit(1)
+		return
+	world.run_event_panel.close()
 
 	if world.accessory_choice == null or not world.accessory_choice.has_signal("reroll_requested"):
 		push_error("Accessory choice is missing reroll signal")
@@ -219,6 +226,7 @@ func _run() -> void:
 		_set_layout_override(world.run_event_panel, test_size)
 		_set_layout_override(world.result_screen, test_size)
 		_set_layout_override(world.battle_status, test_size)
+		_set_layout_override(world.character_hud, test_size)
 		await process_frame
 		await process_frame
 		var character_panel := world.character_select.get("panel") as PanelContainer
@@ -240,8 +248,13 @@ func _run() -> void:
 			quit(1)
 			return
 		var audio_reset_button := world.audio_settings_panel.get_node("Backdrop/MarginContainer/PanelContainer/MarginContainer/VBoxContainer/ButtonRow/ResetButton") as Button
-		if test_size.x <= 720 and audio_reset_button.text != "Reset Mix":
+		if test_size.x <= 720 and audio_reset_button.text != "Reset":
 			push_error("Audio settings compact label did not switch")
+			quit(1)
+			return
+		var audio_preview_button := world.audio_settings_panel.get("preview_button_map").get("Music") as Button
+		if test_size.x <= 720 and audio_preview_button != null and audio_preview_button.text != "Test":
+			push_error("Audio settings compact preview label did not switch")
 			quit(1)
 			return
 		world.audio_settings_panel.hide_panel()
@@ -302,6 +315,19 @@ func _run() -> void:
 
 		var status_margin := world.battle_status.get("root_margin") as MarginContainer
 		if not _assert_virtual_rect_fits(status_margin, test_size, "Battle status panel"):
+			quit(1)
+			return
+		var hud_margin := world.character_hud.get("root_margin") as MarginContainer
+		if not _assert_virtual_rect_fits(hud_margin, test_size, "Character HUD panel"):
+			quit(1)
+			return
+		var hud_skill_grid := world.character_hud.get("skill_grid") as GridContainer
+		if test_size.x <= 720 and hud_skill_grid != null and hud_skill_grid.columns != 2:
+			push_error("Character HUD compact skill grid did not switch to two columns")
+			quit(1)
+			return
+		if test_size.x > 720 and hud_skill_grid != null and hud_skill_grid.columns != 4:
+			push_error("Character HUD full skill grid did not restore to four columns")
 			quit(1)
 			return
 

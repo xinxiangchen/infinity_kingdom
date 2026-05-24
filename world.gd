@@ -562,6 +562,8 @@ func _event_status_hint(kind: String) -> String:
 	match kind:
 		"shop":
 			return "Spend gold only where it sharpens the next boss check or patches a real weakness."
+		"bounty":
+			return "Cash now is best before rerolls or shop buys. Contracts are strongest while multiple fights remain."
 		"rest":
 			return "Recovery is immediate. Heal if survival is shaky, or refill defense and inspiration if stable."
 		"training":

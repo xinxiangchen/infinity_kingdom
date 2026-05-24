@@ -66,6 +66,14 @@ static func apply_choice(choice_id: String, actor: Node) -> void:
 			restore_defense_after_refresh = true
 		"shop_relic":
 			pass
+		"bounty_cache":
+			RunDirector.grant_gold(40)
+		"bounty_contract":
+			RunDirector.add_reward_flat_bonus(18)
+		"bounty_tithe":
+			RunDirector.add_reward_multiplier(1.28)
+			RunDirector.add_run_modifier("max_hp", -10.0, 1.0, 28.0)
+			persistent_changed = true
 		"rest_heal":
 			heal_percent(actor, 0.45)
 		"rest_focus":
@@ -167,6 +175,12 @@ static func summary(choice_id: String) -> String:
 			return "Armor reinforced."
 		"shop_relic":
 			return "A hidden relic cache is marked."
+		"bounty_cache":
+			return "Immediate gold claimed."
+		"bounty_contract":
+			return "Future bounty payments improved."
+		"bounty_tithe":
+			return "High-risk contract signed."
 		"rest_heal":
 			return "Health restored."
 		"rest_focus":

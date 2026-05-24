@@ -166,12 +166,23 @@ func _on_run_state_changed(state: Dictionary) -> void:
 	var next_event := String(state.get("next_event_kind", ""))
 	var next_text := RunDirector.describe_event_kind(next_event) if RunDirector != null and not next_event.is_empty() else "Victory"
 	var modifier_count := (state.get("run_modifiers", {}) as Dictionary).size()
-	run_label.text = "Gold %d  |  Last +%d  |  Cleared %d\nNext %s  |  Run effects %d" % [
+	var reward_flat_bonus := int(state.get("reward_flat_bonus", 0))
+	var reward_multiplier := float(state.get("reward_multiplier", 1.0))
+	var reward_bonus_text := "None"
+	if reward_flat_bonus > 0 or reward_multiplier > 1.001:
+		var parts: Array[String] = []
+		if reward_flat_bonus > 0:
+			parts.append("+%d gold" % reward_flat_bonus)
+		if reward_multiplier > 1.001:
+			parts.append("x%.2f reward" % reward_multiplier)
+		reward_bonus_text = " ".join(parts)
+	run_label.text = "Gold %d  |  Last +%d  |  Cleared %d\nNext %s  |  Run effects %d  |  Bounty %s" % [
 		int(state.get("gold", 0)),
 		int(state.get("last_reward_gold", 0)),
 		int(state.get("cleared_encounters", 0)),
 		next_text,
-		modifier_count
+		modifier_count,
+		reward_bonus_text
 	]
 
 func _queue_layout_refresh() -> void:

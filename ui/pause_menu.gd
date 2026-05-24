@@ -206,6 +206,8 @@ func _refresh_context() -> void:
 	var hero_name := "No Champion"
 	var gold_value := int(RunDirector.gold)
 	var cleared_value := int(RunDirector.cleared_encounters)
+	var reward_flat_bonus := int(RunDirector.get_state().get("reward_flat_bonus", 0))
+	var reward_multiplier := float(RunDirector.get_state().get("reward_multiplier", 1.0))
 	var next_kind := RunDirector.describe_event_kind(RunDirector.peek_next_event_kind())
 	var encounter_name := "No active encounter"
 	if target_world != null and is_instance_valid(target_world):
@@ -221,7 +223,12 @@ func _refresh_context() -> void:
 					encounter_name = String(encounter.get_status_title())
 				else:
 					encounter_name = String(encounter.name)
-	run_summary_label.text = "Hero %s  |  Gold %d  |  Cleared %d" % [hero_name, gold_value, cleared_value]
+	var bounty_text := ""
+	if reward_flat_bonus > 0:
+		bounty_text += "  |  +%d gold" % reward_flat_bonus
+	if reward_multiplier > 1.001:
+		bounty_text += "  |  x%.2f reward" % reward_multiplier
+	run_summary_label.text = "Hero %s  |  Gold %d  |  Cleared %d%s" % [hero_name, gold_value, cleared_value, bounty_text]
 	encounter_summary_label.text = "Current %s  |  Next %s" % [encounter_name, next_kind if not next_kind.is_empty() else "Victory"]
 	var equipped_accessory: Dictionary = AccessoryManager.get_equipped_accessory()
 	var accessory_name := String(equipped_accessory.get("name", "No Accessory"))

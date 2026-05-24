@@ -15,11 +15,31 @@ func _run() -> void:
 		push_error("AccessoryManager autoload missing")
 		quit(1)
 		return
+	var run_director := root.get_node_or_null("/root/RunDirector")
+	if run_director == null:
+		push_error("RunDirector autoload missing")
+		quit(1)
+		return
 
 	var world := world_scene.instantiate()
 	root.add_child(world)
 	await process_frame
 	await process_frame
+
+	run_director.reset_run()
+	var event_sequence: Array[String] = []
+	for _index in range(4):
+		event_sequence.append(run_director.next_event_kind())
+	if event_sequence.size() != 4 or event_sequence[0] != "shop":
+		push_error("RunDirector did not build a four-step event deck starting with shop")
+		quit(1)
+		return
+	for event_index in range(1, event_sequence.size()):
+		if event_sequence[event_index] == "shop":
+			push_error("RunDirector repeated shop before the deck was exhausted")
+			quit(1)
+			return
+	run_director.reset_run()
 
 	world._on_character_selected(&"knight")
 	await process_frame
@@ -74,6 +94,11 @@ func _run() -> void:
 		return
 	if world.current_encounter == null:
 		push_error("Encounter did not begin after keep shortcut")
+		quit(1)
+		return
+	var hud_run_state := world.character_hud.get("run_state_label") as Label
+	if hud_run_state == null or hud_run_state.text.find("Next") == -1:
+		push_error("Character HUD run state did not populate")
 		quit(1)
 		return
 	var threat_value := world.battle_status.get("threat_value_label") as Label

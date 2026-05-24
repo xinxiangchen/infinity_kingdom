@@ -77,6 +77,13 @@ func _rebuild(kind: String, gold: int) -> void:
 			choice_row.add_child(_choice_card("shop_defense", "Light Armor Pack", "Restore defense and gain +12 max defense.", "res://assets/ui/consumable/light_armor_pack.png", 40, gold))
 			choice_row.add_child(_choice_card("shop_relic", "Relic Map", "Buy an extra relic choice before the next fight.", "res://assets/ui/icon/ui_shop.png", 55, gold))
 			choice_row.add_child(_choice_card("skip", "Save Gold", "Keep your gold for a later event.", "res://assets/ui/icon/currency_gold_pixel.png", 0, gold))
+		"bounty":
+			title_label.text = "Bounty Board"
+			subtitle_label.text = "Take coin now, or lock in richer encounter payouts for the rest of this run."
+			choice_row.add_child(_choice_card("bounty_cache", "Open Purse", "Claim 40 gold immediately.", "res://assets/ui/icon/currency_gold_pixel.png", 0, gold))
+			choice_row.add_child(_choice_card("bounty_contract", "Steady Contract", "Future encounters grant +18 bonus gold.", "res://assets/ui/icon/ui_shop.png", 0, gold))
+			choice_row.add_child(_choice_card("bounty_tithe", "Risk Contract", "Future encounters grant +28% gold, but lose 10 max hp.", "res://assets/ui/trait/trait_execute.png", 0, gold))
+			choice_row.add_child(_choice_card("skip", "Walk Past", "Keep the build unchanged and move on.", "res://assets/ui/icon/ui_back.png", 0, gold))
 		"rest":
 			title_label.text = "Church Refuge"
 			subtitle_label.text = "Recover before the next encounter."
@@ -258,6 +265,8 @@ func _rule_summary_for_kind(kind: String, next_event: String) -> String:
 	match kind:
 		"shop":
 			return "Buy one focused upgrade now. Next event after this: %s." % next_event
+		"bounty":
+			return "Bounties shape your economy. Immediate gold spikes now, contracts pay through later fights."
 		"rest":
 			return "Recovery is immediate and does not change your long-term route."
 		"training":
@@ -273,6 +282,8 @@ func _default_detail_for_kind(kind: String) -> String:
 	match kind:
 		"shop":
 			return "Choose a purchase if it sharpens the next boss check. Saving gold keeps later options open."
+		"bounty":
+			return "Take cash now if a reroll or purchase is coming. Contracts are stronger when more encounters remain."
 		"rest":
 			return "Take health if survival is shaky, or recover defense and inspiration if your build is already stable."
 		"training":
@@ -289,6 +300,8 @@ func _footer_text_for_kind(kind: String) -> String:
 	match kind:
 		"shop":
 			return "%s  |  Gold is spent immediately." % lead
+		"bounty":
+			return "%s  |  Payout bonuses last for the rest of the run." % lead
 		"rest":
 			return "%s  |  Recovery resolves instantly." % lead
 		"training":
@@ -341,6 +354,11 @@ func _choice_meta(choice_id: String, cost: int) -> Dictionary:
 		meta["timing"] = "Run Bonus" if choice_id != "shop_relic" else "Next Relic"
 		meta["detail"] = "Spends gold now for a lasting upgrade."
 		meta["color"] = Color(1.0, 0.86, 0.56)
+	elif choice_id.begins_with("bounty_"):
+		meta["type"] = "Bounty"
+		meta["timing"] = "Economy"
+		meta["detail"] = "Turns the run toward immediate coin or stronger future payouts."
+		meta["color"] = Color(1.0, 0.82, 0.50)
 	elif choice_id.begins_with("rest_"):
 		meta["type"] = "Recovery"
 		meta["timing"] = "Instant"
