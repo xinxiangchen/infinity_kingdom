@@ -162,18 +162,20 @@ func gain_inspiration(amount: float) -> void:
 	if not is_equal_approx(previous, inspiration):
 		inspiration_changed.emit(inspiration, max_inspiration)
 
-func on_attack_landed(_attack_name: StringName, target: Node) -> void:
+func on_attack_landed(attack_name: StringName, target: Node) -> void:
 	gain_inspiration(inspiration_gain_on_attack_hit)
 	if enchant_active and target != null and target.has_method("apply_control_effects"):
 		target.apply_control_effects(_build_control_payload())
 		clear_skill3_enchant()
 	if skill1_attack_blades_upgrade and attack_blade_bonus_hits_remaining > 0 and target != null and target.has_method("receive_hit"):
 		attack_blade_bonus_hits_remaining -= 1
-		target.receive_hit({
-			"source": self,
-			"damage": skill1_attack_blades_damage,
-			"crit_rate": crit_rate
-		})
+		target.receive_hit(AccessoryManager.build_hit_payload(
+			self,
+			&"skill1_bonus",
+			skill1_attack_blades_damage,
+			crit_rate
+		))
+	AccessoryManager.apply_on_hit_effects(self, attack_name, target)
 
 func sync_visuals() -> void:
 	if absf(facing.x) > 0.01:
@@ -411,11 +413,12 @@ func _apply_area_damage(center: Vector2, radius: float, damage: float, attack_na
 			continue
 		if not target.has_method("receive_hit"):
 			continue
-		target.receive_hit({
-			"source": self,
-			"damage": damage,
-			"crit_rate": _get_current_crit_rate()
-		})
+		target.receive_hit(AccessoryManager.build_hit_payload(
+			self,
+			attack_name,
+			damage,
+			_get_current_crit_rate()
+		))
 		on_attack_landed(attack_name, target)
 		attack_hit.emit(attack_name, target)
 
@@ -453,11 +456,12 @@ func _update_blades(delta: float) -> void:
 		if float(blade_hit_cooldowns.get(key, 0.0)) > 0.0:
 			continue
 		blade_hit_cooldowns[key] = blade_tick_interval
-		target.receive_hit({
-			"source": self,
-			"damage": skill1_damage,
-			"crit_rate": _get_current_crit_rate()
-		})
+		target.receive_hit(AccessoryManager.build_hit_payload(
+			self,
+			&"skill1",
+			skill1_damage,
+			_get_current_crit_rate()
+		))
 		on_attack_landed(&"skill1", target)
 		attack_hit.emit(&"skill1", target)
 	if blade_time_remaining <= 0.0:
@@ -601,4 +605,3 @@ func _add_dead_animation(library: AnimationLibrary) -> void:
 	animation.length = 0.7
 	_add_value_track(animation, "Body:rotation", [[0.0, 0.0], [0.7, PI * 0.5]])
 	_store_animation(library, &"dead", animation)
-

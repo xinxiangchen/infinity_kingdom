@@ -152,8 +152,9 @@ func gain_inspiration(amount: float) -> void:
 	if not is_equal_approx(previous, inspiration):
 		inspiration_changed.emit(inspiration, max_inspiration)
 
-func on_attack_landed(_attack_name: StringName, _target: Node) -> void:
+func on_attack_landed(attack_name: StringName, target: Node) -> void:
 	gain_inspiration(inspiration_gain_on_attack_hit)
+	AccessoryManager.apply_on_hit_effects(self, attack_name, target)
 
 func sync_visuals() -> void:
 	if absf(facing.x) > 0.01:
@@ -376,11 +377,12 @@ func apply_assassination_damage() -> void:
 	var damage := skill3_damage
 	if skill3_execute_upgrade and _can_execute_target(active_skill_target):
 		damage = 999999.0
-	var payload := {
-		"source": self,
-		"damage": get_scaled_damage(damage),
-		"crit_rate": _get_current_crit_rate()
-	}
+	var payload := AccessoryManager.build_hit_payload(
+		self,
+		&"skill3",
+		get_scaled_damage(damage),
+		_get_current_crit_rate()
+	)
 	active_skill_target.receive_hit(payload)
 	on_attack_landed(&"skill3", active_skill_target)
 	attack_hit.emit(&"skill3", active_skill_target)
@@ -461,13 +463,13 @@ func apply_damage_to_overlapping_targets(base_damage: float, radius: float, atta
 		if not target.has_method("receive_hit"):
 			continue
 		current_attack_targets.append(target)
-		var payload := {
-			"source": self,
-			"damage": get_scaled_damage(base_damage),
-			"crit_rate": _get_current_crit_rate()
-		}
-		for key in extra_payload.keys():
-			payload[key] = extra_payload[key]
+		var payload := AccessoryManager.build_hit_payload(
+			self,
+			attack_name,
+			get_scaled_damage(base_damage),
+			_get_current_crit_rate(),
+			extra_payload
+		)
 		target.receive_hit(payload)
 		on_attack_landed(attack_name, target)
 		attack_hit.emit(attack_name, target)

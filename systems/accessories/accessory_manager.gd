@@ -151,9 +151,16 @@ const STAT_FIELDS := [
 	"skill3_damage"
 ]
 
+const DIRECT_SKILL_ATTACKS := {
+	&"skill1": true,
+	&"skill2": true,
+	&"skill3": true
+}
+
 var equipped_accessory: Dictionary = EMPTY_ACCESSORY.duplicate(true)
 var current_choices: Array[Dictionary] = []
 var base_stats_by_actor: Dictionary = {}
+var combat_proc_ready_at: Dictionary = {}
 var choice_cursor: int = 0
 var accessory_catalog: Array[Dictionary] = []
 
@@ -174,6 +181,7 @@ func reset_run() -> void:
 	equipped_accessory = EMPTY_ACCESSORY.duplicate(true)
 	current_choices.clear()
 	base_stats_by_actor.clear()
+	combat_proc_ready_at.clear()
 	choice_cursor = 0
 	accessory_equipped.emit(equipped_accessory)
 
@@ -242,6 +250,59 @@ func keep_current(actor: Node = null) -> Dictionary:
 		apply_to_actor(actor)
 	accessory_equipped.emit(equipped_accessory)
 	return equipped_accessory
+
+func build_hit_payload(actor: Node, attack_name: StringName, base_damage: float, base_crit_rate: float, extra_payload: Dictionary = {}) -> Dictionary:
+	var payload := {
+		"source": actor,
+		"damage": base_damage,
+		"crit_rate": base_crit_rate
+	}
+	for key in extra_payload.keys():
+		payload[key] = extra_payload[key]
+	return enhance_hit_payload(actor, attack_name, payload)
+
+func enhance_hit_payload(actor: Node, attack_name: StringName, payload: Dictionary) -> Dictionary:
+	var enhanced := payload.duplicate(true)
+	var tags := get_equipped_tags()
+	if tags.is_empty():
+		return enhanced
+	var damage_value := float(enhanced.get("damage", 0.0))
+	if tags.has("crit"):
+		enhanced["crit_rate"] = float(enhanced.get("crit_rate", 0.0)) + 0.08
+	if tags.has("attack") and attack_name == &"attack":
+		damage_value += maxf(4.0, damage_value * 0.06)
+		enhanced["damage"] = damage_value
+	if tags.has("power") and _is_direct_skill_attack(attack_name):
+		damage_value += maxf(8.0, damage_value * 0.08)
+		enhanced["damage"] = damage_value
+	if tags.has("risk") and _ratio(actor, "hp", "max_hp") <= 0.55:
+		damage_value *= 1.12
+		enhanced["damage"] = damage_value
+	if tags.has("damage") and _is_direct_skill_attack(attack_name):
+		_merge_payload_max(enhanced, "damage_multiplier", 1.12)
+		_merge_payload_max(enhanced, "damage_multiplier_duration", 2.25)
+	return enhanced
+
+func apply_on_hit_effects(actor: Node, attack_name: StringName, target: Node) -> void:
+	if actor == null:
+		return
+	var tags := get_equipped_tags()
+	if tags.is_empty():
+		return
+	if tags.has("resource") and _consume_combat_proc(actor, "resource_flow", 0.18):
+		_grant_inspiration(actor, 1.0 if _is_direct_skill_attack(attack_name) else 0.5)
+	if tags.has("attack") and attack_name == &"attack":
+		_refund_cooldown(actor, "attack", 0.08)
+	if tags.has("tempo") and _is_direct_skill_attack(attack_name):
+		_refund_cooldown(actor, String(attack_name), 0.32)
+	if tags.has("skill") and _is_direct_skill_attack(attack_name) and _consume_combat_proc(actor, "skill_silence", 0.55):
+		_try_apply_target_control(target, {"silence_duration": 1.0})
+	if tags.has("speed") and (attack_name == &"attack" or attack_name == &"skill1") and _consume_combat_proc(actor, "speed_slow", 0.35):
+		_try_apply_target_control(target, {"slow_duration": 1.15, "slow_multiplier": 0.82})
+	if tags.has("defense") and _is_direct_skill_attack(attack_name) and _consume_combat_proc(actor, "defense_guard", 0.55):
+		_restore_defense_or_shield(actor, 10.0, 10.0)
+	if tags.has("survival") and _ratio(actor, "hp", "max_hp") <= 0.5 and _consume_combat_proc(actor, "survival_heal", 1.2):
+		_heal_actor(actor, 4.0)
 
 func get_accessory(accessory_id: String) -> Dictionary:
 	if accessory_id == "none":
@@ -371,6 +432,8 @@ func _scale(actor: Node, field: String, multiplier: float, floor_value: float = 
 	actor.set(field, next_value)
 
 func _has_property(actor: Node, field: String) -> bool:
+	if actor == null:
+		return false
 	for property in actor.get_property_list():
 		if String(property.get("name", "")) == field:
 			return true
@@ -392,3 +455,86 @@ func _format_effect(key: String, value: float) -> String:
 		return "%s %+d%%" % [label, int(round(value * 100.0))]
 	var sign := "+" if value >= 0.0 else ""
 	return "%s %s%.1f" % [label, sign, value]
+
+func _is_direct_skill_attack(attack_name: StringName) -> bool:
+	return DIRECT_SKILL_ATTACKS.has(attack_name)
+
+func _merge_payload_max(payload: Dictionary, key: String, value: float) -> void:
+	payload[key] = maxf(float(payload.get(key, 0.0)), value)
+
+func _consume_combat_proc(actor: Node, proc_name: String, cooldown: float) -> bool:
+	if actor == null:
+		return false
+	var proc_key := "%s:%s" % [actor.get_instance_id(), proc_name]
+	var now := Time.get_ticks_msec() * 0.001
+	if now < float(combat_proc_ready_at.get(proc_key, 0.0)):
+		return false
+	combat_proc_ready_at[proc_key] = now + cooldown
+	return true
+
+func _grant_inspiration(actor: Node, amount: float) -> void:
+	if amount <= 0.0:
+		return
+	if actor.has_method("gain_inspiration"):
+		actor.gain_inspiration(amount)
+		return
+	if not _has_property(actor, "inspiration") or not _has_property(actor, "max_inspiration"):
+		return
+	actor.inspiration = clampf(float(actor.inspiration) + amount, 0.0, float(actor.max_inspiration))
+	if actor.has_method("emit_stat_signals"):
+		actor.emit_stat_signals()
+
+func _refund_cooldown(actor: Node, cooldown_key: String, amount: float) -> void:
+	if amount <= 0.0 or not _has_property(actor, "cooldowns"):
+		return
+	var cooldowns_value: Variant = actor.get("cooldowns")
+	if not (cooldowns_value is Dictionary):
+		return
+	var cooldowns: Dictionary = cooldowns_value
+	if not cooldowns.has(cooldown_key):
+		return
+	cooldowns[cooldown_key] = maxf(float(cooldowns[cooldown_key]) - amount, 0.0)
+	actor.set("cooldowns", cooldowns)
+
+func _restore_defense_or_shield(actor: Node, defense_amount: float, shield_amount: float) -> void:
+	var health_component := _get_health_component(actor)
+	if health_component != null:
+		var current_defense := float(health_component.get("defense"))
+		var max_defense_value := float(health_component.get("max_defense"))
+		if max_defense_value > 0.0 and current_defense < max_defense_value:
+			health_component.defense = minf(current_defense + defense_amount, max_defense_value)
+			health_component.defense_changed.emit(float(health_component.defense), max_defense_value)
+			return
+		if health_component.has_method("apply_shield"):
+			health_component.apply_shield(shield_amount)
+			return
+	if _has_property(actor, "defense") and _has_property(actor, "max_defense"):
+		if float(actor.defense) < float(actor.max_defense):
+			actor.defense = minf(float(actor.defense) + defense_amount, float(actor.max_defense))
+		elif _has_property(actor, "shield"):
+			actor.shield = float(actor.get("shield")) + shield_amount
+	if actor.has_method("emit_stat_signals"):
+		actor.emit_stat_signals()
+
+func _heal_actor(actor: Node, amount: float) -> void:
+	if amount <= 0.0:
+		return
+	if actor.has_method("heal"):
+		actor.heal(amount)
+		return
+	if not _has_property(actor, "hp") or not _has_property(actor, "max_hp"):
+		return
+	actor.hp = clampf(float(actor.hp) + amount, 0.0, float(actor.max_hp))
+	if actor.has_method("emit_stat_signals"):
+		actor.emit_stat_signals()
+
+func _try_apply_target_control(target: Node, payload: Dictionary) -> void:
+	if target == null or not is_instance_valid(target):
+		return
+	if target.has_method("apply_control_effects"):
+		target.apply_control_effects(payload)
+
+func _get_health_component(actor: Node) -> Node:
+	if actor == null:
+		return null
+	return actor.get_node_or_null("HealthComponent")

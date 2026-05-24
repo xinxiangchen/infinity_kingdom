@@ -31,7 +31,7 @@ grow_horizontal = 2
 grow_vertical = 2
 
 [node name="PanelContainer" type="PanelContainer" parent="CenterContainer"]
-custom_minimum_size = Vector2(620, 470)
+custom_minimum_size = Vector2(580, 440)
 layout_mode = 2
 
 [node name="MarginContainer" type="MarginContainer" parent="CenterContainer/PanelContainer"]
@@ -46,7 +46,7 @@ layout_mode = 2
 theme_override_constants/separation = 14
 
 [node name="Decoration" type="TextureRect" parent="CenterContainer/PanelContainer/MarginContainer/VBoxContainer"]
-custom_minimum_size = Vector2(0, 96)
+custom_minimum_size = Vector2(0, 88)
 layout_mode = 2
 expand_mode = 1
 stretch_mode = 5
@@ -63,7 +63,7 @@ horizontal_alignment = 1
 autowrap_mode = 3
 
 [node name="Detail" type="Label" parent="CenterContainer/PanelContainer/MarginContainer/VBoxContainer"]
-custom_minimum_size = Vector2(0, 80)
+custom_minimum_size = Vector2(0, 72)
 layout_mode = 2
 text = "Choose another champion to restart."
 horizontal_alignment = 1

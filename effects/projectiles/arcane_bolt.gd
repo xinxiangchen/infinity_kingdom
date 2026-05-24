@@ -53,11 +53,7 @@ func _try_hit(target: Variant) -> void:
 	if not target.has_method("receive_hit"):
 		return
 	expired = true
-	target.receive_hit({
-		"source": source,
-		"damage": damage,
-		"crit_rate": crit_rate
-	})
+	target.receive_hit(AccessoryManager.build_hit_payload(source, attack_name, damage, crit_rate))
 	if source != null and source.has_method("on_attack_landed"):
 		source.on_attack_landed(attack_name, target)
 	_spawn_hit_flash()

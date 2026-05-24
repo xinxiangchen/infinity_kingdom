@@ -22,6 +22,12 @@ const DAMAGE_NUMBER_SCENE := preload("res://effects/damage_number.tscn")
 @export var skill2_recover_duration: float = 2.0
 @export var skill2_length: float = 310.0
 @export var skill2_width: float = 34.0
+@export_range(0.1, 0.9, 0.05) var enrage_threshold_ratio: float = 0.45
+@export var enrage_damage_multiplier: float = 1.12
+@export var enrage_speed_multiplier: float = 1.15
+@export var enrage_cooldown_multiplier: float = 0.82
+@export var enrage_aftershock_multiplier: float = 0.55
+@export var enrage_aftershock_bonus_radius: float = 38.0
 
 @onready var body: Polygon2D = $Body
 @onready var sword: Polygon2D = $Sword
@@ -47,6 +53,8 @@ var silenced_time_remaining: float = 0.0
 var root_time_remaining: float = 0.0
 var slow_time_remaining: float = 0.0
 var slow_factor: float = 1.0
+var enraged: bool = false
+var slam_aftershock_committed: bool = false
 
 func _ready() -> void:
 	add_to_group("damageable")
@@ -66,9 +74,10 @@ func get_status_title() -> String:
 	return "Judicator"
 
 func get_status_text() -> String:
-	return "HP %d / %d\nState: %s" % [
+	return "HP %d / %d%s\nState: %s" % [
 		int(round(hp)),
 		int(round(max_hp)),
+		"  ENRAGED" if enraged else "",
 		String(state)
 	]
 
@@ -82,6 +91,7 @@ func _physics_process(delta: float) -> void:
 	state_time += delta
 	if target == null or not is_instance_valid(target):
 		_find_target()
+	_update_enrage_state()
 	_update_state(delta)
 	_update_visuals()
 
@@ -169,6 +179,7 @@ func _start_skill1() -> void:
 	state = &"skill_1_jump_start"
 	state_time = 0.0
 	action_committed = false
+	slam_aftershock_committed = false
 	skill1_cooldown_remaining = skill1_cooldown
 	leap_start_position = global_position
 	leap_target_position = target.global_position if target != null else global_position
@@ -190,7 +201,11 @@ func _process_skill1_slam() -> void:
 		global_position = leap_target_position
 		landing_ring.visible = false
 		_hit_target_in_radius(skill1_radius, skill1_damage, true)
-	if state_time >= skill1_travel_duration + 0.08:
+	if enraged and action_committed and not slam_aftershock_committed and state_time >= skill1_travel_duration + 0.05:
+		slam_aftershock_committed = true
+		_spawn_aftershock()
+		_hit_target_in_radius(skill1_radius + enrage_aftershock_bonus_radius, skill1_damage * enrage_aftershock_multiplier, false)
+	if state_time >= skill1_travel_duration + (0.18 if enraged else 0.08):
 		_enter_recover(skill1_recover_duration)
 
 func _start_skill2() -> void:
@@ -210,7 +225,7 @@ func _process_skill2_charge() -> void:
 	slash_line.global_position = global_position
 	if not action_committed and state_time >= skill2_charge_duration:
 		action_committed = true
-		_hit_target_in_line(skill2_damage)
+		_hit_target_in_line(skill2_damage, skill2_length + (28.0 if enraged else 0.0), skill2_width + (10.0 if enraged else 0.0))
 		slash_line.default_color = Color(1.0, 0.74, 0.4, 0.95)
 	if state_time >= skill2_charge_duration + 0.18:
 		slash_line.visible = false
@@ -244,12 +259,16 @@ func _hit_target_in_radius(radius: float, damage: float, knockback: bool) -> voi
 		var direction := (actor.global_position - global_position).normalized()
 		actor.velocity = direction * 320.0
 
-func _hit_target_in_line(damage: float) -> void:
+func _hit_target_in_line(damage: float, length: float = -1.0, width: float = -1.0) -> void:
 	if target == null or not is_instance_valid(target):
 		return
+	if length <= 0.0:
+		length = skill2_length
+	if width <= 0.0:
+		width = skill2_width
 	var start_position := global_position
-	var end_position := global_position + line_direction * skill2_length
-	if _distance_to_segment(target.global_position, start_position, end_position) > skill2_width:
+	var end_position := global_position + line_direction * length
+	if _distance_to_segment(target.global_position, start_position, end_position) > width:
 		return
 	target.receive_hit({
 		"source": self,
@@ -269,16 +288,46 @@ func _distance_to_segment(point: Vector2, start_position: Vector2, end_position:
 func _can_use_skills() -> bool:
 	return silenced_time_remaining <= 0.0
 
+func _update_enrage_state() -> void:
+	if enraged or hp > max_hp * enrage_threshold_ratio:
+		return
+	enraged = true
+	move_speed *= enrage_speed_multiplier
+	attack_damage *= enrage_damage_multiplier
+	skill1_damage *= enrage_damage_multiplier
+	skill2_damage *= enrage_damage_multiplier
+	attack_interval *= enrage_cooldown_multiplier
+	skill1_cooldown *= enrage_cooldown_multiplier
+	skill2_cooldown *= enrage_cooldown_multiplier
+	landing_ring.default_color = Color(1.0, 0.74, 0.38, 0.9)
+	slash_line.default_color = Color(1.0, 0.62, 0.4, 0.85)
+	Sfx.play_event(&"boss_judicator_skill2", global_position, 2.0)
+
 func _update_visuals() -> void:
 	var body_color := Color(0.68, 0.7, 0.78, 1.0)
 	if state == &"skill_1_jump_start" or state == &"skill_2_charge":
 		body_color = Color(0.9, 0.74, 0.52, 1.0)
 	elif silenced_time_remaining > 0.0:
 		body_color = Color(0.72, 0.64, 0.92, 1.0)
+	elif enraged:
+		body_color = Color(0.92, 0.62, 0.42, 1.0)
 	body.color = body_color
 	sword.color = Color(0.92, 0.84, 0.72, 1.0)
 	if target != null and is_instance_valid(target):
 		sword.rotation = (target.global_position - global_position).angle()
+
+func _spawn_aftershock() -> void:
+	var ring := Line2D.new()
+	ring.width = 5.0
+	ring.closed = true
+	ring.default_color = Color(1.0, 0.74, 0.42, 0.92)
+	ring.points = _build_ring_points(skill1_radius + enrage_aftershock_bonus_radius, 18)
+	ring.global_position = global_position
+	get_tree().current_scene.add_child(ring)
+	var tween := create_tween()
+	tween.tween_property(ring, "scale", Vector2.ONE * 1.12, 0.14)
+	tween.parallel().tween_property(ring, "modulate:a", 0.0, 0.14)
+	tween.finished.connect(ring.queue_free)
 
 func _spawn_damage_number(amount: float, is_critical: bool) -> void:
 	var damage_number := DAMAGE_NUMBER_SCENE.instantiate()
@@ -310,3 +359,10 @@ func _on_died() -> void:
 			defeated.emit()
 			queue_free()
 	)
+
+func _build_ring_points(radius: float, steps: int = 16) -> PackedVector2Array:
+	var points := PackedVector2Array()
+	for index in range(steps):
+		var angle := TAU * float(index) / float(steps)
+		points.append(Vector2.RIGHT.rotated(angle) * radius)
+	return points

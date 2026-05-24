@@ -9,6 +9,7 @@ var direction: Vector2 = Vector2.RIGHT
 var damage: float = 100.0
 var crit_rate: float = 0.0
 var source: Node = null
+var attack_name: StringName = &"skill1"
 var hit_targets: Array[Node] = []
 var pulse_time: float = 0.0
 
@@ -16,11 +17,12 @@ func _ready() -> void:
 	body_entered.connect(_on_body_entered)
 	area_entered.connect(_on_area_entered)
 
-func setup(owner_actor: Node, travel_direction: Vector2, hit_damage: float, hit_crit_rate: float) -> void:
+func setup(owner_actor: Node, travel_direction: Vector2, hit_damage: float, hit_crit_rate: float, attack_label: StringName = &"skill1") -> void:
 	source = owner_actor
 	direction = travel_direction.normalized() if travel_direction != Vector2.ZERO else Vector2.RIGHT
 	damage = hit_damage
 	crit_rate = hit_crit_rate
+	attack_name = attack_label
 	rotation = direction.angle()
 	var timer := get_tree().create_timer(lifetime)
 	timer.timeout.connect(queue_free)
@@ -48,13 +50,9 @@ func _try_hit(target: Variant) -> void:
 	if not target.has_method("receive_hit"):
 		return
 	hit_targets.append(target)
-	target.receive_hit({
-		"source": source,
-		"damage": damage,
-		"crit_rate": crit_rate
-	})
+	target.receive_hit(AccessoryManager.build_hit_payload(source, attack_name, damage, crit_rate))
 	if source != null and source.has_method("on_attack_landed"):
-		source.on_attack_landed(&"skill1", target)
+		source.on_attack_landed(attack_name, target)
 	_spawn_hit_flash()
 
 func _resolve_damage_target(target: Variant) -> Node:

@@ -9,6 +9,7 @@ class TestActor:
 	var defense: float = 12.0
 	var max_inspiration: float = 40.0
 	var inspiration: float = 10.0
+	var shield: float = 0.0
 	var attack_damage: float = 20.0
 	var attack_interval: float = 1.0
 	var move_speed: float = 300.0
@@ -23,12 +24,27 @@ class TestActor:
 	var skill1_damage: float = 50.0
 	var skill2_damage: float = 65.0
 	var skill3_damage: float = 80.0
+	var cooldowns := {
+		"attack": 0.7,
+		"skill1": 3.0,
+		"skill2": 5.0,
+		"skill3": 7.0
+	}
 
 	func heal(amount: float) -> void:
 		hp = clampf(hp + amount, 0.0, max_hp)
 
 	func emit_stat_signals() -> void:
 		pass
+
+class ControlTarget:
+	extends Node
+
+	var applied_effects: Dictionary = {}
+
+	func apply_control_effects(payload: Dictionary) -> void:
+		for key in payload.keys():
+			applied_effects[key] = payload[key]
 
 func _initialize() -> void:
 	call_deferred("_run")
@@ -52,7 +68,9 @@ func _run() -> void:
 		quit(1)
 		return
 	var actor := TestActor.new()
+	var control_target := ControlTarget.new()
 	root.add_child(actor)
+	root.add_child(control_target)
 	var base_damage := float(actor.attack_damage)
 	var base_speed := float(actor.move_speed)
 	var base_crit := float(actor.crit_rate)
@@ -123,5 +141,60 @@ func _run() -> void:
 		push_error("New accessory stats were not applied after re-equip")
 		quit(1)
 		return
+	accessory_manager.equip("wolf_pendant", actor)
+	var skill_payload: Dictionary = accessory_manager.build_hit_payload(actor, &"skill2", 40.0, 0.1)
+	if float(skill_payload.get("crit_rate", 0.0)) <= 0.1:
+		push_error("Crit relic did not improve combat payload crit chance")
+		quit(1)
+		return
+	if float(skill_payload.get("damage_multiplier", 1.0)) <= 1.0:
+		push_error("Damage relic did not add a combat payload rider")
+		quit(1)
+		return
+	accessory_manager.equip("wind_knot", actor)
+	control_target.applied_effects.clear()
+	actor.cooldowns["attack"] = 0.7
+	accessory_manager.apply_on_hit_effects(actor, &"attack", control_target)
+	if float(actor.cooldowns["attack"]) >= 0.7:
+		push_error("Attack relic did not refund basic attack cooldown")
+		quit(1)
+		return
+	if float(control_target.applied_effects.get("slow_duration", 0.0)) <= 0.0:
+		push_error("Speed relic did not apply slow control")
+		quit(1)
+		return
+	accessory_manager.equip("old_king_crest", actor)
+	control_target.applied_effects.clear()
+	actor.defense = 8.0
+	accessory_manager.apply_on_hit_effects(actor, &"skill2", control_target)
+	if float(control_target.applied_effects.get("silence_duration", 0.0)) <= 0.0:
+		push_error("Skill relic did not apply silence control")
+		quit(1)
+		return
+	if float(actor.defense) <= 8.0:
+		push_error("Defense relic did not restore defense on skill hit")
+		quit(1)
+		return
+	accessory_manager.equip("ember_talisman", actor)
+	actor.inspiration = 5.0
+	actor.cooldowns["skill1"] = 3.0
+	accessory_manager.apply_on_hit_effects(actor, &"skill1", control_target)
+	if float(actor.inspiration) <= 5.0:
+		push_error("Resource relic did not restore inspiration on hit")
+		quit(1)
+		return
+	if float(actor.cooldowns["skill1"]) >= 3.0:
+		push_error("Tempo relic did not refund skill cooldown")
+		quit(1)
+		return
+	accessory_manager.equip("iron_branch_pendant", actor)
+	actor.hp = 20.0
+	actor.defense = 0.0
+	accessory_manager.apply_on_hit_effects(actor, &"skill2", control_target)
+	if float(actor.hp) <= 20.0:
+		push_error("Survival relic did not heal low-health actor on hit")
+		quit(1)
+		return
 	actor.queue_free()
+	control_target.queue_free()
 	quit(0)

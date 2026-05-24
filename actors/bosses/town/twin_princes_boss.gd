@@ -12,6 +12,7 @@ const ROYAL_BOLT_SCENE := preload("res://effects/projectiles/royal_bolt.tscn")
 @export var teleport_slash_damage: float = 30.0
 @export var spear_charge_damage: float = 50.0
 @export var barrage_damage: float = 18.0
+@export_range(0.1, 0.9, 0.05) var desperation_threshold_ratio: float = 0.35
 
 @onready var body: Polygon2D = $Body
 @onready var spear: Polygon2D = $Spear
@@ -40,6 +41,7 @@ var silenced_time_remaining: float = 0.0
 var root_time_remaining: float = 0.0
 var slow_time_remaining: float = 0.0
 var slow_factor: float = 1.0
+var desperation_active: bool = false
 
 func _ready() -> void:
 	add_to_group("damageable")
@@ -60,8 +62,9 @@ func get_status_title() -> String:
 	return "Grand Prince" if current_phase == 1 else "Saint Prince Yage"
 
 func get_status_text() -> String:
-	return "Phase %d\nHP %d / %d\nState: %s" % [
+	return "Phase %d%s\nHP %d / %d\nState: %s" % [
 		current_phase,
+		"  DESPERATE" if desperation_active else "",
 		int(round(hp)),
 		int(round(max_hp)),
 		String(state)
@@ -77,6 +80,7 @@ func _physics_process(delta: float) -> void:
 	spear_cooldown = maxf(spear_cooldown - delta, 0.0)
 	barrage_cooldown = maxf(barrage_cooldown - delta, 0.0)
 	state_time += delta
+	_update_desperation_state()
 	_update_state(delta)
 	_update_visuals()
 
@@ -140,7 +144,7 @@ func _process_idle(delta: float) -> void:
 	var distance := to_target.length()
 	if distance > 0.0:
 		spear.rotation = to_target.angle()
-	if current_phase == 2 and _can_use_skills() and barrage_cooldown <= 0.0 and distance >= 150.0:
+	if current_phase == 2 and _can_use_skills() and barrage_cooldown <= 0.0 and distance >= (120.0 if desperation_active else 150.0):
 		_start_barrage()
 		return
 	if _can_use_skills() and teleport_cooldown <= 0.0:
@@ -158,7 +162,7 @@ func _start_teleport_attack() -> void:
 	state = &"teleport_mark"
 	state_time = 0.0
 	action_committed = false
-	teleport_cooldown = 5.0 if current_phase == 1 else 3.2
+	teleport_cooldown = 5.0 if current_phase == 1 else (2.45 if desperation_active else 3.2)
 	if target != null and is_instance_valid(target):
 		var side := Vector2(52.0, 0.0)
 		side.x *= -1.0 if int(Time.get_ticks_msec() / 100) % 2 == 0 else 1.0
@@ -184,13 +188,13 @@ func _process_teleport_slash() -> void:
 		action_committed = true
 		_hit_target_in_radius(84.0, teleport_slash_damage)
 	if state_time >= 0.28:
-		_enter_recover(0.4 if current_phase == 1 else 0.24)
+		_enter_recover(0.4 if current_phase == 1 else (0.16 if desperation_active else 0.24))
 
 func _start_spear_charge() -> void:
 	state = &"spear_charge"
 	state_time = 0.0
 	action_committed = false
-	spear_cooldown = 6.0
+	spear_cooldown = 4.8 if desperation_active else 6.0
 	charge_start_position = global_position
 	charge_direction = (target.global_position - global_position).normalized() if target != null else Vector2.RIGHT
 	if charge_direction == Vector2.ZERO:
@@ -218,7 +222,7 @@ func _start_barrage() -> void:
 	state = &"barrage_cast"
 	state_time = 0.0
 	action_committed = false
-	barrage_cooldown = 8.0
+	barrage_cooldown = 5.8 if desperation_active else 8.0
 	Sfx.play_event(&"boss_twin_barrage", global_position)
 
 func _process_barrage_cast() -> void:
@@ -226,7 +230,7 @@ func _process_barrage_cast() -> void:
 		action_committed = true
 		_fire_barrage()
 	if state_time >= 0.82:
-		_enter_recover(0.7)
+		_enter_recover(0.42 if desperation_active else 0.7)
 
 func _process_recover() -> void:
 	if state_time >= 0.7:
@@ -254,11 +258,17 @@ func _fire_barrage() -> void:
 	if target == null or not is_instance_valid(target):
 		return
 	var base_direction := (target.global_position - global_position).normalized()
-	for angle_offset in [-18.0, -9.0, 0.0, 9.0, 18.0]:
-		var bolt := ROYAL_BOLT_SCENE.instantiate()
-		bolt.global_position = projectile_spawner.global_position
-		get_tree().current_scene.add_child(bolt)
-		bolt.setup(self, base_direction.rotated(deg_to_rad(angle_offset)), barrage_damage)
+	var first_wave := [-18.0, -9.0, 0.0, 9.0, 18.0]
+	if desperation_active:
+		first_wave = [-24.0, -16.0, -8.0, 0.0, 8.0, 16.0, 24.0]
+	_spawn_barrage_wave(base_direction, first_wave, barrage_damage)
+	if desperation_active:
+		var timer := get_tree().create_timer(0.18)
+		timer.timeout.connect(func() -> void:
+			if is_instance_valid(self) and target != null and is_instance_valid(target):
+				var second_direction := (target.global_position - global_position).normalized()
+				_spawn_barrage_wave(second_direction, [-12.0, 0.0, 12.0], barrage_damage * 0.8)
+		)
 
 func _hit_target_in_radius(radius: float, damage: float) -> void:
 	if target == null or not is_instance_valid(target):
@@ -296,12 +306,26 @@ func _distance_to_segment(point: Vector2, start_position: Vector2, end_position:
 func _can_use_skills() -> bool:
 	return silenced_time_remaining <= 0.0
 
+func _update_desperation_state() -> void:
+	if desperation_active or current_phase != 2 or hp > max_hp * desperation_threshold_ratio:
+		return
+	desperation_active = true
+	move_speed *= 1.08
+	teleport_cooldown = minf(teleport_cooldown, 1.0)
+	spear_cooldown = minf(spear_cooldown, 1.5)
+	barrage_cooldown = minf(barrage_cooldown, 1.6)
+	phase_ring.visible = true
+	phase_ring.rotation = 0.0
+	Sfx.play_event(&"boss_twin_barrage", global_position, 2.0)
+
 func _update_visuals() -> void:
 	var base_color := Color(0.84, 0.82, 0.88, 1.0) if current_phase == 1 else Color(0.95, 0.76, 0.58, 1.0)
 	if silenced_time_remaining > 0.0:
 		base_color = Color(0.72, 0.64, 0.92, 1.0)
+	elif desperation_active:
+		base_color = Color(1.0, 0.62, 0.46, 1.0)
 	body.color = base_color
-	phase_ring.default_color = Color(1.0, 0.82, 0.56, 0.85) if current_phase == 2 else Color(0.82, 0.86, 1.0, 0.8)
+	phase_ring.default_color = Color(1.0, 0.64, 0.42, 0.9) if desperation_active else (Color(1.0, 0.82, 0.56, 0.85) if current_phase == 2 else Color(0.82, 0.86, 1.0, 0.8))
 	if target != null and is_instance_valid(target):
 		spear.rotation = (target.global_position - global_position).angle()
 
@@ -323,6 +347,7 @@ func _on_damaged(_amount: float, remaining_hp: float, _source: Node) -> void:
 func _on_died() -> void:
 	if current_phase == 1:
 		current_phase = 2
+		desperation_active = false
 		max_hp = phase2_hp
 		hp = max_hp
 		invulnerable = true
@@ -345,3 +370,10 @@ func _on_died() -> void:
 			defeated.emit()
 			queue_free()
 	)
+
+func _spawn_barrage_wave(base_direction: Vector2, angles: Array, damage: float) -> void:
+	for angle_offset in angles:
+		var bolt := ROYAL_BOLT_SCENE.instantiate()
+		bolt.global_position = projectile_spawner.global_position
+		get_tree().current_scene.add_child(bolt)
+		bolt.setup(self, base_direction.rotated(deg_to_rad(float(angle_offset))), damage)

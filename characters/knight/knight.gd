@@ -149,8 +149,9 @@ func emit_stat_signals() -> void:
 func get_character_name() -> String:
 	return "Knight"
 
-func on_attack_landed(_attack_name: StringName, _target: Node) -> void:
+func on_attack_landed(attack_name: StringName, target: Node) -> void:
 	gain_inspiration(inspiration_gain_on_attack_hit)
+	AccessoryManager.apply_on_hit_effects(self, attack_name, target)
 
 func sync_visuals() -> void:
 	if absf(facing.x) > 0.01:
@@ -329,14 +330,17 @@ func try_hit_dash_target(target: Variant) -> void:
 	if dash_hit_targets.has(target):
 		return
 	dash_hit_targets.append(target)
-	var payload := {
-		"source": self,
-		"damage": get_scaled_damage(skill1_damage),
-		"crit_rate": crit_rate
-	}
+	var extra_payload := {}
 	if skill1_armor_break_upgrade:
-		payload["damage_multiplier"] = armor_break_multiplier
-		payload["damage_multiplier_duration"] = armor_break_duration
+		extra_payload["damage_multiplier"] = armor_break_multiplier
+		extra_payload["damage_multiplier_duration"] = armor_break_duration
+	var payload := AccessoryManager.build_hit_payload(
+		self,
+		&"skill1",
+		get_scaled_damage(skill1_damage),
+		crit_rate,
+		extra_payload
+	)
 	target.receive_hit(payload)
 	on_attack_landed(&"skill1", target)
 	attack_hit.emit(&"skill1", target)
@@ -443,13 +447,13 @@ func apply_damage_to_targets(base_damage: float, radius: float, attack_name: Str
 		if not target.has_method("receive_hit"):
 			continue
 		hit_targets.append(target)
-		var payload := {
-			"source": self,
-			"damage": get_scaled_damage(base_damage),
-			"crit_rate": crit_rate
-		}
-		for key in extra_payload.keys():
-			payload[key] = extra_payload[key]
+		var payload := AccessoryManager.build_hit_payload(
+			self,
+			attack_name,
+			get_scaled_damage(base_damage),
+			crit_rate,
+			extra_payload
+		)
 		target.receive_hit(payload)
 		on_attack_landed(attack_name, target)
 		attack_hit.emit(attack_name, target)
