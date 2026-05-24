@@ -93,6 +93,31 @@ theme_override_constants/h_separation = 14
 theme_override_constants/v_separation = 14
 columns = 3
 
+[node name="PreviewPanel" type="PanelContainer" parent="Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer"]
+custom_minimum_size = Vector2(0, 92)
+layout_mode = 2
+
+[node name="MarginContainer" type="MarginContainer" parent="Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/PreviewPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 10
+
+[node name="VBoxContainer" type="VBoxContainer" parent="Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/PreviewPanel/MarginContainer"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="PreviewTitle" type="Label" parent="Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/PreviewPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "Preview"
+
+[node name="PreviewDetail" type="Label" parent="Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/PreviewPanel/MarginContainer/VBoxContainer"]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+text = "Hover or focus a relic to preview its run plan."
+autowrap_mode = 3
+
 [node name="ButtonRow" type="HBoxContainer" parent="Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer"]
 layout_mode = 2
 theme_override_constants/separation = 12
@@ -107,3 +132,9 @@ text = "Keep Current"
 custom_minimum_size = Vector2(220, 54)
 layout_mode = 2
 text = "Reroll - 20 Gold"
+
+[node name="Footer" type="Label" parent="Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "1 / 2 / 3 choose  |  K keep  |  R reroll  |  Esc keep"
+horizontal_alignment = 1
+autowrap_mode = 3

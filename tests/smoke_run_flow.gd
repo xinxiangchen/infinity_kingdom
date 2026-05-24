@@ -32,6 +32,15 @@ func _run() -> void:
 		push_error("Battle status did not switch to relic objective after character select")
 		quit(1)
 		return
+	if world.accessory_choice == null or not world.accessory_choice.visible:
+		push_error("Accessory choice did not open after character select")
+		quit(1)
+		return
+	var accessory_preview := world.accessory_choice.get_node("Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/PreviewPanel/MarginContainer/VBoxContainer/PreviewDetail") as Label
+	if accessory_preview == null or accessory_preview.text.is_empty():
+		push_error("Accessory choice preview did not initialize")
+		quit(1)
+		return
 
 	world.active_run_event_kind = "shop"
 	world.run_event_panel.open("shop", 0)
@@ -54,12 +63,19 @@ func _run() -> void:
 		quit(1)
 		return
 
-	if world.accessory_choice != null and world.accessory_choice.visible:
-		world.accessory_choice.close()
-	var first_choice: Dictionary = choices[0]
-	accessory_manager.equip(String(first_choice.get("id", "")), world.player_character)
-	world._on_accessory_choice_made(String(first_choice.get("id", "")), false)
+	var keep_event := InputEventKey.new()
+	keep_event.keycode = KEY_K
+	keep_event.pressed = true
+	world.accessory_choice._unhandled_input(keep_event)
 	await process_frame
+	if world.accessory_choice.visible:
+		push_error("Accessory choice did not close after keep shortcut")
+		quit(1)
+		return
+	if world.current_encounter == null:
+		push_error("Encounter did not begin after keep shortcut")
+		quit(1)
+		return
 	var threat_value := world.battle_status.get("threat_value_label") as Label
 	if threat_value == null or threat_value.text.is_empty():
 		push_error("Battle status threat label did not populate after starting an encounter")

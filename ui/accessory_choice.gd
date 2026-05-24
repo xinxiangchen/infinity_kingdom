@@ -22,13 +22,21 @@ const CARD_GAP := 14.0
 @onready var current_summary_label: Label = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/CurrentRow/CurrentMargin/CurrentContent/Text/Summary
 @onready var choices_scroll: ScrollContainer = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/ChoicesScroll
 @onready var choices_row: GridContainer = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/ChoicesScroll/ChoicesRow
+@onready var preview_panel: PanelContainer = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/PreviewPanel
+@onready var preview_title_label: Label = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/PreviewPanel/MarginContainer/VBoxContainer/PreviewTitle
+@onready var preview_detail_label: Label = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/PreviewPanel/MarginContainer/VBoxContainer/PreviewDetail
 @onready var button_row: HBoxContainer = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/ButtonRow
 @onready var keep_button: Button = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/ButtonRow/KeepButton
 @onready var reroll_button: Button = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/ButtonRow/RerollButton
+@onready var footer_label: Label = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/Footer
 
 var active_choices: Array[Dictionary] = []
 var active_actor: Node = null
 var active_reroll_cost: int = 0
+var active_gold: int = 0
+var choice_buttons: Array[Button] = []
+var choice_data: Array[Dictionary] = []
+var selected_choice_index: int = -1
 var layout_size_override: Vector2 = Vector2.ZERO
 
 func _ready() -> void:
@@ -44,14 +52,16 @@ func open(choices: Array[Dictionary], actor: Node, reason: String = "Relic Offer
 	active_choices = choices
 	active_actor = actor
 	active_reroll_cost = reroll_cost
+	active_gold = gold
 	title_label.text = reason
-	subtitle_label.text = "Equip one relic. The current relic is replaced immediately."
+	subtitle_label.text = "Equip one relic. The current relic is replaced immediately. Use 1 / 2 / 3 to choose fast."
 	reroll_button.text = "Reroll - %d Gold" % reroll_cost
 	reroll_button.disabled = reroll_cost > gold
 	_refresh_current()
 	_rebuild_choices()
 	visible = true
 	get_tree().paused = true
+	call_deferred("_focus_first_choice")
 
 func close() -> void:
 	visible = false
@@ -61,12 +71,19 @@ func _apply_skin() -> void:
 	backdrop.color = Color(0.015, 0.018, 0.026, 0.76)
 	panel.add_theme_stylebox_override("panel", UISkin.choice_panel_style())
 	current_row.add_theme_stylebox_override("panel", UISkin.content_panel_style())
+	preview_panel.add_theme_stylebox_override("panel", UISkin.content_panel_style())
 	var icon_slot := $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/CurrentRow/CurrentMargin/CurrentContent/IconSlot as PanelContainer
 	icon_slot.add_theme_stylebox_override("panel", UISkin.icon_slot_style())
 	UISkin.label(title_label, 28, Color(0.98, 0.90, 0.67))
 	UISkin.label(subtitle_label, 15, Color(0.76, 0.80, 0.88))
 	UISkin.label(current_name_label, 18, Color.WHITE)
 	UISkin.label(current_summary_label, 14, Color(0.76, 0.82, 0.90))
+	UISkin.label(preview_title_label, 15, Color(0.98, 0.90, 0.67))
+	UISkin.label(preview_detail_label, 12, Color(0.84, 0.88, 0.96))
+	UISkin.label(footer_label, 12, Color(0.74, 0.80, 0.88))
+	preview_title_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	preview_detail_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	footer_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	UISkin.button_styles(keep_button, "thin")
 	UISkin.button_styles(reroll_button, "thin")
 
@@ -74,28 +91,49 @@ func _refresh_current() -> void:
 	var current := AccessoryManager.get_equipped_accessory()
 	current_icon.texture = load(String(current.get("icon", "res://assets/ui/icon/ui_unknown.png"))) as Texture2D
 	current_name_label.text = "Current: %s" % String(current.get("name", "No Accessory"))
-	current_summary_label.text = "%s\n%s" % [
-		String(current.get("summary", "")),
-		AccessoryManager.describe_effects(current)
-	]
+	var tags_text := AccessoryManager.describe_tags(current.get("tags", []))
+	var playstyle_text := AccessoryManager.describe_playstyle(current.get("tags", []))
+	var detail_parts: Array[String] = []
+	var summary_text := String(current.get("summary", ""))
+	if not summary_text.is_empty():
+		detail_parts.append(summary_text)
+	detail_parts.append(AccessoryManager.describe_effects(current))
+	if not tags_text.is_empty():
+		detail_parts.append(tags_text)
+	if not playstyle_text.is_empty():
+		detail_parts.append(playstyle_text)
+	current_summary_label.text = "\n".join(detail_parts)
 
 func _rebuild_choices() -> void:
+	choice_buttons.clear()
+	choice_data.clear()
+	selected_choice_index = -1
 	for child in choices_row.get_children():
 		choices_row.remove_child(child)
 		child.queue_free()
+	var choice_index := 0
 	for accessory in active_choices:
-		choices_row.add_child(_choice_card(accessory))
+		var button := _choice_card(accessory, choice_index)
+		choice_buttons.append(button)
+		choice_data.append(accessory.duplicate(true))
+		choices_row.add_child(button)
+		choice_index += 1
+	preview_title_label.text = "Preview"
+	preview_detail_label.text = "Hover or focus a relic to preview its run plan."
+	footer_label.text = _footer_text(false)
 	_refresh_layout()
 
-func _choice_card(accessory: Dictionary) -> Button:
+func _choice_card(accessory: Dictionary, choice_index: int) -> Button:
 	var button := Button.new()
 	button.text = ""
+	button.focus_mode = Control.FOCUS_ALL
 	button.custom_minimum_size = Vector2(296, 326)
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	button.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	button.add_theme_stylebox_override("normal", UISkin.texture_style(UISkin.asset("choice/choice_card_normal.png"), 30, 12))
 	button.add_theme_stylebox_override("hover", UISkin.texture_style(UISkin.asset("choice/choice_card_hover.png"), 30, 12))
 	button.add_theme_stylebox_override("pressed", UISkin.texture_style(UISkin.asset("choice/choice_card_selected.png"), 30, 12))
+	button.set_meta("accessory_id", String(accessory.get("id", "")))
 
 	var margin := MarginContainer.new()
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -158,7 +196,17 @@ func _choice_card(accessory: Dictionary) -> Button:
 	effects_label.custom_minimum_size = Vector2(0, 48)
 	UISkin.label(effects_label, 12, Color(0.72, 0.92, 0.78))
 	box.add_child(effects_label)
+
+	var plan_label := Label.new()
+	plan_label.text = AccessoryManager.describe_playstyle(accessory.get("tags", []))
+	plan_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	plan_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	plan_label.custom_minimum_size = Vector2(0, 40)
+	UISkin.label(plan_label, 11, Color(0.92, 0.84, 0.66))
+	box.add_child(plan_label)
 	UISkin.ignore_mouse_recursive(margin)
+	button.focus_entered.connect(func() -> void: _preview_accessory(choice_index))
+	button.mouse_entered.connect(func() -> void: _preview_accessory(choice_index))
 	button.pressed.connect(func() -> void:
 		var accessory_id := String(accessory.get("id", ""))
 		AccessoryManager.equip(accessory_id, active_actor)
@@ -171,6 +219,75 @@ func _on_keep_pressed() -> void:
 	AccessoryManager.keep_current(active_actor)
 	close()
 	accessory_choice_made.emit(String(AccessoryManager.get_equipped_accessory().get("id", "none")), true)
+
+func _unhandled_input(event: InputEvent) -> void:
+	if not visible:
+		return
+	if event is InputEventKey and event.pressed and not event.echo:
+		match event.keycode:
+			KEY_1, KEY_KP_1:
+				_activate_choice_index(0)
+				get_viewport().set_input_as_handled()
+			KEY_2, KEY_KP_2:
+				_activate_choice_index(1)
+				get_viewport().set_input_as_handled()
+			KEY_3, KEY_KP_3:
+				_activate_choice_index(2)
+				get_viewport().set_input_as_handled()
+			KEY_K:
+				_on_keep_pressed()
+				get_viewport().set_input_as_handled()
+			KEY_R:
+				if not reroll_button.disabled:
+					reroll_requested.emit()
+				get_viewport().set_input_as_handled()
+			KEY_ESCAPE:
+				_on_keep_pressed()
+				get_viewport().set_input_as_handled()
+
+func _activate_choice_index(choice_index: int) -> void:
+	if choice_index < 0 or choice_index >= choice_buttons.size():
+		return
+	var button := choice_buttons[choice_index]
+	if button == null or button.disabled:
+		return
+	button.grab_focus()
+	button.emit_signal("pressed")
+
+func _preview_accessory(choice_index: int) -> void:
+	if choice_index < 0 or choice_index >= choice_data.size():
+		return
+	selected_choice_index = choice_index
+	var accessory := choice_data[choice_index]
+	var accessory_name := String(accessory.get("name", "Accessory"))
+	var tags_text := AccessoryManager.describe_tags(accessory.get("tags", []))
+	var summary_text := String(accessory.get("summary", ""))
+	var effect_text := AccessoryManager.describe_effects(accessory)
+	var playstyle_text := AccessoryManager.describe_playstyle(accessory.get("tags", []))
+	preview_title_label.text = "Preview %d: %s%s" % [
+		choice_index + 1,
+		accessory_name,
+		("  |  %s" % tags_text) if not tags_text.is_empty() else ""
+	]
+	var detail_parts: Array[String] = []
+	if not summary_text.is_empty():
+		detail_parts.append(summary_text)
+	if not effect_text.is_empty():
+		detail_parts.append(effect_text)
+	if not playstyle_text.is_empty():
+		detail_parts.append(playstyle_text)
+	preview_detail_label.text = " ".join(detail_parts)
+
+func _focus_first_choice() -> void:
+	if choice_buttons.is_empty():
+		return
+	choice_buttons[0].grab_focus()
+	_preview_accessory(0)
+
+func _footer_text(compact: bool) -> String:
+	if compact:
+		return "1-3 choose  |  K keep  |  R reroll"
+	return "1 / 2 / 3 choose  |  K keep  |  R reroll %d gold  |  Gold %d  |  Esc keep" % [active_reroll_cost, active_gold]
 
 func _rarity_color(rarity: String) -> Color:
 	match rarity:
@@ -213,13 +330,17 @@ func _refresh_layout() -> void:
 	current_row.custom_minimum_size.y = 88.0 if very_compact else (96.0 if compact else 108.0)
 	current_icon_slot.custom_minimum_size = Vector2(70, 70) if very_compact else (Vector2(78, 78) if compact else Vector2(90, 90))
 	current_icon.custom_minimum_size = Vector2(58, 58) if very_compact else (Vector2(66, 66) if compact else Vector2(78, 78))
-	choices_scroll.custom_minimum_size.y = clampf(panel.custom_minimum_size.y * (0.42 if very_compact else 0.48), 204.0, 348.0)
+	preview_panel.custom_minimum_size.y = 82.0 if very_compact else (88.0 if compact else 96.0)
+	choices_scroll.custom_minimum_size.y = clampf(panel.custom_minimum_size.y * (0.34 if very_compact else 0.41), 188.0, 330.0)
 	UISkin.label(title_label, 22 if very_compact else (25 if compact else 28), Color(0.98, 0.90, 0.67))
 	UISkin.label(subtitle_label, 13 if very_compact else (14 if compact else 15), Color(0.76, 0.80, 0.88))
 	UISkin.label(current_name_label, 15 if very_compact else (17 if compact else 18), Color.WHITE)
 	UISkin.label(current_summary_label, 12 if very_compact else 13, Color(0.76, 0.82, 0.90))
+	UISkin.label(preview_title_label, 13 if very_compact else (14 if compact else 15), Color(0.98, 0.90, 0.67))
+	UISkin.label(preview_detail_label, 11 if compact else 12, Color(0.84, 0.88, 0.96))
+	UISkin.label(footer_label, 10 if very_compact else 11, Color(0.74, 0.80, 0.88))
 	var card_width := 220.0 if very_compact else (252.0 if compact else 296.0)
-	var card_height := 254.0 if very_compact else (288.0 if compact else 326.0)
+	var card_height := 286.0 if very_compact else (314.0 if compact else 350.0)
 	var available_width := maxf(choices_scroll.size.x, panel.custom_minimum_size.x - (56.0 if very_compact else 96.0))
 	var next_columns := clampi(int(floor((available_width + CARD_GAP) / (card_width + CARD_GAP))), 1, 3)
 	choices_row.columns = max(1, min(next_columns, max(active_choices.size(), 1)))
@@ -231,6 +352,7 @@ func _refresh_layout() -> void:
 	reroll_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	keep_button.text = "Keep" if very_compact else "Keep Current"
 	reroll_button.text = "Reroll" if compact else "Reroll - %d Gold" % active_reroll_cost
+	footer_label.text = _footer_text(very_compact)
 	for child in choices_row.get_children():
 		if child is Button:
 			var card := child as Button

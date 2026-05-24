@@ -183,6 +183,11 @@ func _run() -> void:
 		push_error("Run event panel detail preview is empty")
 		quit(1)
 		return
+	var event_footer := world.run_event_panel.get_node("Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/Footer") as Label
+	if event_footer == null or event_footer.text.find("Esc") == -1:
+		push_error("Run event panel footer is missing skip shortcut text")
+		quit(1)
+		return
 	world.run_event_panel.close()
 	world.run_event_panel.open("attunement", 100)
 	await process_frame
@@ -274,6 +279,16 @@ func _run() -> void:
 		await process_frame
 		var accessory_panel := world.accessory_choice.get_node("Backdrop/CenterContainer/PanelContainer") as PanelContainer
 		if not _assert_control_fits(accessory_panel, test_size, "Accessory choice panel"):
+			quit(1)
+			return
+		var preview_detail := world.accessory_choice.get_node("Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/PreviewPanel/MarginContainer/VBoxContainer/PreviewDetail") as Label
+		var accessory_footer := world.accessory_choice.get_node("Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/Footer") as Label
+		if preview_detail == null or preview_detail.text.is_empty():
+			push_error("Accessory choice preview detail is empty")
+			quit(1)
+			return
+		if accessory_footer == null or accessory_footer.text.find("keep") == -1:
+			push_error("Accessory choice footer is missing keep shortcut text")
 			quit(1)
 			return
 		world.accessory_choice.close()

@@ -18,6 +18,20 @@ const TAG_LABELS := {
 	"tempo": "Tempo"
 }
 
+const TAG_PLAYSTYLE_HINTS := {
+	"attack": "Improves repeated basic pressure and rewards staying on target.",
+	"crit": "Raises burst variance and scales best with fast hit volume.",
+	"damage": "Pushes direct kill speed and helps finish elite checks sooner.",
+	"defense": "Restores armor value and buys room for mistakes in long fights.",
+	"power": "Favors skill-centered burst windows over attrition.",
+	"resource": "Feeds inspiration economy so your strongest tools come back sooner.",
+	"risk": "Pays off hardest when you stay aggressive on low health.",
+	"skill": "Supports cooldown, control, and direct skill conversion.",
+	"speed": "Makes dodges, flanks, and reposition checks easier to pass cleanly.",
+	"survival": "Stabilizes rough runs and softens recovery mistakes.",
+	"tempo": "Keeps momentum rolling once you start landing skills or kills."
+}
+
 const EMPTY_ACCESSORY := {
 	"id": "none",
 	"name": "No Accessory",
@@ -208,6 +222,23 @@ func describe_tags(tags: Array = []) -> String:
 			continue
 		parts.append(String(TAG_LABELS.get(next_tag, next_tag.capitalize())))
 	return ", ".join(parts)
+
+func describe_playstyle(tags: Array = []) -> String:
+	var source_tags := tags
+	if source_tags.is_empty():
+		source_tags = get_equipped_tags()
+	var hints: Array[String] = []
+	for tag in source_tags:
+		var next_tag := String(tag)
+		if next_tag.is_empty():
+			continue
+		var hint := String(TAG_PLAYSTYLE_HINTS.get(next_tag, ""))
+		if hint.is_empty() or hints.has(hint):
+			continue
+		hints.append(hint)
+		if hints.size() >= 2:
+			break
+	return " ".join(hints)
 
 func generate_choices(count: int = 3) -> Array[Dictionary]:
 	var pool := get_catalog()

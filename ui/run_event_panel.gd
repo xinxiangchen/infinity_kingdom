@@ -25,6 +25,7 @@ const CARD_GAP := 12.0
 var active_kind: String = ""
 var active_gold: int = 0
 var active_default_detail: String = ""
+var choice_buttons: Array[Button] = []
 var layout_size_override: Vector2 = Vector2.ZERO
 
 func _ready() -> void:
@@ -62,6 +63,7 @@ func close() -> void:
 	get_tree().paused = false
 
 func _rebuild(kind: String, gold: int) -> void:
+	choice_buttons.clear()
 	for child in choice_row.get_children():
 		choice_row.remove_child(child)
 		child.queue_free()
@@ -71,7 +73,6 @@ func _rebuild(kind: String, gold: int) -> void:
 		"shop":
 			title_label.text = "Black Market"
 			subtitle_label.text = "Spend gold for a focused advantage before the next fight."
-			footer_label.text = "Enter choose  |  Gold is spent immediately."
 			choice_row.add_child(_choice_card("shop_attack", "Sharpening Oil", "Gain +10% attack damage this run.", "res://assets/ui/consumable/sharpening_oil.png", 45, gold))
 			choice_row.add_child(_choice_card("shop_defense", "Light Armor Pack", "Restore defense and gain +12 max defense.", "res://assets/ui/consumable/light_armor_pack.png", 40, gold))
 			choice_row.add_child(_choice_card("shop_relic", "Relic Map", "Buy an extra relic choice before the next fight.", "res://assets/ui/icon/ui_shop.png", 55, gold))
@@ -79,7 +80,6 @@ func _rebuild(kind: String, gold: int) -> void:
 		"rest":
 			title_label.text = "Church Refuge"
 			subtitle_label.text = "Recover before the next encounter."
-			footer_label.text = "Instant recovery  |  Skip stays available."
 			choice_row.add_child(_choice_card("rest_heal", "Medkit", "Restore 45% health.", "res://assets/ui/consumable/medkit.png", 0, gold))
 			choice_row.add_child(_choice_card("rest_focus", "Protective Candle", "Restore inspiration and defense.", "res://assets/ui/consumable/protective_candle.png", 0, gold))
 			choice_row.add_child(_choice_card("rest_repair", "Field Repair", "Restore defense and gain +8 max hp.", "res://assets/ui/icon/ui_shield.png", 0, gold))
@@ -87,7 +87,6 @@ func _rebuild(kind: String, gold: int) -> void:
 		"training":
 			title_label.text = "Training Drill"
 			subtitle_label.text = "Choose one stat technique for the rest of this run."
-			footer_label.text = "Permanent training  |  Stacks with relics."
 			choice_row.add_child(_choice_card("train_crit", "Precision", "+5% critical chance.", "res://assets/ui/trait/trait_crit.png", 0, gold))
 			choice_row.add_child(_choice_card("train_speed", "Footwork", "+8% move speed.", "res://assets/ui/icon/stat_speed_pixel.png", 0, gold))
 			choice_row.add_child(_choice_card("train_cooldown", "Rhythm", "-6% skill cooldowns.", "res://assets/ui/icon/stat_cooldown_pixel.png", 0, gold))
@@ -95,7 +94,6 @@ func _rebuild(kind: String, gold: int) -> void:
 		"pact":
 			title_label.text = "Forbidden Pact"
 			subtitle_label.text = "Take a sharp edge now, and live with the tradeoff for the rest of the run."
-			footer_label.text = "Permanent tradeoffs  |  No gold cost."
 			choice_row.add_child(_choice_card("pact_power", "Blood Price", "+18% attack, +10% skill damage, but skills cost more inspiration.", "res://assets/ui/trait/trait_damage.png", 0, gold))
 			choice_row.add_child(_choice_card("pact_guard", "Iron Oath", "Gain heavy defense and restore armor, but move slower.", "res://assets/ui/icon/ui_shield.png", 0, gold))
 			choice_row.add_child(_choice_card("pact_focus", "Astral Debt", "Gain inspiration and cooldown efficiency, but lose max hp.", "res://assets/ui/icon/ui_mana_flame.png", 0, gold))
@@ -104,16 +102,15 @@ func _rebuild(kind: String, gold: int) -> void:
 			var tags_text := AccessoryManager.describe_tags()
 			title_label.text = "Relic Resonance"
 			subtitle_label.text = "Your relic leans toward %s. Draw out one matching response for the rest of this run." % (tags_text if not tags_text.is_empty() else "an unknown path")
-			footer_label.text = "Permanent resonance  |  Skip keeps the relic unchanged."
 			for choice in RunEffects.attunement_choices():
 				choice_row.add_child(_choice_card_from_data(choice, gold))
 			choice_row.add_child(_choice_card("skip", "Leave It Still", "Keep the relic unchanged and move on.", "res://assets/ui/icon/ui_back.png", 0, gold))
 		_:
 			title_label.text = "Travel"
 			subtitle_label.text = "No event is available."
-			footer_label.text = "Continue to the next encounter."
 			choice_row.add_child(_choice_card("skip", "Continue", "Move to the next encounter.", "res://assets/ui/icon/ui_check.png", 0, gold))
 	detail_label.text = active_default_detail
+	footer_label.text = _footer_text_for_kind(kind)
 	_refresh_layout()
 	call_deferred("_focus_first_choice")
 
@@ -130,6 +127,7 @@ func _choice_card_from_data(choice: Dictionary, gold: int) -> Button:
 func _choice_card(choice_id: String, title: String, summary: String, icon_path: String, cost: int, gold: int) -> Button:
 	var button := Button.new()
 	button.text = ""
+	button.focus_mode = Control.FOCUS_ALL
 	button.custom_minimum_size = Vector2(236, 274)
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	button.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -138,6 +136,8 @@ func _choice_card(choice_id: String, title: String, summary: String, icon_path: 
 	button.add_theme_stylebox_override("hover", UISkin.texture_style(UISkin.asset("choice/choice_card_hover.png"), 30, 12))
 	button.add_theme_stylebox_override("pressed", UISkin.texture_style(UISkin.asset("choice/choice_card_selected.png"), 30, 12))
 	button.add_theme_stylebox_override("disabled", UISkin.texture_style(UISkin.asset("choice/choice_card_disabled.png"), 30, 12))
+	button.set_meta("choice_id", choice_id)
+	choice_buttons.append(button)
 
 	var margin := MarginContainer.new()
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -202,6 +202,43 @@ func _choice_card(choice_id: String, title: String, summary: String, icon_path: 
 	)
 	return button
 
+func _unhandled_input(event: InputEvent) -> void:
+	if not visible:
+		return
+	if event is InputEventKey and event.pressed and not event.echo:
+		match event.keycode:
+			KEY_1, KEY_KP_1:
+				_activate_choice_index(0)
+				get_viewport().set_input_as_handled()
+			KEY_2, KEY_KP_2:
+				_activate_choice_index(1)
+				get_viewport().set_input_as_handled()
+			KEY_3, KEY_KP_3:
+				_activate_choice_index(2)
+				get_viewport().set_input_as_handled()
+			KEY_4, KEY_KP_4:
+				_activate_choice_index(3)
+				get_viewport().set_input_as_handled()
+			KEY_ESCAPE:
+				_activate_skip_choice()
+				get_viewport().set_input_as_handled()
+
+func _activate_choice_index(choice_index: int) -> void:
+	if choice_index < 0 or choice_index >= choice_buttons.size():
+		return
+	var button := choice_buttons[choice_index]
+	if button == null or button.disabled:
+		return
+	button.grab_focus()
+	button.emit_signal("pressed")
+
+func _activate_skip_choice() -> void:
+	for button in choice_buttons:
+		if button != null and String(button.get_meta("choice_id", "")) == "skip" and not button.disabled:
+			button.grab_focus()
+			button.emit_signal("pressed")
+			return
+
 func _queue_layout_refresh() -> void:
 	call_deferred("_refresh_layout")
 
@@ -246,6 +283,22 @@ func _default_detail_for_kind(kind: String) -> String:
 			return "Resonance is the cleanest way to reinforce your current relic identity."
 		_:
 			return "Choose a path and continue."
+
+func _footer_text_for_kind(kind: String) -> String:
+	var lead := "1-4 choose  |  Esc skip"
+	match kind:
+		"shop":
+			return "%s  |  Gold is spent immediately." % lead
+		"rest":
+			return "%s  |  Recovery resolves instantly." % lead
+		"training":
+			return "%s  |  Training stacks for the rest of the run." % lead
+		"pact":
+			return "%s  |  Pact tradeoffs are permanent." % lead
+		"attunement":
+			return "%s  |  Resonance lasts for the rest of the run." % lead
+		_:
+			return "%s  |  Continue when ready." % lead
 
 func _preview_choice(choice_id: String, title: String, summary: String, cost: int, disabled: bool) -> void:
 	var meta := _choice_meta(choice_id, cost)
@@ -350,6 +403,8 @@ func _refresh_layout() -> void:
 	UISkin.label(rule_summary_label, 11 if compact else 12, Color(0.78, 0.84, 0.92))
 	UISkin.label(detail_label, 11 if compact else 12, Color(0.92, 0.86, 0.72))
 	UISkin.label(footer_label, 11 if compact else 12, Color(0.74, 0.80, 0.88))
+	if very_compact:
+		footer_label.text = "1-4 choose  |  Esc skip"
 	var card_width := 212.0 if very_compact else (224.0 if compact else 236.0)
 	var card_height := 238.0 if very_compact else (252.0 if compact else 274.0)
 	var available_width := maxf(choice_scroll.size.x, panel.custom_minimum_size.x - (56.0 if very_compact else 96.0))
