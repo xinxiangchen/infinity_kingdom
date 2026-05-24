@@ -162,24 +162,7 @@ func _start_next_encounter() -> void:
 	active_accessory_reason = ""
 	encounter_index += 1
 	if encounter_index >= ENCOUNTER_SCENES.size():
-		if Music != null:
-			Music.play_profile(&"victory")
-		_schedule_title_music(2.8)
-		if battle_status != null and battle_status.has_method("set_message"):
-			battle_status.set_message(
-				"Town Cleared",
-				"All enemy waves and town boss encounters are defeated.",
-				_detail_text("Pick another champion to restart the sequence.")
-			)
-		if character_select != null:
-			character_select.visible = true
-		if result_screen != null and result_screen.has_method("show_result"):
-			result_screen.show_result(
-				"victory",
-				"Town Cleared",
-				"All enemy waves and bosses are defeated.",
-				"Your relic build survived the trial. Continue to select a new champion."
-			)
+		_complete_run_victory()
 		return
 	_play_audio_profile_for_encounter(encounter_index)
 	current_encounter = ENCOUNTER_SCENES[encounter_index].instantiate()
@@ -193,16 +176,20 @@ func _start_next_encounter() -> void:
 func _on_encounter_defeated() -> void:
 	var reward := RunDirector.reward_encounter(encounter_index, player_character)
 	current_encounter = null
+	var defeated_final_encounter := encounter_index >= ENCOUNTER_SCENES.size() - 1
 	if battle_status != null and battle_status.has_method("set_message"):
 		battle_status.set_message(
-			"Encounter Cleared",
+			"Trial Complete" if defeated_final_encounter else "Encounter Cleared",
 			"+%d gold earned." % reward,
 			_detail_text("Gold: %d" % int(RunDirector.gold))
 		)
 	var timer := get_tree().create_timer(1.1)
 	timer.timeout.connect(func() -> void:
 		if is_instance_valid(self) and player_character != null and is_instance_valid(player_character) and float(player_character.hp) > 0.0:
-			_offer_next_run_event()
+			if defeated_final_encounter:
+				_complete_run_victory()
+			else:
+				_offer_next_run_event()
 	)
 
 func _on_player_died() -> void:
@@ -330,6 +317,26 @@ func _play_ui_feedback(success: bool) -> void:
 		Sfx.play_event(&"ui_deny")
 		return
 	Sfx.play_event(&"ui_confirm", null, -7.0, 0.86, "UI")
+
+func _complete_run_victory() -> void:
+	if Music != null:
+		Music.play_profile(&"victory")
+	_schedule_title_music(2.8)
+	if battle_status != null and battle_status.has_method("set_message"):
+		battle_status.set_message(
+			"Town Cleared",
+			"All enemy waves and town boss encounters are defeated.",
+			_detail_text("Pick another champion to restart the sequence.")
+		)
+	if character_select != null:
+		character_select.visible = true
+	if result_screen != null and result_screen.has_method("show_result"):
+		result_screen.show_result(
+			"victory",
+			"Town Cleared",
+			"All enemy waves and bosses are defeated.",
+			"Your relic build survived the trial. Continue to select a new champion."
+		)
 
 func _bind_actor_audio(actor: Node) -> void:
 	if actor == null:

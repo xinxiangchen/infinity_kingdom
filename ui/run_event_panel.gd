@@ -3,11 +3,16 @@ extends CanvasLayer
 signal event_choice_made(choice_id: String)
 
 const UISkin := preload("res://ui/ui_skin.gd")
+const PANEL_MIN_SIZE := Vector2(720, 480)
+const PANEL_MAX_SIZE := Vector2(1080, 640)
+const CARD_MIN_WIDTH := 236.0
+const CARD_GAP := 12.0
 
 @onready var backdrop: ColorRect = $Backdrop
 @onready var panel: PanelContainer = $Backdrop/CenterContainer/PanelContainer
 @onready var title_label: Label = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/Title
 @onready var subtitle_label: Label = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/Subtitle
+@onready var choice_scroll: ScrollContainer = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/ChoiceScroll
 @onready var choice_row: GridContainer = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/ChoiceScroll/ChoiceRow
 @onready var footer_label: Label = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/Footer
 
@@ -22,6 +27,9 @@ func _ready() -> void:
 	UISkin.label(title_label, 28, Color(0.98, 0.90, 0.66))
 	UISkin.label(subtitle_label, 15, Color(0.78, 0.84, 0.92))
 	UISkin.label(footer_label, 13, Color(0.74, 0.80, 0.88))
+	if get_viewport() != null and not get_viewport().size_changed.is_connected(_queue_layout_refresh):
+		get_viewport().size_changed.connect(_queue_layout_refresh)
+	_queue_layout_refresh()
 
 func open(kind: String, gold: int) -> void:
 	active_kind = kind
@@ -62,11 +70,20 @@ func _rebuild(kind: String, gold: int) -> void:
 			choice_row.add_child(_choice_card("train_speed", "Footwork", "+8% move speed.", "res://assets/ui/icon/stat_speed_pixel.png", 0, gold))
 			choice_row.add_child(_choice_card("train_cooldown", "Rhythm", "-6% skill cooldowns.", "res://assets/ui/icon/stat_cooldown_pixel.png", 0, gold))
 			choice_row.add_child(_choice_card("train_resource", "Focus Drill", "+12 max inspiration.", "res://assets/ui/icon/stat_mana_pixel.png", 0, gold))
+		"pact":
+			title_label.text = "Forbidden Pact"
+			subtitle_label.text = "Take a sharp edge now, and live with the tradeoff for the rest of the run."
+			footer_label.text = "These bargains do not cost gold."
+			choice_row.add_child(_choice_card("pact_power", "Blood Price", "+18% attack, +10% skill damage, but skills cost more inspiration.", "res://assets/ui/trait/trait_damage.png", 0, gold))
+			choice_row.add_child(_choice_card("pact_guard", "Iron Oath", "Gain heavy defense and restore armor, but move slower.", "res://assets/ui/icon/ui_shield.png", 0, gold))
+			choice_row.add_child(_choice_card("pact_focus", "Astral Debt", "Gain inspiration and cooldown efficiency, but lose max hp.", "res://assets/ui/icon/ui_mana_flame.png", 0, gold))
+			choice_row.add_child(_choice_card("skip", "Refuse", "Walk away without changing the build.", "res://assets/ui/icon/ui_back.png", 0, gold))
 		_:
 			title_label.text = "Travel"
 			subtitle_label.text = "No event is available."
 			footer_label.text = ""
 			choice_row.add_child(_choice_card("skip", "Continue", "Move to the next encounter.", "res://assets/ui/icon/ui_check.png", 0, gold))
+	_refresh_layout()
 
 func _choice_card(choice_id: String, title: String, summary: String, icon_path: String, cost: int, gold: int) -> Button:
 	var button := Button.new()
@@ -132,3 +149,18 @@ func _choice_card(choice_id: String, title: String, summary: String, icon_path: 
 		event_choice_made.emit(choice_id)
 	)
 	return button
+
+func _queue_layout_refresh() -> void:
+	call_deferred("_refresh_layout")
+
+func _refresh_layout() -> void:
+	if panel == null or choice_row == null:
+		return
+	var viewport_size := get_viewport().get_visible_rect().size
+	panel.custom_minimum_size = Vector2(
+		clampf(viewport_size.x - 88.0, PANEL_MIN_SIZE.x, PANEL_MAX_SIZE.x),
+		clampf(viewport_size.y - 88.0, PANEL_MIN_SIZE.y, PANEL_MAX_SIZE.y)
+	)
+	var available_width := maxf(choice_scroll.size.x, panel.custom_minimum_size.x - 96.0)
+	var next_columns := clampi(int(floor((available_width + CARD_GAP) / (CARD_MIN_WIDTH + CARD_GAP))), 1, 4)
+	choice_row.columns = max(1, min(next_columns, max(choice_row.get_child_count(), 1)))

@@ -6,6 +6,10 @@ const BUS_SFX := "SFX"
 const BUS_UI := "UI"
 const MASTER_LABEL := "Master"
 const UISkin := preload("res://ui/ui_skin.gd")
+const PANEL_MIN_WIDTH := 380.0
+const PANEL_MAX_WIDTH := 620.0
+const PANEL_MIN_BOTTOM := 460.0
+const PANEL_MAX_BOTTOM := 912.0
 
 const BUS_ORDER := [BUS_MUSIC, BUS_AMBIENCE, BUS_SFX, BUS_UI]
 const BUS_LABELS := {
@@ -25,6 +29,7 @@ const BUS_DESCRIPTIONS := {
 @onready var master_slider: HSlider = $Backdrop/MarginContainer/PanelContainer/MarginContainer/VBoxContainer/MasterPanel/MarginContainer/VBoxContainer/ControlsRow/MasterSlider
 @onready var master_value_label: Label = $Backdrop/MarginContainer/PanelContainer/MarginContainer/VBoxContainer/MasterPanel/MarginContainer/VBoxContainer/ControlsRow/MasterValueLabel
 @onready var rows_container: VBoxContainer = $Backdrop/MarginContainer/PanelContainer/MarginContainer/VBoxContainer/Rows
+@onready var root_margin: MarginContainer = $Backdrop/MarginContainer
 @onready var master_mute_button: Button = $Backdrop/MarginContainer/PanelContainer/MarginContainer/VBoxContainer/ButtonRow/MasterMuteButton
 @onready var reset_button: Button = $Backdrop/MarginContainer/PanelContainer/MarginContainer/VBoxContainer/ButtonRow/ResetButton
 @onready var close_button: Button = $Backdrop/MarginContainer/PanelContainer/MarginContainer/VBoxContainer/ButtonRow/CloseButton
@@ -50,6 +55,9 @@ func _ready() -> void:
 	visible = false
 	refresh_values()
 	_set_status_text("Reset restores the chapter mix. Mute keeps the current slider level in memory.")
+	if get_viewport() != null and not get_viewport().size_changed.is_connected(_queue_layout_refresh):
+		get_viewport().size_changed.connect(_queue_layout_refresh)
+	_queue_layout_refresh()
 
 func _apply_skin() -> void:
 	panel.add_theme_stylebox_override("panel", UISkin.menu_panel_style())
@@ -322,3 +330,14 @@ func _slider_to_db(slider_value: float) -> float:
 	if slider_value <= 0.0:
 		return -40.0
 	return linear_to_db(slider_value / 100.0)
+
+func _queue_layout_refresh() -> void:
+	call_deferred("_refresh_layout")
+
+func _refresh_layout() -> void:
+	if root_margin == null:
+		return
+	var viewport_size := get_viewport().get_visible_rect().size
+	root_margin.offset_left = -clampf(viewport_size.x * 0.34, PANEL_MIN_WIDTH, PANEL_MAX_WIDTH)
+	root_margin.offset_right = -18.0
+	root_margin.offset_bottom = clampf(viewport_size.y - 18.0, PANEL_MIN_BOTTOM, PANEL_MAX_BOTTOM)

@@ -3,6 +3,8 @@ extends CanvasLayer
 signal closed
 
 const UISkin := preload("res://ui/ui_skin.gd")
+const PANEL_MIN_SIZE := Vector2(340, 300)
+const PANEL_MAX_SIZE := Vector2(470, 452)
 
 @onready var backdrop: ColorRect = $Backdrop
 @onready var panel: PanelContainer = $Backdrop/CenterContainer/PanelContainer
@@ -28,6 +30,9 @@ func _ready() -> void:
 	vsync_button.pressed.connect(_toggle_vsync)
 	close_button.pressed.connect(close)
 	_refresh_status()
+	if get_viewport() != null and not get_viewport().size_changed.is_connected(_queue_layout_refresh):
+		get_viewport().size_changed.connect(_queue_layout_refresh)
+	_queue_layout_refresh()
 
 func open() -> void:
 	visible = true
@@ -58,3 +63,13 @@ func _refresh_status() -> void:
 	var vsync := "VSync On" if DisplayServer.window_get_vsync_mode() != DisplayServer.VSYNC_DISABLED else "VSync Off"
 	status_label.text = "%s | %s" % [mode, vsync]
 	vsync_button.text = "Turn VSync Off" if DisplayServer.window_get_vsync_mode() != DisplayServer.VSYNC_DISABLED else "Turn VSync On"
+
+func _queue_layout_refresh() -> void:
+	call_deferred("_refresh_layout")
+
+func _refresh_layout() -> void:
+	var viewport_size := get_viewport().get_visible_rect().size
+	panel.custom_minimum_size = Vector2(
+		clampf(viewport_size.x - 160.0, PANEL_MIN_SIZE.x, PANEL_MAX_SIZE.x),
+		clampf(viewport_size.y - 180.0, PANEL_MIN_SIZE.y, PANEL_MAX_SIZE.y)
+	)

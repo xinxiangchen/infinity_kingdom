@@ -2,11 +2,10 @@ extends Node
 
 signal state_changed(state: Dictionary)
 
-const EVENT_SEQUENCE := [
-	"relic",
-	"shop",
+const EVENT_POOL := [
 	"rest",
-	"training"
+	"training",
+	"pact"
 ]
 
 var gold: int = 0
@@ -14,6 +13,7 @@ var cleared_encounters: int = 0
 var event_cursor: int = 0
 var run_modifiers: Dictionary = {}
 var last_reward_gold: int = 0
+var event_deck: Array[String] = []
 var rng := RandomNumberGenerator.new()
 
 func _ready() -> void:
@@ -25,6 +25,7 @@ func reset_run() -> void:
 	event_cursor = 0
 	run_modifiers.clear()
 	last_reward_gold = 0
+	event_deck = _build_event_deck()
 	_emit_state()
 
 func reward_encounter(encounter_index: int, actor: Node = null) -> int:
@@ -46,9 +47,30 @@ func spend_gold(amount: int) -> bool:
 	return true
 
 func next_event_kind() -> String:
-	var kind := String(EVENT_SEQUENCE[event_cursor % EVENT_SEQUENCE.size()])
+	if event_deck.is_empty():
+		event_deck = _build_event_deck()
+	var kind := String(event_deck.pop_front())
 	event_cursor += 1
+	_emit_state()
 	return kind
+
+func peek_next_event_kind() -> String:
+	if event_deck.is_empty():
+		return ""
+	return String(event_deck[0])
+
+func describe_event_kind(kind: String) -> String:
+	match kind:
+		"shop":
+			return "Black Market"
+		"rest":
+			return "Church Refuge"
+		"training":
+			return "Training Drill"
+		"pact":
+			return "Forbidden Pact"
+		_:
+			return "Unknown"
 
 func add_run_modifier(field: String, add_value: float = 0.0, multiplier: float = 1.0, floor_value: float = -INF) -> void:
 	if field.is_empty():
@@ -90,6 +112,8 @@ func get_state() -> Dictionary:
 		"cleared_encounters": cleared_encounters,
 		"event_cursor": event_cursor,
 		"last_reward_gold": last_reward_gold,
+		"next_event_kind": peek_next_event_kind(),
+		"event_deck": event_deck.duplicate(),
 		"run_modifiers": get_run_modifiers()
 	}
 
@@ -128,6 +152,15 @@ func _performance_bonus(actor: Node) -> int:
 	if defense_ratio >= 0.60:
 		bonus += 8
 	return bonus
+
+func _build_event_deck() -> Array[String]:
+	var pool: Array[String] = ["rest", "training", "pact"]
+	var deck: Array[String] = ["shop"]
+	while not pool.is_empty():
+		var next_index := rng.randi_range(0, pool.size() - 1)
+		deck.append(pool[next_index])
+		pool.remove_at(next_index)
+	return deck
 
 func _ratio(actor: Node, current_field: String, max_field: String) -> float:
 	if not _has_property(actor, current_field) or not _has_property(actor, max_field):

@@ -7,6 +7,8 @@ signal restart_requested
 signal quit_requested
 
 const UISkin := preload("res://ui/ui_skin.gd")
+const PANEL_MIN_SIZE := Vector2(340, 360)
+const PANEL_MAX_SIZE := Vector2(460, 590)
 
 @onready var backdrop: ColorRect = $Backdrop
 @onready var panel: PanelContainer = $Backdrop/CenterContainer/PanelContainer
@@ -33,6 +35,9 @@ func _ready() -> void:
 	settings_button.pressed.connect(func() -> void: settings_requested.emit())
 	restart_button.pressed.connect(func() -> void: restart_requested.emit())
 	quit_button.pressed.connect(func() -> void: quit_requested.emit())
+	if get_viewport() != null and not get_viewport().size_changed.is_connected(_queue_layout_refresh):
+		get_viewport().size_changed.connect(_queue_layout_refresh)
+	_queue_layout_refresh()
 
 func open() -> void:
 	visible = true
@@ -45,3 +50,13 @@ func close() -> void:
 
 func is_open() -> bool:
 	return visible
+
+func _queue_layout_refresh() -> void:
+	call_deferred("_refresh_layout")
+
+func _refresh_layout() -> void:
+	var viewport_size := get_viewport().get_visible_rect().size
+	panel.custom_minimum_size = Vector2(
+		clampf(viewport_size.x - 140.0, PANEL_MIN_SIZE.x, PANEL_MAX_SIZE.x),
+		clampf(viewport_size.y - 160.0, PANEL_MIN_SIZE.y, PANEL_MAX_SIZE.y)
+	)

@@ -27,6 +27,11 @@ func _process(_delta: float) -> void:
 	var lines := PackedStringArray()
 	lines.append("Debug")
 	lines.append("Gold: %d | Cleared: %d" % [int(RunDirector.gold), int(RunDirector.cleared_encounters)])
+	var next_kind := RunDirector.peek_next_event_kind()
+	lines.append("Next Event: %s | Modifiers: %d" % [
+		RunDirector.describe_event_kind(next_kind) if not next_kind.is_empty() else "Victory",
+		RunDirector.get_run_modifiers().size()
+	])
 	lines.append("Encounter: %s" % (encounter.name if encounter != null and is_instance_valid(encounter) else "none"))
 	if player != null and is_instance_valid(player):
 		lines.append("Hero: %s | State: %s" % [

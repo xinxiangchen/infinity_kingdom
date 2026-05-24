@@ -38,11 +38,16 @@ func _run() -> void:
 		quit(1)
 		return
 	run_director.reset_run()
+	if run_director.peek_next_event_kind() != "shop":
+		push_error("Run event deck did not start with shop")
+		quit(1)
+		return
 	var actor := TestActor.new()
 	root.add_child(actor)
 	var base_damage := float(actor.attack_damage)
 	var base_speed := float(actor.move_speed)
 	var base_crit := float(actor.crit_rate)
+	var base_hp := float(actor.max_hp)
 	var high_reward := int(run_director.reward_encounter(0, actor))
 	if high_reward <= 35:
 		push_error("Performance reward bonus was not applied")
@@ -54,6 +59,8 @@ func _run() -> void:
 	run_effects.apply_choice("train_crit", actor)
 	run_effects.apply_choice("train_resource", actor)
 	run_effects.apply_choice("rest_repair", actor)
+	run_effects.apply_choice("pact_power", actor)
+	run_effects.apply_choice("pact_focus", actor)
 	if float(actor.attack_damage) <= base_damage:
 		push_error("shop_attack did not increase damage")
 		quit(1)
@@ -70,8 +77,16 @@ func _run() -> void:
 		push_error("train_resource did not increase max inspiration")
 		quit(1)
 		return
-	if float(actor.max_hp) <= 100.0:
-		push_error("rest_repair did not increase max hp")
+	if float(actor.max_hp) < base_hp - 4.0:
+		push_error("pact_focus reduced max hp too heavily")
+		quit(1)
+		return
+	if float(actor.max_hp) >= 108.0:
+		push_error("pact_focus did not reduce max hp after rest_repair")
+		quit(1)
+		return
+	if float(actor.max_hp) <= 90.0:
+		push_error("rest_repair did not keep max hp in a healthy range")
 		quit(1)
 		return
 	var modified_damage := float(actor.attack_damage)

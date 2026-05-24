@@ -4,14 +4,22 @@ signal accessory_choice_made(accessory_id: String, kept_current: bool)
 signal reroll_requested
 
 const UISkin := preload("res://ui/ui_skin.gd")
+const PANEL_MIN_SIZE := Vector2(720, 520)
+const PANEL_MAX_SIZE := Vector2(1120, 736)
+const CARD_MIN_WIDTH := 296.0
+const CARD_GAP := 14.0
 
 @onready var backdrop: ColorRect = $Backdrop
+@onready var panel: PanelContainer = $Backdrop/CenterContainer/PanelContainer
 @onready var title_label: Label = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/Title
 @onready var subtitle_label: Label = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/Subtitle
-@onready var current_icon: TextureRect = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/CurrentRow/IconSlot/Icon
-@onready var current_name_label: Label = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/CurrentRow/Text/Name
-@onready var current_summary_label: Label = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/CurrentRow/Text/Summary
+@onready var current_row: PanelContainer = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/CurrentRow
+@onready var current_icon: TextureRect = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/CurrentRow/CurrentMargin/CurrentContent/IconSlot/Icon
+@onready var current_name_label: Label = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/CurrentRow/CurrentMargin/CurrentContent/Text/Name
+@onready var current_summary_label: Label = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/CurrentRow/CurrentMargin/CurrentContent/Text/Summary
+@onready var choices_scroll: ScrollContainer = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/ChoicesScroll
 @onready var choices_row: GridContainer = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/ChoicesScroll/ChoicesRow
+@onready var button_row: HBoxContainer = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/ButtonRow
 @onready var keep_button: Button = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/ButtonRow/KeepButton
 @onready var reroll_button: Button = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/ButtonRow/RerollButton
 
@@ -23,6 +31,9 @@ func _ready() -> void:
 	_apply_skin()
 	keep_button.pressed.connect(_on_keep_pressed)
 	reroll_button.pressed.connect(func() -> void: reroll_requested.emit())
+	if get_viewport() != null and not get_viewport().size_changed.is_connected(_queue_layout_refresh):
+		get_viewport().size_changed.connect(_queue_layout_refresh)
+	_queue_layout_refresh()
 
 func open(choices: Array[Dictionary], actor: Node, reason: String = "Relic Offering", reroll_cost: int = 0, gold: int = 0) -> void:
 	active_choices = choices
@@ -42,11 +53,9 @@ func close() -> void:
 
 func _apply_skin() -> void:
 	backdrop.color = Color(0.015, 0.018, 0.026, 0.76)
-	var panel := $Backdrop/CenterContainer/PanelContainer as PanelContainer
 	panel.add_theme_stylebox_override("panel", UISkin.choice_panel_style())
-	var current_panel := $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/CurrentRow as PanelContainer
-	current_panel.add_theme_stylebox_override("panel", UISkin.content_panel_style())
-	var icon_slot := $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/CurrentRow/IconSlot as PanelContainer
+	current_row.add_theme_stylebox_override("panel", UISkin.content_panel_style())
+	var icon_slot := $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/CurrentRow/CurrentMargin/CurrentContent/IconSlot as PanelContainer
 	icon_slot.add_theme_stylebox_override("panel", UISkin.icon_slot_style())
 	UISkin.label(title_label, 28, Color(0.98, 0.90, 0.67))
 	UISkin.label(subtitle_label, 15, Color(0.76, 0.80, 0.88))
@@ -70,6 +79,7 @@ func _rebuild_choices() -> void:
 		child.queue_free()
 	for accessory in active_choices:
 		choices_row.add_child(_choice_card(accessory))
+	_refresh_layout()
 
 func _choice_card(accessory: Dictionary) -> Button:
 	var button := Button.new()
@@ -168,3 +178,19 @@ func _rarity_color(rarity: String) -> Color:
 			return Color(1.0, 0.72, 0.35)
 		_:
 			return Color(0.78, 0.80, 0.84)
+
+func _queue_layout_refresh() -> void:
+	call_deferred("_refresh_layout")
+
+func _refresh_layout() -> void:
+	if panel == null or choices_row == null:
+		return
+	var viewport_size := get_viewport().get_visible_rect().size
+	panel.custom_minimum_size = Vector2(
+		clampf(viewport_size.x - 80.0, PANEL_MIN_SIZE.x, PANEL_MAX_SIZE.x),
+		clampf(viewport_size.y - 80.0, PANEL_MIN_SIZE.y, PANEL_MAX_SIZE.y)
+	)
+	var available_width := maxf(choices_scroll.size.x, panel.custom_minimum_size.x - 96.0)
+	var next_columns := clampi(int(floor((available_width + CARD_GAP) / (CARD_MIN_WIDTH + CARD_GAP))), 1, 3)
+	choices_row.columns = max(1, min(next_columns, max(active_choices.size(), 1)))
+	button_row.alignment = BoxContainer.ALIGNMENT_CENTER

@@ -38,6 +38,24 @@ static func apply_choice(choice_id: String, actor: Node) -> void:
 		"train_resource":
 			RunDirector.add_run_modifier("max_inspiration", 12.0)
 			persistent_changed = true
+		"pact_power":
+			RunDirector.add_run_modifier("attack_damage", 0.0, 1.18)
+			for field in ["skill1_damage", "skill2_damage", "skill3_damage"]:
+				RunDirector.add_run_modifier(field, 0.0, 1.10, 0.0)
+			for field in ["skill1_cost", "skill2_cost", "skill3_cost"]:
+				RunDirector.add_run_modifier(field, 0.0, 1.12, 0.0)
+			persistent_changed = true
+		"pact_guard":
+			RunDirector.add_run_modifier("max_defense", 28.0)
+			RunDirector.add_run_modifier("move_speed", 0.0, 0.90, 0.0)
+			persistent_changed = true
+			restore_defense_after_refresh = true
+		"pact_focus":
+			RunDirector.add_run_modifier("max_inspiration", 20.0)
+			RunDirector.add_run_modifier("max_hp", -12.0, 1.0, 30.0)
+			for field in ["skill1_cooldown", "skill2_cooldown", "skill3_cooldown"]:
+				RunDirector.add_run_modifier(field, 0.0, 0.92, 0.0)
+			persistent_changed = true
 	if persistent_changed:
 		refresh_persistent_modifiers(actor)
 	if restore_defense_after_refresh:
@@ -87,6 +105,12 @@ static func summary(choice_id: String) -> String:
 			return "Skill rhythm improved."
 		"train_resource":
 			return "Inspiration capacity expanded."
+		"pact_power":
+			return "Blood Price accepted."
+		"pact_guard":
+			return "Iron Oath accepted."
+		"pact_focus":
+			return "Astral Debt accepted."
 		_:
 			return "You move on."
 
