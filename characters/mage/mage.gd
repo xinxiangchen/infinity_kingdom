@@ -314,6 +314,7 @@ func start_skill1_cast() -> void:
 	play_animation(&"skill1")
 
 func cast_skill1_blades() -> void:
+	clear_control_effects(false, true, true)
 	if skill1_shield_upgrade:
 		health_component.set_shield(skill1_shield_value)
 	attack_started.emit(&"skill1")
@@ -355,6 +356,7 @@ func start_skill3_cast() -> void:
 	play_animation(&"skill3")
 
 func apply_skill3_enchant() -> void:
+	clear_control_effects(true, true, true)
 	attack_started.emit(&"skill3")
 	enchant_active = true
 	enchant_sigil.visible = true
@@ -445,6 +447,20 @@ func apply_control_effects(payload: Dictionary) -> void:
 		_emit_control_status_changed()
 		if not popup_text.is_empty():
 			_spawn_control_text(popup_text, popup_color)
+
+func clear_control_effects(clear_silence: bool = false, clear_root: bool = true, clear_slow: bool = true) -> void:
+	var previous_summary := get_control_status_text()
+	if clear_silence:
+		silenced_time_remaining = 0.0
+	if clear_root:
+		root_time_remaining = 0.0
+	if clear_slow:
+		slow_time_remaining = 0.0
+		slow_factor = 1.0
+	if previous_summary == get_control_status_text():
+		return
+	_emit_control_status_changed()
+	_spawn_control_text("Steady", Color(0.98, 0.90, 0.68, 1.0))
 
 func _get_attack_direction() -> Vector2:
 	var target := find_primary_target(attack_targeting_range)

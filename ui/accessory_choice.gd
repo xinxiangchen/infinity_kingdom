@@ -29,6 +29,7 @@ const CARD_GAP := 14.0
 var active_choices: Array[Dictionary] = []
 var active_actor: Node = null
 var active_reroll_cost: int = 0
+var layout_size_override: Vector2 = Vector2.ZERO
 
 func _ready() -> void:
 	visible = false
@@ -190,7 +191,11 @@ func _queue_layout_refresh() -> void:
 func _refresh_layout() -> void:
 	if panel == null or choices_row == null:
 		return
-	var viewport_size: Vector2 = Vector2(get_window().size) if get_window() != null else get_viewport().get_visible_rect().size
+	var viewport_size: Vector2 = layout_size_override
+	if viewport_size == Vector2.ZERO:
+		viewport_size = get_viewport().get_visible_rect().size
+	if viewport_size == Vector2.ZERO and get_window() != null:
+		viewport_size = Vector2(get_window().size)
 	var compact: bool = viewport_size.x < 980.0 or viewport_size.y < 720.0
 	var very_compact: bool = viewport_size.x < 760.0 or viewport_size.y < 620.0
 	panel.custom_minimum_size = Vector2(

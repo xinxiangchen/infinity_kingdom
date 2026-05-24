@@ -46,6 +46,24 @@ func _run() -> void:
 			push_error("Root did not apply correctly: %s" % scene_path)
 			quit(1)
 			return
+		if not actor.has_method("clear_control_effects"):
+			push_error("Player is missing clear_control_effects: %s" % scene_path)
+			quit(1)
+			return
+		actor.clear_control_effects(true, true, true)
+		if not String(actor.get_control_status_text()).is_empty():
+			push_error("Control effects were not cleared: %s" % scene_path)
+			quit(1)
+			return
+		if float(actor.get_effective_move_speed()) < float(actor.move_speed):
+			push_error("Move speed did not recover after clear: %s" % scene_path)
+			quit(1)
+			return
+		if not actor.can_cast_skill(&"skill1"):
+			push_error("Skill casting did not recover after clear: %s" % scene_path)
+			quit(1)
+			return
+		actor.apply_control_effects({"root_duration": 0.6})
 		if String(actor.get_control_status_text()).find("Rooted") == -1:
 			push_error("Control status text did not include rooted: %s" % scene_path)
 			quit(1)

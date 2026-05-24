@@ -322,6 +322,7 @@ func start_roll() -> void:
 		dash_direction = facing if facing != Vector2.ZERO else Vector2.RIGHT
 	dash_direction = dash_direction.normalized()
 	active_dash_invincible = skill2_invincible_upgrade
+	clear_control_effects(skill2_invincible_upgrade, true, true)
 	roll_afterimage_timer = 0.0
 	_spawn_afterimage(0.32)
 	play_animation(&"dash")
@@ -508,6 +509,20 @@ func apply_control_effects(payload: Dictionary) -> void:
 		_emit_control_status_changed()
 		if not popup_text.is_empty():
 			_spawn_control_text(popup_text, popup_color)
+
+func clear_control_effects(clear_silence: bool = false, clear_root: bool = true, clear_slow: bool = true) -> void:
+	var previous_summary := get_control_status_text()
+	if clear_silence:
+		silenced_time_remaining = 0.0
+	if clear_root:
+		root_time_remaining = 0.0
+	if clear_slow:
+		slow_time_remaining = 0.0
+		slow_factor = 1.0
+	if previous_summary == get_control_status_text():
+		return
+	_emit_control_status_changed()
+	_spawn_control_text("Steady", Color(0.98, 0.90, 0.68, 1.0))
 
 func get_effective_move_speed() -> float:
 	return move_speed * slow_factor

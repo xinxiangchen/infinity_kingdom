@@ -395,6 +395,7 @@ func cast_skill2() -> void:
 	trigger_shockwave()
 
 func activate_guard() -> void:
+	clear_control_effects(false, true, true)
 	guard_active = true
 	guard_time_remaining = guard_duration
 	health_component.set_shield(guard_shield_value)
@@ -411,6 +412,7 @@ func end_guard() -> void:
 	shield_changed.emit(shield)
 
 func apply_sanctuary() -> void:
+	clear_control_effects(true, true, true)
 	if skill3_heal_upgrade:
 		heal((max_hp - hp) * 0.1)
 	if skill3_restore_defense_upgrade:
@@ -480,6 +482,20 @@ func apply_control_effects(payload: Dictionary) -> void:
 		_emit_control_status_changed()
 		if not popup_text.is_empty():
 			_spawn_control_text(popup_text, popup_color)
+
+func clear_control_effects(clear_silence: bool = false, clear_root: bool = true, clear_slow: bool = true) -> void:
+	var previous_summary := get_control_status_text()
+	if clear_silence:
+		silenced_time_remaining = 0.0
+	if clear_root:
+		root_time_remaining = 0.0
+	if clear_slow:
+		slow_time_remaining = 0.0
+		slow_factor = 1.0
+	if previous_summary == get_control_status_text():
+		return
+	_emit_control_status_changed()
+	_spawn_control_text("Steady", Color(0.98, 0.90, 0.68, 1.0))
 
 func get_scaled_damage(base_damage: float) -> float:
 	return base_damage * active_damage_multiplier
