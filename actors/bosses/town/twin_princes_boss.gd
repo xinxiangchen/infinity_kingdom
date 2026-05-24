@@ -172,6 +172,7 @@ func _start_teleport_attack() -> void:
 	teleport_marker.visible = true
 	teleport_marker.global_position = teleport_target_position
 	teleport_marker.rotation = 0.0
+	_show_intent_text("Blink Slash", Color(1.0, 0.82, 0.68, 1.0), teleport_target_position, 0.86)
 	Sfx.play_event(&"boss_twin_teleport", global_position)
 
 func _process_teleport_mark() -> void:
@@ -202,6 +203,7 @@ func _start_spear_charge() -> void:
 	charge_line.visible = true
 	charge_line.global_position = global_position
 	charge_line.rotation = charge_direction.angle()
+	_show_intent_text("Spear Charge", Color(1.0, 0.76, 0.58, 1.0), global_position, 0.88)
 	Sfx.play_event(&"boss_twin_charge", global_position)
 
 func _process_spear_charge(delta: float) -> void:
@@ -223,6 +225,7 @@ func _start_barrage() -> void:
 	state_time = 0.0
 	action_committed = false
 	barrage_cooldown = 5.8 if desperation_active else 8.0
+	_show_intent_text("Royal Barrage", Color(1.0, 0.86, 0.62, 1.0), global_position, 0.9)
 	Sfx.play_event(&"boss_twin_barrage", global_position)
 
 func _process_barrage_cast() -> void:
@@ -316,6 +319,7 @@ func _update_desperation_state() -> void:
 	barrage_cooldown = minf(barrage_cooldown, 1.6)
 	phase_ring.visible = true
 	phase_ring.rotation = 0.0
+	_show_intent_text("Desperate", Color(1.0, 0.66, 0.50, 1.0), global_position, 0.94)
 	Sfx.play_event(&"boss_twin_barrage", global_position, 2.0)
 
 func _update_visuals() -> void:
@@ -328,12 +332,31 @@ func _update_visuals() -> void:
 	phase_ring.default_color = Color(1.0, 0.64, 0.42, 0.9) if desperation_active else (Color(1.0, 0.82, 0.56, 0.85) if current_phase == 2 else Color(0.82, 0.86, 1.0, 0.8))
 	if target != null and is_instance_valid(target):
 		spear.rotation = (target.global_position - global_position).angle()
+	var pulse := 0.82 + 0.18 * sin(Time.get_ticks_msec() * 0.01)
+	if teleport_marker.visible:
+		teleport_marker.scale = Vector2.ONE * (0.92 + 0.08 * pulse)
+		teleport_marker.width = 3.0 + 0.8 * pulse
+		teleport_marker.modulate = Color(1.0, 1.0, 1.0, 0.76 + 0.14 * pulse)
+	if charge_line.visible:
+		charge_line.width = 3.6 + 1.0 * pulse
+		charge_line.modulate = Color(1.0, 1.0, 1.0, 0.74 + 0.16 * pulse)
+	if phase_ring.visible:
+		phase_ring.scale = Vector2.ONE * (0.94 + 0.08 * pulse)
+		phase_ring.width = 3.4 + 1.0 * pulse
+		phase_ring.modulate = Color(1.0, 1.0, 1.0, 0.74 + 0.16 * pulse)
 
 func _spawn_damage_number(amount: float, is_critical: bool) -> void:
 	var damage_number := DAMAGE_NUMBER_SCENE.instantiate()
 	damage_number.position = Vector2(0.0, -44.0)
 	damage_number.setup(amount, is_critical)
 	effects_layer.add_child(damage_number)
+
+func _show_intent_text(label_text: String, color_value: Color, world_position: Vector2, scale_value: float = 0.84) -> void:
+	var popup := DAMAGE_NUMBER_SCENE.instantiate()
+	popup.position = to_local(world_position) + Vector2(-42.0, -56.0)
+	if popup.has_method("setup_text"):
+		popup.setup_text(label_text, color_value, scale_value)
+	effects_layer.add_child(popup)
 
 func _on_damaged(_amount: float, remaining_hp: float, _source: Node) -> void:
 	hp = remaining_hp
@@ -346,6 +369,7 @@ func _on_damaged(_amount: float, remaining_hp: float, _source: Node) -> void:
 
 func _on_died() -> void:
 	if current_phase == 1:
+		_show_intent_text("Phase Two", Color(1.0, 0.88, 0.62, 1.0), global_position, 0.94)
 		current_phase = 2
 		desperation_active = false
 		max_hp = phase2_hp

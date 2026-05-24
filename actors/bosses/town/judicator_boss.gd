@@ -185,6 +185,7 @@ func _start_skill1() -> void:
 	leap_target_position = target.global_position if target != null else global_position
 	landing_ring.visible = true
 	landing_ring.global_position = leap_target_position
+	_show_intent_text("Leap Slam", Color(1.0, 0.84, 0.62, 1.0), leap_target_position, 0.88)
 	Sfx.play_event(&"boss_judicator_skill1", global_position)
 
 func _process_skill1_jump_start() -> void:
@@ -219,6 +220,7 @@ func _start_skill2() -> void:
 	slash_line.visible = true
 	slash_line.global_position = global_position
 	slash_line.rotation = line_direction.angle()
+	_show_intent_text("Line Verdict", Color(1.0, 0.74, 0.54, 1.0), global_position, 0.88)
 	Sfx.play_event(&"boss_judicator_skill2", global_position)
 
 func _process_skill2_charge() -> void:
@@ -302,6 +304,7 @@ func _update_enrage_state() -> void:
 	skill2_cooldown *= enrage_cooldown_multiplier
 	landing_ring.default_color = Color(1.0, 0.74, 0.38, 0.9)
 	slash_line.default_color = Color(1.0, 0.62, 0.4, 0.85)
+	_show_intent_text("Enraged", Color(1.0, 0.70, 0.48, 1.0), global_position, 0.94)
 	Sfx.play_event(&"boss_judicator_skill2", global_position, 2.0)
 
 func _update_visuals() -> void:
@@ -316,6 +319,14 @@ func _update_visuals() -> void:
 	sword.color = Color(0.92, 0.84, 0.72, 1.0)
 	if target != null and is_instance_valid(target):
 		sword.rotation = (target.global_position - global_position).angle()
+	var pulse := 0.82 + 0.18 * sin(Time.get_ticks_msec() * 0.01)
+	if landing_ring.visible:
+		landing_ring.scale = Vector2.ONE * (0.94 + 0.08 * pulse)
+		landing_ring.width = 3.4 + 1.2 * pulse
+		landing_ring.modulate = Color(1.0, 1.0, 1.0, 0.76 + 0.16 * pulse)
+	if slash_line.visible:
+		slash_line.width = 4.0 + 1.2 * pulse
+		slash_line.modulate = Color(1.0, 1.0, 1.0, 0.74 + 0.16 * pulse)
 
 func _spawn_aftershock() -> void:
 	var ring := Line2D.new()
@@ -335,6 +346,13 @@ func _spawn_damage_number(amount: float, is_critical: bool) -> void:
 	damage_number.position = Vector2(0.0, -42.0)
 	damage_number.setup(amount, is_critical)
 	effects_layer.add_child(damage_number)
+
+func _show_intent_text(label_text: String, color_value: Color, world_position: Vector2, scale_value: float = 0.86) -> void:
+	var popup := DAMAGE_NUMBER_SCENE.instantiate()
+	popup.position = to_local(world_position) + Vector2(-42.0, -54.0)
+	if popup.has_method("setup_text"):
+		popup.setup_text(label_text, color_value, scale_value)
+	effects_layer.add_child(popup)
 
 func _on_damaged(_amount: float, remaining_hp: float, _source: Node) -> void:
 	hp = remaining_hp

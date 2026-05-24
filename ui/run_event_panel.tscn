@@ -47,6 +47,30 @@ text = "Choose a reward."
 horizontal_alignment = 1
 autowrap_mode = 3
 
+[node name="ContextPanel" type="PanelContainer" parent="Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="MarginContainer" type="MarginContainer" parent="Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/ContextPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 10
+
+[node name="VBoxContainer" type="VBoxContainer" parent="Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/ContextPanel/MarginContainer"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="BuildSummary" type="Label" parent="Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/ContextPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "Gold 0  |  Relic No Accessory"
+autowrap_mode = 3
+
+[node name="RuleSummary" type="Label" parent="Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/ContextPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "Choices update the current run."
+autowrap_mode = 3
+
 [node name="ChoiceScroll" type="ScrollContainer" parent="Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer"]
 custom_minimum_size = Vector2(0, 320)
 layout_mode = 2
@@ -58,6 +82,13 @@ size_flags_horizontal = 3
 theme_override_constants/h_separation = 12
 theme_override_constants/v_separation = 12
 columns = 4
+
+[node name="Detail" type="Label" parent="Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+text = "Choose a reward."
+horizontal_alignment = 1
+autowrap_mode = 3
 
 [node name="Footer" type="Label" parent="Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer"]
 layout_mode = 2

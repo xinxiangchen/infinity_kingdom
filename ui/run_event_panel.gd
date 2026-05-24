@@ -14,11 +14,17 @@ const CARD_GAP := 12.0
 @onready var panel_margin: MarginContainer = $Backdrop/CenterContainer/PanelContainer/MarginContainer
 @onready var title_label: Label = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/Title
 @onready var subtitle_label: Label = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/Subtitle
+@onready var context_panel: PanelContainer = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/ContextPanel
+@onready var build_summary_label: Label = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/ContextPanel/MarginContainer/VBoxContainer/BuildSummary
+@onready var rule_summary_label: Label = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/ContextPanel/MarginContainer/VBoxContainer/RuleSummary
 @onready var choice_scroll: ScrollContainer = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/ChoiceScroll
 @onready var choice_row: GridContainer = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/ChoiceScroll/ChoiceRow
+@onready var detail_label: Label = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/Detail
 @onready var footer_label: Label = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/Footer
 
 var active_kind: String = ""
+var active_gold: int = 0
+var active_default_detail: String = ""
 var layout_size_override: Vector2 = Vector2.ZERO
 
 func _ready() -> void:
@@ -27,8 +33,18 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	backdrop.color = Color(0.015, 0.018, 0.026, 0.72)
 	panel.add_theme_stylebox_override("panel", UISkin.menu_panel_style())
+	context_panel.add_theme_stylebox_override("panel", UISkin.content_panel_style())
+	title_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	subtitle_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	build_summary_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	rule_summary_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	detail_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	footer_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	UISkin.label(title_label, 28, Color(0.98, 0.90, 0.66))
 	UISkin.label(subtitle_label, 15, Color(0.78, 0.84, 0.92))
+	UISkin.label(build_summary_label, 12, Color(0.90, 0.92, 0.98))
+	UISkin.label(rule_summary_label, 12, Color(0.78, 0.84, 0.92))
+	UISkin.label(detail_label, 12, Color(0.92, 0.86, 0.72))
 	UISkin.label(footer_label, 13, Color(0.74, 0.80, 0.88))
 	if get_viewport() != null and not get_viewport().size_changed.is_connected(_queue_layout_refresh):
 		get_viewport().size_changed.connect(_queue_layout_refresh)
@@ -36,6 +52,7 @@ func _ready() -> void:
 
 func open(kind: String, gold: int) -> void:
 	active_kind = kind
+	active_gold = gold
 	_rebuild(kind, gold)
 	visible = true
 	get_tree().paused = true
@@ -48,11 +65,13 @@ func _rebuild(kind: String, gold: int) -> void:
 	for child in choice_row.get_children():
 		choice_row.remove_child(child)
 		child.queue_free()
+	_refresh_context(kind, gold)
+	active_default_detail = _default_detail_for_kind(kind)
 	match kind:
 		"shop":
 			title_label.text = "Black Market"
 			subtitle_label.text = "Spend gold for a focused advantage before the next fight."
-			footer_label.text = "Gold: %d" % gold
+			footer_label.text = "Enter choose  |  Gold is spent immediately."
 			choice_row.add_child(_choice_card("shop_attack", "Sharpening Oil", "Gain +10% attack damage this run.", "res://assets/ui/consumable/sharpening_oil.png", 45, gold))
 			choice_row.add_child(_choice_card("shop_defense", "Light Armor Pack", "Restore defense and gain +12 max defense.", "res://assets/ui/consumable/light_armor_pack.png", 40, gold))
 			choice_row.add_child(_choice_card("shop_relic", "Relic Map", "Buy an extra relic choice before the next fight.", "res://assets/ui/icon/ui_shop.png", 55, gold))
@@ -60,7 +79,7 @@ func _rebuild(kind: String, gold: int) -> void:
 		"rest":
 			title_label.text = "Church Refuge"
 			subtitle_label.text = "Recover before the next encounter."
-			footer_label.text = "A quiet room, a candle, and just enough time."
+			footer_label.text = "Instant recovery  |  Skip stays available."
 			choice_row.add_child(_choice_card("rest_heal", "Medkit", "Restore 45% health.", "res://assets/ui/consumable/medkit.png", 0, gold))
 			choice_row.add_child(_choice_card("rest_focus", "Protective Candle", "Restore inspiration and defense.", "res://assets/ui/consumable/protective_candle.png", 0, gold))
 			choice_row.add_child(_choice_card("rest_repair", "Field Repair", "Restore defense and gain +8 max hp.", "res://assets/ui/icon/ui_shield.png", 0, gold))
@@ -68,7 +87,7 @@ func _rebuild(kind: String, gold: int) -> void:
 		"training":
 			title_label.text = "Training Drill"
 			subtitle_label.text = "Choose one stat technique for the rest of this run."
-			footer_label.text = "Training stacks with relics."
+			footer_label.text = "Permanent training  |  Stacks with relics."
 			choice_row.add_child(_choice_card("train_crit", "Precision", "+5% critical chance.", "res://assets/ui/trait/trait_crit.png", 0, gold))
 			choice_row.add_child(_choice_card("train_speed", "Footwork", "+8% move speed.", "res://assets/ui/icon/stat_speed_pixel.png", 0, gold))
 			choice_row.add_child(_choice_card("train_cooldown", "Rhythm", "-6% skill cooldowns.", "res://assets/ui/icon/stat_cooldown_pixel.png", 0, gold))
@@ -76,7 +95,7 @@ func _rebuild(kind: String, gold: int) -> void:
 		"pact":
 			title_label.text = "Forbidden Pact"
 			subtitle_label.text = "Take a sharp edge now, and live with the tradeoff for the rest of the run."
-			footer_label.text = "These bargains do not cost gold."
+			footer_label.text = "Permanent tradeoffs  |  No gold cost."
 			choice_row.add_child(_choice_card("pact_power", "Blood Price", "+18% attack, +10% skill damage, but skills cost more inspiration.", "res://assets/ui/trait/trait_damage.png", 0, gold))
 			choice_row.add_child(_choice_card("pact_guard", "Iron Oath", "Gain heavy defense and restore armor, but move slower.", "res://assets/ui/icon/ui_shield.png", 0, gold))
 			choice_row.add_child(_choice_card("pact_focus", "Astral Debt", "Gain inspiration and cooldown efficiency, but lose max hp.", "res://assets/ui/icon/ui_mana_flame.png", 0, gold))
@@ -85,16 +104,18 @@ func _rebuild(kind: String, gold: int) -> void:
 			var tags_text := AccessoryManager.describe_tags()
 			title_label.text = "Relic Resonance"
 			subtitle_label.text = "Your relic leans toward %s. Draw out one matching response for the rest of this run." % (tags_text if not tags_text.is_empty() else "an unknown path")
-			footer_label.text = "Relic: %s" % String(AccessoryManager.get_equipped_accessory().get("name", "No Accessory"))
+			footer_label.text = "Permanent resonance  |  Skip keeps the relic unchanged."
 			for choice in RunEffects.attunement_choices():
 				choice_row.add_child(_choice_card_from_data(choice, gold))
 			choice_row.add_child(_choice_card("skip", "Leave It Still", "Keep the relic unchanged and move on.", "res://assets/ui/icon/ui_back.png", 0, gold))
 		_:
 			title_label.text = "Travel"
 			subtitle_label.text = "No event is available."
-			footer_label.text = ""
+			footer_label.text = "Continue to the next encounter."
 			choice_row.add_child(_choice_card("skip", "Continue", "Move to the next encounter.", "res://assets/ui/icon/ui_check.png", 0, gold))
+	detail_label.text = active_default_detail
 	_refresh_layout()
+	call_deferred("_focus_first_choice")
 
 func _choice_card_from_data(choice: Dictionary, gold: int) -> Button:
 	return _choice_card(
@@ -129,6 +150,14 @@ func _choice_card(choice_id: String, title: String, summary: String, icon_path: 
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 8)
 	margin.add_child(box)
+
+	var meta := _choice_meta(choice_id, cost)
+	var badge_row := HBoxContainer.new()
+	badge_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	badge_row.add_theme_constant_override("separation", 6)
+	box.add_child(badge_row)
+	badge_row.add_child(_badge(String(meta.get("type", "Choice")), meta.get("color", Color(0.82, 0.86, 0.96))))
+	badge_row.add_child(_badge(String(meta.get("timing", "Now")), meta.get("timing_color", Color(0.92, 0.84, 0.66))))
 
 	var slot := PanelContainer.new()
 	slot.custom_minimum_size = Vector2(88, 88)
@@ -165,6 +194,8 @@ func _choice_card(choice_id: String, title: String, summary: String, icon_path: 
 	box.add_child(cost_label)
 
 	UISkin.ignore_mouse_recursive(margin)
+	button.focus_entered.connect(func() -> void: _preview_choice(choice_id, title, summary, cost, button.disabled))
+	button.mouse_entered.connect(func() -> void: _preview_choice(choice_id, title, summary, cost, button.disabled))
 	button.pressed.connect(func() -> void:
 		close()
 		event_choice_made.emit(choice_id)
@@ -173,6 +204,126 @@ func _choice_card(choice_id: String, title: String, summary: String, icon_path: 
 
 func _queue_layout_refresh() -> void:
 	call_deferred("_refresh_layout")
+
+func _refresh_context(kind: String, gold: int) -> void:
+	var equipped_accessory := AccessoryManager.get_equipped_accessory()
+	var accessory_name := String(equipped_accessory.get("name", "No Accessory"))
+	var tags_text := AccessoryManager.describe_tags(equipped_accessory.get("tags", []))
+	var next_event := RunDirector.describe_event_kind(RunDirector.peek_next_event_kind())
+	build_summary_label.text = "Gold %d  |  Relic %s%s" % [
+		gold,
+		accessory_name,
+		("  |  %s" % tags_text) if not tags_text.is_empty() else ""
+	]
+	rule_summary_label.text = _rule_summary_for_kind(kind, next_event)
+
+func _rule_summary_for_kind(kind: String, next_event: String) -> String:
+	match kind:
+		"shop":
+			return "Buy one focused upgrade now. Next event after this: %s." % next_event
+		"rest":
+			return "Recovery is immediate and does not change your long-term route."
+		"training":
+			return "Training permanently boosts one lane for the rest of the run."
+		"pact":
+			return "Pacts are permanent. They raise power now and reshape future fights."
+		"attunement":
+			return "Attunement follows your relic tags and lasts for the rest of this run."
+		_:
+			return "Move on when you are ready."
+
+func _default_detail_for_kind(kind: String) -> String:
+	match kind:
+		"shop":
+			return "Choose a purchase if it sharpens the next boss check. Saving gold keeps later options open."
+		"rest":
+			return "Take health if survival is shaky, or recover defense and inspiration if your build is already stable."
+		"training":
+			return "Training is permanent. Pick the lane your current relic and hero already reward."
+		"pact":
+			return "Every pact is a commitment. Look for the tradeoff your current hero can absorb best."
+		"attunement":
+			return "Resonance is the cleanest way to reinforce your current relic identity."
+		_:
+			return "Choose a path and continue."
+
+func _preview_choice(choice_id: String, title: String, summary: String, cost: int, disabled: bool) -> void:
+	var meta := _choice_meta(choice_id, cost)
+	var cost_text := "Cost %d gold." % cost if cost > 0 else "No gold cost."
+	if disabled:
+		cost_text = "Not enough gold yet."
+	detail_label.text = "%s: %s %s %s" % [
+		title,
+		String(meta.get("detail", "")),
+		summary,
+		cost_text
+	]
+
+func _focus_first_choice() -> void:
+	for child in choice_row.get_children():
+		if child is Button and not (child as Button).disabled:
+			(child as Button).grab_focus()
+			return
+	for child in choice_row.get_children():
+		if child is Button:
+			(child as Button).grab_focus()
+			return
+
+func _choice_meta(choice_id: String, cost: int) -> Dictionary:
+	var meta := {
+		"type": "Choice",
+		"timing": "Now",
+		"detail": "Updates the current run path.",
+		"color": Color(0.76, 0.84, 0.96),
+		"timing_color": Color(0.92, 0.84, 0.66)
+	}
+	if choice_id == "skip":
+		meta["type"] = "Skip"
+		meta["timing"] = "No Cost"
+		meta["detail"] = "Keeps the current build unchanged and moves the run forward."
+		meta["color"] = Color(0.72, 0.78, 0.88)
+		meta["timing_color"] = Color(0.76, 0.82, 0.90)
+	elif choice_id.begins_with("shop_"):
+		meta["type"] = "Purchase"
+		meta["timing"] = "Run Bonus" if choice_id != "shop_relic" else "Next Relic"
+		meta["detail"] = "Spends gold now for a lasting upgrade."
+		meta["color"] = Color(1.0, 0.86, 0.56)
+	elif choice_id.begins_with("rest_"):
+		meta["type"] = "Recovery"
+		meta["timing"] = "Instant"
+		meta["detail"] = "Resolves immediately before the next encounter."
+		meta["color"] = Color(0.78, 0.96, 0.82)
+	elif choice_id.begins_with("train_"):
+		meta["type"] = "Training"
+		meta["timing"] = "Permanent"
+		meta["detail"] = "Adds a clean stat bonus for the rest of the run."
+		meta["color"] = Color(0.78, 0.90, 1.0)
+	elif choice_id.begins_with("pact_"):
+		meta["type"] = "Pact"
+		meta["timing"] = "Tradeoff"
+		meta["detail"] = "Permanent power with a permanent drawback."
+		meta["color"] = Color(1.0, 0.74, 0.66)
+	elif choice_id.begins_with("attune_"):
+		meta["type"] = "Attunement"
+		meta["timing"] = "Permanent"
+		meta["detail"] = "Deepens the current relic identity instead of changing direction."
+		meta["color"] = Color(0.88, 0.76, 1.0)
+	if cost > 0:
+		meta["timing"] = "Cost %d" % cost
+	return meta
+
+func _badge(text_value: String, color_value: Color) -> PanelContainer:
+	var panel_value := PanelContainer.new()
+	panel_value.add_theme_stylebox_override(
+		"panel",
+		UISkin.flat_style(color_value.darkened(0.76), color_value, 1, 5)
+	)
+	var label_value := Label.new()
+	label_value.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label_value.text = text_value
+	UISkin.label(label_value, 10, color_value.lightened(0.12))
+	panel_value.add_child(label_value)
+	return panel_value
 
 func _refresh_layout() -> void:
 	if panel == null or choice_row == null:
@@ -192,10 +343,13 @@ func _refresh_layout() -> void:
 	panel_margin.add_theme_constant_override("margin_top", 18 if very_compact else (22 if compact else 30))
 	panel_margin.add_theme_constant_override("margin_right", 18 if very_compact else (24 if compact else 34))
 	panel_margin.add_theme_constant_override("margin_bottom", 18 if very_compact else (22 if compact else 30))
-	choice_scroll.custom_minimum_size.y = clampf(panel.custom_minimum_size.y * (0.48 if very_compact else 0.58), 188.0, 386.0)
+	choice_scroll.custom_minimum_size.y = clampf(panel.custom_minimum_size.y * (0.34 if very_compact else (0.40 if compact else 0.46)), 164.0, 330.0)
 	UISkin.label(title_label, 22 if very_compact else (25 if compact else 28), Color(0.98, 0.90, 0.66))
 	UISkin.label(subtitle_label, 13 if very_compact else (14 if compact else 15), Color(0.78, 0.84, 0.92))
-	UISkin.label(footer_label, 12 if compact else 13, Color(0.74, 0.80, 0.88))
+	UISkin.label(build_summary_label, 11 if compact else 12, Color(0.90, 0.92, 0.98))
+	UISkin.label(rule_summary_label, 11 if compact else 12, Color(0.78, 0.84, 0.92))
+	UISkin.label(detail_label, 11 if compact else 12, Color(0.92, 0.86, 0.72))
+	UISkin.label(footer_label, 11 if compact else 12, Color(0.74, 0.80, 0.88))
 	var card_width := 212.0 if very_compact else (224.0 if compact else 236.0)
 	var card_height := 238.0 if very_compact else (252.0 if compact else 274.0)
 	var available_width := maxf(choice_scroll.size.x, panel.custom_minimum_size.x - (56.0 if very_compact else 96.0))

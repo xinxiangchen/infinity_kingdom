@@ -224,12 +224,14 @@ func _update_shield(delta: float) -> void:
 		state_time = 0.0
 		action_committed = false
 		attack_cooldown = attack_interval
+		_show_intent_text("Shield Bash", Color(0.98, 0.86, 0.66, 1.0), 0.86)
 		Sfx.play_event(&"enemy_shield_bash", global_position)
 		return
 	if skill_cooldown <= 0.0 and distance <= attack_range + 40.0:
 		state = &"guard_hold"
 		state_time = 0.0
 		skill_cooldown = 4.0
+		_show_intent_text("Brace", Color(0.82, 0.90, 1.0, 1.0), 0.78)
 		return
 	state = &"advance"
 	_set_melee_pressure_velocity(distance, attack_range * 0.92, attack_range * 0.64, 0.78, 0.1)
@@ -257,6 +259,7 @@ func _update_archer(delta: float) -> void:
 		state_time = 0.0
 		action_committed = false
 		attack_cooldown = attack_interval
+		_show_intent_text("Arrow Shot", Color(0.82, 0.96, 0.72, 1.0), 0.8)
 		return
 	state = &"reposition"
 	_set_ranged_spacing_velocity(distance, 150.0, attack_range + 120.0, 0.7, 0.7)
@@ -298,6 +301,7 @@ func _update_hunter(delta: float) -> void:
 		state = &"dash_in"
 		state_time = 0.0
 		skill_cooldown = 3.0
+		_show_intent_text("Pounce", Color(1.0, 0.74, 0.70, 1.0), 0.84)
 		Sfx.play_event(&"enemy_hunter_dash", global_position)
 		return
 	state = &"stalk"
@@ -326,6 +330,7 @@ func _update_apprentice(delta: float) -> void:
 		state_time = 0.0
 		action_committed = false
 		attack_cooldown = attack_interval
+		_show_intent_text("Frost Bolt", Color(0.78, 0.88, 1.0, 1.0), 0.8)
 		return
 	state = &"move"
 	_set_ranged_spacing_velocity(distance, 180.0, 280.0, 0.62, 0.54)
@@ -377,6 +382,7 @@ func _update_arcanist(delta: float) -> void:
 		skill_cooldown = 4.5
 		basic_attack_counter = 0
 		telegraph_line.visible = true
+		_show_intent_text("Silence Beam", Color(1.0, 0.78, 0.56, 1.0), 0.88)
 		Sfx.play_event(&"enemy_arcanist_cast", global_position)
 		return
 	if distance <= 320.0 and attack_cooldown <= 0.0:
@@ -510,6 +516,15 @@ func _spawn_melee_attack_effect(radius: float, color: Color, spread: float, forw
 	spark_tween.parallel().tween_property(spark, "modulate:a", 0.0, 0.12)
 	spark_tween.finished.connect(spark.queue_free)
 
+func _show_intent_text(label_text: String, color_value: Color, scale_value: float = 0.8) -> void:
+	if effects_layer == null:
+		return
+	var popup := DAMAGE_NUMBER_SCENE.instantiate()
+	popup.position = Vector2(-38.0, -56.0)
+	if popup.has_method("setup_text"):
+		popup.setup_text(label_text, color_value, scale_value)
+	effects_layer.add_child(popup)
+
 func _hit_target_radius(radius: float, damage: float) -> void:
 	if target == null or not is_instance_valid(target):
 		return
@@ -590,7 +605,13 @@ func _update_visuals() -> void:
 	body.color = color
 	telegraph_ring.visible = state == &"draw_bow" or state == &"cast_bolt" or state == &"basic_cast"
 	telegraph_ring.default_color = color.lightened(0.25)
-	telegraph_ring.scale = Vector2.ONE * (0.92 + 0.08 * sin(Time.get_ticks_msec() * 0.008))
+	var pulse := 0.82 + 0.18 * sin(Time.get_ticks_msec() * 0.008)
+	telegraph_ring.scale = Vector2.ONE * (0.92 + 0.08 * pulse)
+	telegraph_ring.width = 2.2 + 0.6 * pulse
+	telegraph_ring.modulate = Color(1.0, 1.0, 1.0, 0.74 + 0.18 * pulse)
+	if telegraph_line.visible:
+		telegraph_line.width = 3.2 + 0.8 * pulse
+		telegraph_line.modulate = Color(1.0, 1.0, 1.0, 0.72 + 0.18 * pulse)
 	if target != null and is_instance_valid(target):
 		weapon.rotation = (target.global_position - global_position).angle()
 		projectile_spawner.position.x = 26.0 if target.global_position.x >= global_position.x else -26.0

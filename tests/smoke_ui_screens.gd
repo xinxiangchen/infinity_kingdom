@@ -58,6 +58,17 @@ func _run() -> void:
 		push_error("Character select is missing quit signal")
 		quit(1)
 		return
+	if not world.character_select.has_method("_set_selected_hero"):
+		push_error("Character select is missing hero detail selection")
+		quit(1)
+		return
+	world.character_select._set_selected_hero(1)
+	await process_frame
+	var selected_title := world.character_select.get("hero_detail_title") as Label
+	if selected_title == null or selected_title.text.find("Ranger") == -1:
+		push_error("Character select detail panel did not update to Ranger")
+		quit(1)
+		return
 
 	if world.pause_menu == null or not world.pause_menu.has_method("open"):
 		push_error("Pause menu missing")
@@ -143,6 +154,16 @@ func _run() -> void:
 		push_error("Run event panel did not open")
 		quit(1)
 		return
+	var build_summary := world.run_event_panel.get_node("Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/ContextPanel/MarginContainer/VBoxContainer/BuildSummary") as Label
+	var detail_label := world.run_event_panel.get_node("Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/Detail") as Label
+	if build_summary == null or build_summary.text.is_empty():
+		push_error("Run event panel build summary is empty")
+		quit(1)
+		return
+	if detail_label == null or detail_label.text.is_empty():
+		push_error("Run event panel detail preview is empty")
+		quit(1)
+		return
 	world.run_event_panel.close()
 	world.run_event_panel.open("attunement", 100)
 	await process_frame
@@ -164,6 +185,7 @@ func _run() -> void:
 	accessory_manager.reset_run()
 	var test_sizes := [Vector2i(720, 540), Vector2i(1024, 720)]
 	for test_size in test_sizes:
+		_set_layout_override(world.character_select, test_size)
 		_set_layout_override(world.pause_menu, test_size)
 		_set_layout_override(world.audio_settings_panel, test_size)
 		_set_layout_override(world.settings_panel, test_size)
@@ -174,6 +196,10 @@ func _run() -> void:
 		_set_layout_override(world.result_screen, test_size)
 		await process_frame
 		await process_frame
+		var character_panel := world.character_select.get("panel") as PanelContainer
+		if not _assert_control_fits(character_panel, test_size, "Character select panel"):
+			quit(1)
+			return
 		world.pause_menu.open()
 		await process_frame
 		var pause_panel := world.pause_menu.get_node("Backdrop/CenterContainer/PanelContainer") as PanelContainer
