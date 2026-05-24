@@ -11,6 +11,7 @@ const ENCOUNTER_SCENES := [
 	preload("res://actors/bosses/town/twin_princes_boss.tscn")
 ]
 const CONTROL_HINT := "Controls: WASD move, J attack, K / L / I skills. F10 audio mix."
+const RELIC_REROLL_COST := 20
 
 @onready var spawn_marker: Marker2D = $PlayerSpawn
 @onready var encounter_marker: Marker2D = $EncounterSpawn
@@ -33,12 +34,21 @@ var encounter_index: int = -1
 var music_request_serial: int = 0
 var audio_panel_was_open: bool = false
 var waiting_for_accessory_choice: bool = false
+var active_accessory_reason: String = ""
 
 func _ready() -> void:
 	if character_select != null:
 		character_select.character_selected.connect(_on_character_selected)
+		if character_select.has_signal("audio_requested"):
+			character_select.audio_requested.connect(_on_title_audio_requested)
+		if character_select.has_signal("settings_requested"):
+			character_select.settings_requested.connect(_on_title_settings_requested)
+		if character_select.has_signal("quit_requested"):
+			character_select.quit_requested.connect(_on_quit_requested)
 	if accessory_choice != null and accessory_choice.has_signal("accessory_choice_made"):
 		accessory_choice.accessory_choice_made.connect(_on_accessory_choice_made)
+		if accessory_choice.has_signal("reroll_requested"):
+			accessory_choice.reroll_requested.connect(_on_accessory_reroll_requested)
 	if run_event_panel != null and run_event_panel.has_signal("event_choice_made"):
 		run_event_panel.event_choice_made.connect(_on_run_event_choice_made)
 	if pause_menu != null:
@@ -46,6 +56,7 @@ func _ready() -> void:
 		pause_menu.audio_requested.connect(_on_pause_audio_requested)
 		pause_menu.settings_requested.connect(_on_pause_settings_requested)
 		pause_menu.restart_requested.connect(_on_pause_restart_requested)
+		pause_menu.quit_requested.connect(_on_quit_requested)
 	if result_screen != null and result_screen.has_signal("closed"):
 		result_screen.closed.connect(_on_result_closed)
 	if debug_panel != null and debug_panel.has_method("bind_world"):
@@ -117,7 +128,7 @@ func _on_character_selected(character_id: StringName) -> void:
 	if pause_menu != null and pause_menu.has_method("close") and bool(pause_menu.is_open()):
 		pause_menu.close()
 	if Sfx != null:
-		Sfx.play_event(&"ui_confirm")
+		_play_ui_feedback(true)
 	AccessoryManager.reset_run()
 	RunDirector.reset_run()
 	if player_character != null and is_instance_valid(player_character):
@@ -148,6 +159,7 @@ func _on_character_selected(character_id: StringName) -> void:
 
 func _start_next_encounter() -> void:
 	waiting_for_accessory_choice = false
+	active_accessory_reason = ""
 	encounter_index += 1
 	if encounter_index >= ENCOUNTER_SCENES.size():
 		if Music != null:
@@ -179,8 +191,14 @@ func _start_next_encounter() -> void:
 		current_encounter.defeated.connect(_on_encounter_defeated)
 
 func _on_encounter_defeated() -> void:
-	RunDirector.reward_encounter(encounter_index)
+	var reward := RunDirector.reward_encounter(encounter_index, player_character)
 	current_encounter = null
+	if battle_status != null and battle_status.has_method("set_message"):
+		battle_status.set_message(
+			"Encounter Cleared",
+			"+%d gold earned." % reward,
+			_detail_text("Gold: %d" % int(RunDirector.gold))
+		)
 	var timer := get_tree().create_timer(1.1)
 	timer.timeout.connect(func() -> void:
 		if is_instance_valid(self) and player_character != null and is_instance_valid(player_character) and float(player_character.hp) > 0.0:
@@ -210,14 +228,16 @@ func _on_player_died() -> void:
 			"Continue to return to champion selection and try a different relic path."
 		)
 	waiting_for_accessory_choice = false
+	active_accessory_reason = ""
 
 func _offer_accessory(reason: String) -> void:
 	if accessory_choice == null or not accessory_choice.has_method("open"):
 		_start_next_encounter()
 		return
 	waiting_for_accessory_choice = true
+	active_accessory_reason = reason
 	var choices := AccessoryManager.generate_choices(3)
-	accessory_choice.open(choices, player_character, reason)
+	accessory_choice.open(choices, player_character, reason, RELIC_REROLL_COST, int(RunDirector.gold))
 	if battle_status != null and battle_status.has_method("set_message"):
 		battle_status.set_message(
 			reason,
@@ -240,10 +260,11 @@ func _offer_next_run_event() -> void:
 
 func _on_accessory_choice_made(_accessory_id: String, kept_current: bool) -> void:
 	waiting_for_accessory_choice = false
+	active_accessory_reason = ""
 	if player_character != null and is_instance_valid(player_character):
 		RunEffects.refresh_persistent_modifiers(player_character)
 	if Sfx != null:
-		Sfx.play_event(&"ui_confirm")
+		_play_ui_feedback(true)
 	var accessory_name := String(AccessoryManager.get_equipped_accessory().get("name", "No Accessory"))
 	if battle_status != null and battle_status.has_method("set_message"):
 		battle_status.set_message(
@@ -253,28 +274,62 @@ func _on_accessory_choice_made(_accessory_id: String, kept_current: bool) -> voi
 		)
 	_start_next_encounter()
 
-func _on_run_event_choice_made(choice_id: String) -> void:
-	_apply_run_event_choice(choice_id)
+func _on_accessory_reroll_requested() -> void:
+	if not waiting_for_accessory_choice:
+		return
+	if not RunDirector.spend_gold(RELIC_REROLL_COST):
+		if Sfx != null:
+			_play_ui_feedback(false)
+		return
 	if Sfx != null:
-		Sfx.play_event(&"ui_confirm")
+		_play_ui_feedback(true)
+	var reason := active_accessory_reason if not active_accessory_reason.is_empty() else "Relic Offering"
+	var choices := AccessoryManager.generate_choices(3)
+	accessory_choice.open(choices, player_character, reason, RELIC_REROLL_COST, int(RunDirector.gold))
 	if battle_status != null and battle_status.has_method("set_message"):
 		battle_status.set_message(
-			"Event Complete",
-			_run_event_summary(choice_id),
+			"Relic Rerolled",
+			"New relic choices are available.",
 			_detail_text("Gold: %d" % int(RunDirector.gold))
 		)
-	_start_next_encounter()
 
-func _apply_run_event_choice(choice_id: String) -> void:
+func _on_run_event_choice_made(choice_id: String) -> void:
+	var applied := _apply_run_event_choice(choice_id)
+	if Sfx != null:
+		_play_ui_feedback(applied)
+	if battle_status != null and battle_status.has_method("set_message"):
+		battle_status.set_message(
+			"Event Complete" if applied else "Not Enough Gold",
+			_run_event_summary(choice_id) if applied else "Choose another reward next time.",
+			_detail_text("Gold: %d" % int(RunDirector.gold))
+		)
+	if choice_id == "shop_relic" and applied:
+		_offer_accessory("Purchased Relic")
+	else:
+		_start_next_encounter()
+
+func _apply_run_event_choice(choice_id: String) -> bool:
 	if player_character == null or not is_instance_valid(player_character):
-		return
+		return false
 	var cost := RunEffects.cost_for(choice_id)
 	if cost > 0 and not RunDirector.spend_gold(cost):
-		return
+		return false
 	RunEffects.apply_choice(choice_id, player_character)
+	return true
 
 func _run_event_summary(choice_id: String) -> String:
 	return RunEffects.summary(choice_id)
+
+func _play_ui_feedback(success: bool) -> void:
+	if Sfx == null:
+		return
+	if success:
+		Sfx.play_event(&"ui_confirm")
+		return
+	if Sfx.has_method("has_event") and bool(Sfx.has_event(&"ui_deny")):
+		Sfx.play_event(&"ui_deny")
+		return
+	Sfx.play_event(&"ui_confirm", null, -7.0, 0.86, "UI")
 
 func _bind_actor_audio(actor: Node) -> void:
 	if actor == null:
@@ -393,6 +448,21 @@ func _on_pause_restart_requested() -> void:
 		pause_menu.close()
 	_reset_to_character_select()
 
+func _on_title_audio_requested() -> void:
+	if audio_settings_panel != null and audio_settings_panel.has_method("show_panel"):
+		audio_settings_panel.show_panel()
+	_sync_audio_hint_state()
+
+func _on_title_settings_requested() -> void:
+	if settings_panel != null and settings_panel.has_method("open"):
+		settings_panel.open()
+
+func _on_quit_requested() -> void:
+	if pause_menu != null and pause_menu.has_method("close") and bool(pause_menu.is_open()):
+		pause_menu.close()
+	get_tree().paused = false
+	get_tree().quit()
+
 func _on_result_closed() -> void:
 	_reset_to_character_select()
 
@@ -412,6 +482,7 @@ func _reset_to_character_select() -> void:
 	player_character = null
 	encounter_index = -1
 	waiting_for_accessory_choice = false
+	active_accessory_reason = ""
 	AccessoryManager.reset_run()
 	RunDirector.reset_run()
 	if character_select != null:

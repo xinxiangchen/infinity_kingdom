@@ -19,6 +19,10 @@ func _run() -> void:
 		push_error("Character select did not initialize")
 		quit(1)
 		return
+	if not world.character_select.has_signal("quit_requested"):
+		push_error("Character select is missing quit signal")
+		quit(1)
+		return
 
 	if world.pause_menu == null or not world.pause_menu.has_method("open"):
 		push_error("Pause menu missing")
@@ -28,6 +32,10 @@ func _run() -> void:
 	await process_frame
 	if not world.pause_menu.visible:
 		push_error("Pause menu did not open")
+		quit(1)
+		return
+	if not world.pause_menu.has_signal("quit_requested"):
+		push_error("Pause menu is missing quit signal")
 		quit(1)
 		return
 	world.pause_menu.close()
@@ -67,6 +75,11 @@ func _run() -> void:
 		quit(1)
 		return
 	world.run_event_panel.close()
+
+	if world.accessory_choice == null or not world.accessory_choice.has_signal("reroll_requested"):
+		push_error("Accessory choice is missing reroll signal")
+		quit(1)
+		return
 
 	if world.result_screen == null or not world.result_screen.has_method("show_result"):
 		push_error("Result screen missing")

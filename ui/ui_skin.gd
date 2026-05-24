@@ -106,3 +106,5 @@ static func _apply_button_text(button: Button) -> void:
 	button.add_theme_color_override("font_color", Color(0.94, 0.86, 0.64))
 	button.add_theme_color_override("font_hover_color", Color(1.0, 0.93, 0.74))
 	button.add_theme_color_override("font_pressed_color", Color(0.78, 0.65, 0.42))
+	button.clip_text = true
+	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS

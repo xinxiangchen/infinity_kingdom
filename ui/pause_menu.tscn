@@ -22,7 +22,7 @@ grow_horizontal = 2
 grow_vertical = 2
 
 [node name="PanelContainer" type="PanelContainer" parent="Backdrop/CenterContainer"]
-custom_minimum_size = Vector2(420, 502)
+custom_minimum_size = Vector2(460, 590)
 layout_mode = 2
 
 [node name="MarginContainer" type="MarginContainer" parent="Backdrop/CenterContainer/PanelContainer"]
@@ -45,6 +45,7 @@ horizontal_alignment = 1
 layout_mode = 2
 text = "Town boss trial is waiting."
 horizontal_alignment = 1
+autowrap_mode = 3
 
 [node name="ResumeButton" type="Button" parent="Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer"]
 custom_minimum_size = Vector2(0, 58)
@@ -64,4 +65,9 @@ text = "Settings"
 [node name="RestartButton" type="Button" parent="Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer"]
 custom_minimum_size = Vector2(0, 58)
 layout_mode = 2
-text = "Select Champion"
+text = "Champion Select"
+
+[node name="QuitButton" type="Button" parent="Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer"]
+custom_minimum_size = Vector2(0, 58)
+layout_mode = 2
+text = "Quit Game"

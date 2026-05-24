@@ -1,6 +1,9 @@
 extends CanvasLayer
 
 signal character_selected(character_id: StringName)
+signal audio_requested
+signal settings_requested
+signal quit_requested
 
 const UISkin := preload("res://ui/ui_skin.gd")
 
@@ -72,7 +75,9 @@ func _build_ui() -> void:
 	add_child(center)
 
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(1240, 680)
+	panel.custom_minimum_size = Vector2(1240, 760)
+	panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	panel.add_theme_stylebox_override("panel", UISkin.menu_panel_style())
 	center.add_child(panel)
 
@@ -97,22 +102,33 @@ func _build_ui() -> void:
 	subtitle.text = "Pick a family style, then claim relics between encounters to bend the run."
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	subtitle.custom_minimum_size = Vector2(0, 34)
 	UISkin.label(subtitle, 16, Color(0.76, 0.80, 0.88))
 	column.add_child(subtitle)
 
-	var cards := HBoxContainer.new()
-	cards.add_theme_constant_override("separation", 16)
-	cards.alignment = BoxContainer.ALIGNMENT_CENTER
+	var cards := GridContainer.new()
+	cards.columns = 3
+	cards.add_theme_constant_override("h_separation", 16)
+	cards.add_theme_constant_override("v_separation", 16)
+	cards.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	column.add_child(cards)
 
 	for hero in HEROES:
 		cards.add_child(_hero_card(hero))
 
+	var button_row := HBoxContainer.new()
+	button_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	button_row.add_theme_constant_override("separation", 12)
+	column.add_child(button_row)
+	button_row.add_child(_menu_button("Audio Mix", func() -> void: audio_requested.emit()))
+	button_row.add_child(_menu_button("Settings", func() -> void: settings_requested.emit()))
+	button_row.add_child(_menu_button("Quit Game", func() -> void: quit_requested.emit()))
+
 func _hero_card(hero: Dictionary) -> Button:
 	var button := Button.new()
 	button.text = ""
-	button.custom_minimum_size = Vector2(360, 476)
-	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	button.custom_minimum_size = Vector2(360, 450)
+	button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	button.add_theme_stylebox_override("normal", UISkin.texture_style(UISkin.asset("choice/choice_card_normal.png"), 30, 12))
 	button.add_theme_stylebox_override("hover", UISkin.texture_style(UISkin.asset("choice/choice_card_hover.png"), 30, 12))
 	button.add_theme_stylebox_override("pressed", UISkin.texture_style(UISkin.asset("choice/choice_card_selected.png"), 30, 12))
@@ -186,6 +202,14 @@ func _hero_card(hero: Dictionary) -> Button:
 		stat_row.add_child(stat_label)
 
 	UISkin.ignore_mouse_recursive(margin)
+	return button
+
+func _menu_button(text: String, callback: Callable) -> Button:
+	var button := Button.new()
+	button.text = text
+	button.custom_minimum_size = Vector2(180, 44)
+	UISkin.button_styles(button, "thin")
+	button.pressed.connect(callback)
 	return button
 
 func _icon_slot(texture_path: String, icon_size: Vector2) -> PanelContainer:

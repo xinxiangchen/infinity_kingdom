@@ -43,9 +43,17 @@ func _run() -> void:
 	var base_damage := float(actor.attack_damage)
 	var base_speed := float(actor.move_speed)
 	var base_crit := float(actor.crit_rate)
+	var high_reward := int(run_director.reward_encounter(0, actor))
+	if high_reward <= 35:
+		push_error("Performance reward bonus was not applied")
+		quit(1)
+		return
+	run_director.reset_run()
 	run_effects.apply_choice("shop_attack", actor)
 	run_effects.apply_choice("train_speed", actor)
 	run_effects.apply_choice("train_crit", actor)
+	run_effects.apply_choice("train_resource", actor)
+	run_effects.apply_choice("rest_repair", actor)
 	if float(actor.attack_damage) <= base_damage:
 		push_error("shop_attack did not increase damage")
 		quit(1)
@@ -56,6 +64,14 @@ func _run() -> void:
 		return
 	if float(actor.crit_rate) <= base_crit:
 		push_error("train_crit did not increase crit rate")
+		quit(1)
+		return
+	if float(actor.max_inspiration) <= 40.0:
+		push_error("train_resource did not increase max inspiration")
+		quit(1)
+		return
+	if float(actor.max_hp) <= 100.0:
+		push_error("rest_repair did not increase max hp")
 		quit(1)
 		return
 	var modified_damage := float(actor.attack_damage)

@@ -14,11 +14,17 @@ static func apply_choice(choice_id: String, actor: Node) -> void:
 			RunDirector.add_run_modifier("max_defense", 12.0)
 			persistent_changed = true
 			restore_defense_after_refresh = true
+		"shop_relic":
+			pass
 		"rest_heal":
 			heal_percent(actor, 0.45)
 		"rest_focus":
 			restore_defense(actor)
 			restore_inspiration(actor)
+		"rest_repair":
+			RunDirector.add_run_modifier("max_hp", 8.0)
+			persistent_changed = true
+			restore_defense_after_refresh = true
 		"train_crit":
 			RunDirector.add_run_modifier("crit_rate", 0.05)
 			persistent_changed = true
@@ -28,6 +34,9 @@ static func apply_choice(choice_id: String, actor: Node) -> void:
 		"train_cooldown":
 			for field in ["skill1_cooldown", "skill2_cooldown", "skill3_cooldown"]:
 				RunDirector.add_run_modifier(field, 0.0, 0.94, 0.0)
+			persistent_changed = true
+		"train_resource":
+			RunDirector.add_run_modifier("max_inspiration", 12.0)
 			persistent_changed = true
 	if persistent_changed:
 		refresh_persistent_modifiers(actor)
@@ -51,6 +60,8 @@ static func cost_for(choice_id: String) -> int:
 			return 45
 		"shop_defense":
 			return 40
+		"shop_relic":
+			return 55
 		_:
 			return 0
 
@@ -60,16 +71,22 @@ static func summary(choice_id: String) -> String:
 			return "Sharpening Oil applied."
 		"shop_defense":
 			return "Armor reinforced."
+		"shop_relic":
+			return "A hidden relic cache is marked."
 		"rest_heal":
 			return "Health restored."
 		"rest_focus":
 			return "Inspiration and defense restored."
+		"rest_repair":
+			return "Armor repaired and vitality improved."
 		"train_crit":
 			return "Precision training complete."
 		"train_speed":
 			return "Footwork training complete."
 		"train_cooldown":
 			return "Skill rhythm improved."
+		"train_resource":
+			return "Inspiration capacity expanded."
 		_:
 			return "You move on."
 

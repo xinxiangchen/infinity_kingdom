@@ -1,6 +1,7 @@
 extends CanvasLayer
 
 signal accessory_choice_made(accessory_id: String, kept_current: bool)
+signal reroll_requested
 
 const UISkin := preload("res://ui/ui_skin.gd")
 
@@ -10,8 +11,9 @@ const UISkin := preload("res://ui/ui_skin.gd")
 @onready var current_icon: TextureRect = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/CurrentRow/IconSlot/Icon
 @onready var current_name_label: Label = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/CurrentRow/Text/Name
 @onready var current_summary_label: Label = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/CurrentRow/Text/Summary
-@onready var choices_row: HBoxContainer = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/ChoicesRow
+@onready var choices_row: GridContainer = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/ChoicesScroll/ChoicesRow
 @onready var keep_button: Button = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/ButtonRow/KeepButton
+@onready var reroll_button: Button = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/ButtonRow/RerollButton
 
 var active_choices: Array[Dictionary] = []
 var active_actor: Node = null
@@ -20,12 +22,15 @@ func _ready() -> void:
 	visible = false
 	_apply_skin()
 	keep_button.pressed.connect(_on_keep_pressed)
+	reroll_button.pressed.connect(func() -> void: reroll_requested.emit())
 
-func open(choices: Array[Dictionary], actor: Node, reason: String = "Relic Offering") -> void:
+func open(choices: Array[Dictionary], actor: Node, reason: String = "Relic Offering", reroll_cost: int = 0, gold: int = 0) -> void:
 	active_choices = choices
 	active_actor = actor
 	title_label.text = reason
 	subtitle_label.text = "Equip one relic. The current relic is replaced immediately."
+	reroll_button.text = "Reroll - %d Gold" % reroll_cost
+	reroll_button.disabled = reroll_cost > gold
 	_refresh_current()
 	_rebuild_choices()
 	visible = true
@@ -48,6 +53,7 @@ func _apply_skin() -> void:
 	UISkin.label(current_name_label, 18, Color.WHITE)
 	UISkin.label(current_summary_label, 14, Color(0.76, 0.82, 0.90))
 	UISkin.button_styles(keep_button, "thin")
+	UISkin.button_styles(reroll_button, "thin")
 
 func _refresh_current() -> void:
 	var current := AccessoryManager.get_equipped_accessory()
@@ -68,8 +74,9 @@ func _rebuild_choices() -> void:
 func _choice_card(accessory: Dictionary) -> Button:
 	var button := Button.new()
 	button.text = ""
-	button.custom_minimum_size = Vector2(304, 336)
+	button.custom_minimum_size = Vector2(296, 326)
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	button.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	button.add_theme_stylebox_override("normal", UISkin.texture_style(UISkin.asset("choice/choice_card_normal.png"), 30, 12))
 	button.add_theme_stylebox_override("hover", UISkin.texture_style(UISkin.asset("choice/choice_card_hover.png"), 30, 12))
 	button.add_theme_stylebox_override("pressed", UISkin.texture_style(UISkin.asset("choice/choice_card_selected.png"), 30, 12))
@@ -102,7 +109,7 @@ func _choice_card(accessory: Dictionary) -> Button:
 	name_label.text = String(accessory.get("name", "Accessory"))
 	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	name_label.custom_minimum_size = Vector2(0, 48)
+	name_label.custom_minimum_size = Vector2(0, 42)
 	UISkin.label(name_label, 18, Color.WHITE)
 	box.add_child(name_label)
 
@@ -123,7 +130,7 @@ func _choice_card(accessory: Dictionary) -> Button:
 	summary_label.text = String(accessory.get("summary", ""))
 	summary_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	summary_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	summary_label.custom_minimum_size = Vector2(0, 58)
+	summary_label.custom_minimum_size = Vector2(0, 70)
 	summary_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	UISkin.label(summary_label, 13, Color(0.78, 0.84, 0.92))
 	box.add_child(summary_label)
@@ -132,7 +139,7 @@ func _choice_card(accessory: Dictionary) -> Button:
 	effects_label.text = AccessoryManager.describe_effects(accessory)
 	effects_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	effects_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	effects_label.custom_minimum_size = Vector2(0, 42)
+	effects_label.custom_minimum_size = Vector2(0, 48)
 	UISkin.label(effects_label, 12, Color(0.72, 0.92, 0.78))
 	box.add_child(effects_label)
 	UISkin.ignore_mouse_recursive(margin)

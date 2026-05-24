@@ -4,6 +4,7 @@ signal resume_requested
 signal audio_requested
 signal settings_requested
 signal restart_requested
+signal quit_requested
 
 const UISkin := preload("res://ui/ui_skin.gd")
 
@@ -15,6 +16,7 @@ const UISkin := preload("res://ui/ui_skin.gd")
 @onready var audio_button: Button = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/AudioButton
 @onready var settings_button: Button = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/SettingsButton
 @onready var restart_button: Button = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/RestartButton
+@onready var quit_button: Button = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/QuitButton
 
 func _ready() -> void:
 	layer = 30
@@ -24,12 +26,13 @@ func _ready() -> void:
 	panel.add_theme_stylebox_override("panel", UISkin.menu_panel_style())
 	UISkin.label(title_label, 30, Color(0.98, 0.90, 0.66))
 	UISkin.label(subtitle_label, 14, Color(0.78, 0.84, 0.92))
-	for button in [resume_button, audio_button, settings_button, restart_button]:
+	for button in [resume_button, audio_button, settings_button, restart_button, quit_button]:
 		UISkin.button_styles(button, "large")
 	resume_button.pressed.connect(func() -> void: resume_requested.emit())
 	audio_button.pressed.connect(func() -> void: audio_requested.emit())
 	settings_button.pressed.connect(func() -> void: settings_requested.emit())
 	restart_button.pressed.connect(func() -> void: restart_requested.emit())
+	quit_button.pressed.connect(func() -> void: quit_requested.emit())
 
 func open() -> void:
 	visible = true
