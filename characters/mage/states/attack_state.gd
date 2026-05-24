@@ -21,9 +21,9 @@ func enter() -> void:
 func physics_update(delta: float) -> void:
 	elapsed += delta
 	if actor.move_input != Vector2.ZERO:
-		actor.velocity = actor.move_input.normalized() * actor.move_speed
+		actor.velocity = actor.move_input.normalized() * actor.get_effective_move_speed()
 	else:
-		actor.velocity = actor.velocity.move_toward(Vector2.ZERO, actor.move_speed * delta * 10.0)
+		actor.velocity = actor.velocity.move_toward(Vector2.ZERO, actor.get_effective_move_speed() * delta * 10.0)
 	if not hit_triggered and elapsed >= actor.attack_windup:
 		hit_triggered = true
 		actor.trigger_normal_attack_hit()
@@ -35,4 +35,3 @@ func evaluate_transitions() -> void:
 
 func exit() -> void:
 	actor.finish_attack()
-

@@ -22,7 +22,7 @@ grow_horizontal = 2
 grow_vertical = 2
 
 [node name="PanelContainer" type="PanelContainer" parent="Backdrop/CenterContainer"]
-custom_minimum_size = Vector2(920, 560)
+custom_minimum_size = Vector2(820, 520)
 layout_mode = 2
 
 [node name="MarginContainer" type="MarginContainer" parent="Backdrop/CenterContainer/PanelContainer"]
@@ -48,7 +48,7 @@ horizontal_alignment = 1
 autowrap_mode = 3
 
 [node name="ChoiceScroll" type="ScrollContainer" parent="Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer"]
-custom_minimum_size = Vector2(0, 386)
+custom_minimum_size = Vector2(0, 320)
 layout_mode = 2
 horizontal_scroll_mode = 0
 

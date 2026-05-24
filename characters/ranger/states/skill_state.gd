@@ -29,7 +29,7 @@ func physics_update(delta: float) -> void:
 	elapsed += delta
 	match active_skill:
 		&"skill1":
-			actor.velocity = actor.velocity.move_toward(Vector2.ZERO, actor.move_speed * delta * 12.0)
+			actor.velocity = actor.velocity.move_toward(Vector2.ZERO, actor.get_effective_move_speed() * delta * 12.0)
 			if elapsed >= actor.skill1_cast_duration and actor.current_attack_name != &"skill1":
 				actor.current_attack_name = &"skill1"
 				actor.fire_piercing_arrow()

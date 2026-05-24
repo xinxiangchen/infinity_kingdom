@@ -11,6 +11,11 @@ func setup(amount: float, is_critical: bool) -> void:
 	modulate = Color(1.0, 0.95, 0.65, 1.0) if is_critical else Color.WHITE
 	scale = Vector2.ONE * (1.4 if is_critical else 1.0)
 
+func setup_text(label_text: String, color_value: Color, scale_value: float = 1.0) -> void:
+	text = label_text
+	modulate = color_value
+	scale = Vector2.ONE * scale_value
+
 func _ready() -> void:
 	_start_position = position
 

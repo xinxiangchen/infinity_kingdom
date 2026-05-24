@@ -16,7 +16,7 @@ func enter() -> void:
 	actor.play_animation(&"idle")
 
 func physics_update(delta: float) -> void:
-	actor.velocity = actor.velocity.move_toward(Vector2.ZERO, actor.move_speed * delta * 8.0)
+	actor.velocity = actor.velocity.move_toward(Vector2.ZERO, actor.get_effective_move_speed() * delta * 8.0)
 
 func evaluate_transitions() -> void:
 	state_machine.transition_to(actor.get_state_request())

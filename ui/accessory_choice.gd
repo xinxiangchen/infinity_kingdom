@@ -4,16 +4,19 @@ signal accessory_choice_made(accessory_id: String, kept_current: bool)
 signal reroll_requested
 
 const UISkin := preload("res://ui/ui_skin.gd")
-const PANEL_MIN_SIZE := Vector2(720, 520)
+const PANEL_MIN_SIZE := Vector2(340, 420)
 const PANEL_MAX_SIZE := Vector2(1120, 736)
 const CARD_MIN_WIDTH := 296.0
 const CARD_GAP := 14.0
 
 @onready var backdrop: ColorRect = $Backdrop
 @onready var panel: PanelContainer = $Backdrop/CenterContainer/PanelContainer
+@onready var panel_margin: MarginContainer = $Backdrop/CenterContainer/PanelContainer/MarginContainer
 @onready var title_label: Label = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/Title
 @onready var subtitle_label: Label = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/Subtitle
 @onready var current_row: PanelContainer = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/CurrentRow
+@onready var current_margin: MarginContainer = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/CurrentRow/CurrentMargin
+@onready var current_icon_slot: PanelContainer = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/CurrentRow/CurrentMargin/CurrentContent/IconSlot
 @onready var current_icon: TextureRect = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/CurrentRow/CurrentMargin/CurrentContent/IconSlot/Icon
 @onready var current_name_label: Label = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/CurrentRow/CurrentMargin/CurrentContent/Text/Name
 @onready var current_summary_label: Label = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/CurrentRow/CurrentMargin/CurrentContent/Text/Summary
@@ -25,6 +28,7 @@ const CARD_GAP := 14.0
 
 var active_choices: Array[Dictionary] = []
 var active_actor: Node = null
+var active_reroll_cost: int = 0
 
 func _ready() -> void:
 	visible = false
@@ -38,6 +42,7 @@ func _ready() -> void:
 func open(choices: Array[Dictionary], actor: Node, reason: String = "Relic Offering", reroll_cost: int = 0, gold: int = 0) -> void:
 	active_choices = choices
 	active_actor = actor
+	active_reroll_cost = reroll_cost
 	title_label.text = reason
 	subtitle_label.text = "Equip one relic. The current relic is replaced immediately."
 	reroll_button.text = "Reroll - %d Gold" % reroll_cost
@@ -185,12 +190,43 @@ func _queue_layout_refresh() -> void:
 func _refresh_layout() -> void:
 	if panel == null or choices_row == null:
 		return
-	var viewport_size := get_viewport().get_visible_rect().size
+	var viewport_size: Vector2 = Vector2(get_window().size) if get_window() != null else get_viewport().get_visible_rect().size
+	var compact: bool = viewport_size.x < 980.0 or viewport_size.y < 720.0
+	var very_compact: bool = viewport_size.x < 760.0 or viewport_size.y < 620.0
 	panel.custom_minimum_size = Vector2(
-		clampf(viewport_size.x - 80.0, PANEL_MIN_SIZE.x, PANEL_MAX_SIZE.x),
-		clampf(viewport_size.y - 80.0, PANEL_MIN_SIZE.y, PANEL_MAX_SIZE.y)
+		clampf(viewport_size.x - (48.0 if very_compact else 80.0), PANEL_MIN_SIZE.x, PANEL_MAX_SIZE.x),
+		clampf(viewport_size.y - (48.0 if very_compact else 80.0), PANEL_MIN_SIZE.y, PANEL_MAX_SIZE.y)
 	)
-	var available_width := maxf(choices_scroll.size.x, panel.custom_minimum_size.x - 96.0)
-	var next_columns := clampi(int(floor((available_width + CARD_GAP) / (CARD_MIN_WIDTH + CARD_GAP))), 1, 3)
+	panel_margin.add_theme_constant_override("margin_left", 18 if very_compact else (22 if compact else 30))
+	panel_margin.add_theme_constant_override("margin_top", 18 if very_compact else (22 if compact else 28))
+	panel_margin.add_theme_constant_override("margin_right", 18 if very_compact else (22 if compact else 30))
+	panel_margin.add_theme_constant_override("margin_bottom", 18 if very_compact else (22 if compact else 28))
+	current_margin.add_theme_constant_override("margin_left", 10 if very_compact else 12)
+	current_margin.add_theme_constant_override("margin_top", 8 if very_compact else 10)
+	current_margin.add_theme_constant_override("margin_right", 10 if very_compact else 12)
+	current_margin.add_theme_constant_override("margin_bottom", 8 if very_compact else 10)
+	current_row.custom_minimum_size.y = 88.0 if very_compact else (96.0 if compact else 108.0)
+	current_icon_slot.custom_minimum_size = Vector2(70, 70) if very_compact else (Vector2(78, 78) if compact else Vector2(90, 90))
+	current_icon.custom_minimum_size = Vector2(58, 58) if very_compact else (Vector2(66, 66) if compact else Vector2(78, 78))
+	choices_scroll.custom_minimum_size.y = clampf(panel.custom_minimum_size.y * (0.42 if very_compact else 0.48), 204.0, 348.0)
+	UISkin.label(title_label, 22 if very_compact else (25 if compact else 28), Color(0.98, 0.90, 0.67))
+	UISkin.label(subtitle_label, 13 if very_compact else (14 if compact else 15), Color(0.76, 0.80, 0.88))
+	UISkin.label(current_name_label, 15 if very_compact else (17 if compact else 18), Color.WHITE)
+	UISkin.label(current_summary_label, 12 if very_compact else 13, Color(0.76, 0.82, 0.90))
+	var card_width := 220.0 if very_compact else (252.0 if compact else 296.0)
+	var card_height := 254.0 if very_compact else (288.0 if compact else 326.0)
+	var available_width := maxf(choices_scroll.size.x, panel.custom_minimum_size.x - (56.0 if very_compact else 96.0))
+	var next_columns := clampi(int(floor((available_width + CARD_GAP) / (card_width + CARD_GAP))), 1, 3)
 	choices_row.columns = max(1, min(next_columns, max(active_choices.size(), 1)))
 	button_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	button_row.add_theme_constant_override("separation", 8 if compact else 12)
+	keep_button.custom_minimum_size = Vector2(0.0, 48.0 if compact else 54.0)
+	reroll_button.custom_minimum_size = Vector2(0.0, 48.0 if compact else 54.0)
+	keep_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	reroll_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	keep_button.text = "Keep" if very_compact else "Keep Current"
+	reroll_button.text = "Reroll" if compact else "Reroll - %d Gold" % active_reroll_cost
+	for child in choices_row.get_children():
+		if child is Button:
+			var card := child as Button
+			card.custom_minimum_size = Vector2(card_width, card_height)

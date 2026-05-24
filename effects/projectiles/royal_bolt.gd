@@ -8,6 +8,7 @@ extends Area2D
 var direction: Vector2 = Vector2.RIGHT
 var damage: float = 18.0
 var source: Node = null
+var extra_payload: Dictionary = {}
 var expired: bool = false
 var pulse_time: float = 0.0
 
@@ -15,10 +16,11 @@ func _ready() -> void:
 	body_entered.connect(_on_body_entered)
 	area_entered.connect(_on_area_entered)
 
-func setup(owner_actor: Node, travel_direction: Vector2, hit_damage: float) -> void:
+func setup(owner_actor: Node, travel_direction: Vector2, hit_damage: float, payload: Dictionary = {}) -> void:
 	source = owner_actor
 	direction = travel_direction.normalized() if travel_direction != Vector2.ZERO else Vector2.RIGHT
 	damage = hit_damage
+	extra_payload = payload.duplicate(true)
 	rotation = direction.angle()
 	var timer := get_tree().create_timer(lifetime)
 	timer.timeout.connect(queue_free)
@@ -45,11 +47,14 @@ func _try_hit(target: Variant) -> void:
 	if not target.has_method("receive_hit"):
 		return
 	expired = true
-	target.receive_hit({
+	var payload := {
 		"source": source,
 		"damage": damage,
 		"crit_rate": 0.0
-	})
+	}
+	for key in extra_payload.keys():
+		payload[key] = extra_payload[key]
+	target.receive_hit(payload)
 	_spawn_hit_flash()
 	queue_free()
 

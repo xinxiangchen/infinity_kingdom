@@ -546,17 +546,27 @@ func _distance_to_segment(point: Vector2, start_position: Vector2, end_position:
 func _fire_projectile(damage: float, color: Color, new_speed: float) -> void:
 	if target == null or not is_instance_valid(target):
 		return
+	var payload := {}
 	match enemy_type:
 		EnemyType.ARCHER:
 			Sfx.play_event(&"enemy_archer_shot", global_position)
+			if elite:
+				payload["slow_duration"] = 0.8
+				payload["slow_multiplier"] = 0.82
 		EnemyType.APPRENTICE_MAGE:
 			Sfx.play_event(&"enemy_apprentice_cast", global_position)
+			payload["slow_duration"] = 1.0
+			payload["slow_multiplier"] = 0.76
 		EnemyType.ARCANIST:
 			Sfx.play_event(&"enemy_arcanist_cast", global_position)
+			payload["silence_duration"] = 0.85 if not elite else 1.1
+			if elite:
+				payload["slow_duration"] = 0.7
+				payload["slow_multiplier"] = 0.84
 	var projectile := ENEMY_BOLT_SCENE.instantiate()
 	projectile.global_position = projectile_spawner.global_position
 	get_tree().current_scene.add_child(projectile)
-	projectile.setup(self, (target.global_position - projectile_spawner.global_position).normalized(), damage, color, new_speed)
+	projectile.setup(self, (target.global_position - projectile_spawner.global_position).normalized(), damage, color, new_speed, payload)
 
 func _update_visuals() -> void:
 	var color := Color(0.82, 0.4, 0.24, 1.0)

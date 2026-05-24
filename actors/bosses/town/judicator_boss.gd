@@ -252,7 +252,8 @@ func _hit_target_in_radius(radius: float, damage: float, knockback: bool) -> voi
 	target.receive_hit({
 		"source": self,
 		"damage": damage,
-		"crit_rate": 0.0
+		"crit_rate": 0.0,
+		"silence_duration": 0.8 if not enraged else 1.1
 	})
 	if knockback and target is CharacterBody2D:
 		var actor: CharacterBody2D = target

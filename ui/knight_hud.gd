@@ -13,6 +13,7 @@ var inspiration_bar: TextureProgressBar
 var inspiration_label: Label
 var shield_label: Label
 var state_label: Label
+var control_label: Label
 var run_state_label: Label
 var accessory_icon: TextureRect
 var accessory_name_label: Label
@@ -61,10 +62,13 @@ func bind_character(target: Node) -> void:
 	_connect_character_signal("inspiration_changed", _on_inspiration_changed)
 	_connect_character_signal("shield_changed", _on_shield_changed)
 	_connect_character_signal("took_damage", _on_took_damage)
+	_connect_character_signal("control_status_changed", _on_control_status_changed)
 	_on_hp_changed(player_character.hp, player_character.max_hp)
 	_on_defense_changed(player_character.defense, player_character.max_defense)
 	_on_inspiration_changed(player_character.inspiration, player_character.max_inspiration)
 	_on_shield_changed(player_character.shield)
+	if player_character.has_method("get_control_status_text"):
+		_on_control_status_changed(player_character.get_control_status_text())
 	_on_accessory_equipped(AccessoryManager.get_equipped_accessory())
 
 func bind_knight(target: Node) -> void:
@@ -125,6 +129,10 @@ func _build_ui() -> void:
 	state_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	status_row.add_child(shield_label)
 	status_row.add_child(state_label)
+
+	control_label = _make_label("Status Stable", 12, Color(0.72, 0.88, 1.0))
+	control_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	content.add_child(control_label)
 
 	var skills_panel := PanelContainer.new()
 	skills_panel.add_theme_stylebox_override("panel", UISkin.content_panel_style())
@@ -260,6 +268,16 @@ func _on_shield_changed(current_shield: float) -> void:
 func _on_took_damage(_amount: float, _remaining_hp: float) -> void:
 	if player_character != null and is_instance_valid(player_character):
 		_on_shield_changed(player_character.shield)
+
+func _on_control_status_changed(summary: String) -> void:
+	if control_label == null:
+		return
+	if summary.is_empty():
+		control_label.text = "Status Stable"
+		control_label.modulate = Color(0.72, 0.88, 1.0)
+		return
+	control_label.text = "Status %s" % summary
+	control_label.modulate = Color(1.0, 0.84, 0.64)
 
 func _on_accessory_equipped(accessory: Dictionary) -> void:
 	if accessory_icon == null:

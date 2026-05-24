@@ -372,8 +372,12 @@ func _on_died() -> void:
 	)
 
 func _spawn_barrage_wave(base_direction: Vector2, angles: Array, damage: float) -> void:
+	var payload := {
+		"slow_duration": 0.9 if not desperation_active else 1.15,
+		"slow_multiplier": 0.78 if not desperation_active else 0.72
+	}
 	for angle_offset in angles:
 		var bolt := ROYAL_BOLT_SCENE.instantiate()
 		bolt.global_position = projectile_spawner.global_position
 		get_tree().current_scene.add_child(bolt)
-		bolt.setup(self, base_direction.rotated(deg_to_rad(float(angle_offset))), damage)
+		bolt.setup(self, base_direction.rotated(deg_to_rad(float(angle_offset))), damage, payload)

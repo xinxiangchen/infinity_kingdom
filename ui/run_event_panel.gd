@@ -4,13 +4,14 @@ signal event_choice_made(choice_id: String)
 
 const RunEffects := preload("res://systems/run/run_effects.gd")
 const UISkin := preload("res://ui/ui_skin.gd")
-const PANEL_MIN_SIZE := Vector2(720, 480)
+const PANEL_MIN_SIZE := Vector2(340, 400)
 const PANEL_MAX_SIZE := Vector2(1080, 640)
 const CARD_MIN_WIDTH := 236.0
 const CARD_GAP := 12.0
 
 @onready var backdrop: ColorRect = $Backdrop
 @onready var panel: PanelContainer = $Backdrop/CenterContainer/PanelContainer
+@onready var panel_margin: MarginContainer = $Backdrop/CenterContainer/PanelContainer/MarginContainer
 @onready var title_label: Label = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/Title
 @onready var subtitle_label: Label = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/Subtitle
 @onready var choice_scroll: ScrollContainer = $Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/ChoiceScroll
@@ -175,11 +176,27 @@ func _queue_layout_refresh() -> void:
 func _refresh_layout() -> void:
 	if panel == null or choice_row == null:
 		return
-	var viewport_size := get_viewport().get_visible_rect().size
+	var viewport_size: Vector2 = Vector2(get_window().size) if get_window() != null else get_viewport().get_visible_rect().size
+	var compact: bool = viewport_size.x < 980.0 or viewport_size.y < 700.0
+	var very_compact: bool = viewport_size.x < 760.0 or viewport_size.y < 600.0
 	panel.custom_minimum_size = Vector2(
-		clampf(viewport_size.x - 88.0, PANEL_MIN_SIZE.x, PANEL_MAX_SIZE.x),
-		clampf(viewport_size.y - 88.0, PANEL_MIN_SIZE.y, PANEL_MAX_SIZE.y)
+		clampf(viewport_size.x - (48.0 if very_compact else 88.0), PANEL_MIN_SIZE.x, PANEL_MAX_SIZE.x),
+		clampf(viewport_size.y - (48.0 if very_compact else 88.0), PANEL_MIN_SIZE.y, PANEL_MAX_SIZE.y)
 	)
-	var available_width := maxf(choice_scroll.size.x, panel.custom_minimum_size.x - 96.0)
-	var next_columns := clampi(int(floor((available_width + CARD_GAP) / (CARD_MIN_WIDTH + CARD_GAP))), 1, 4)
+	panel_margin.add_theme_constant_override("margin_left", 18 if very_compact else (24 if compact else 34))
+	panel_margin.add_theme_constant_override("margin_top", 18 if very_compact else (22 if compact else 30))
+	panel_margin.add_theme_constant_override("margin_right", 18 if very_compact else (24 if compact else 34))
+	panel_margin.add_theme_constant_override("margin_bottom", 18 if very_compact else (22 if compact else 30))
+	choice_scroll.custom_minimum_size.y = clampf(panel.custom_minimum_size.y * (0.48 if very_compact else 0.58), 188.0, 386.0)
+	UISkin.label(title_label, 22 if very_compact else (25 if compact else 28), Color(0.98, 0.90, 0.66))
+	UISkin.label(subtitle_label, 13 if very_compact else (14 if compact else 15), Color(0.78, 0.84, 0.92))
+	UISkin.label(footer_label, 12 if compact else 13, Color(0.74, 0.80, 0.88))
+	var card_width := 212.0 if very_compact else (224.0 if compact else 236.0)
+	var card_height := 238.0 if very_compact else (252.0 if compact else 274.0)
+	var available_width := maxf(choice_scroll.size.x, panel.custom_minimum_size.x - (56.0 if very_compact else 96.0))
+	var next_columns := clampi(int(floor((available_width + CARD_GAP) / (card_width + CARD_GAP))), 1, 4)
 	choice_row.columns = max(1, min(next_columns, max(choice_row.get_child_count(), 1)))
+	for child in choice_row.get_children():
+		if child is Button:
+			var card := child as Button
+			card.custom_minimum_size = Vector2(card_width, card_height)

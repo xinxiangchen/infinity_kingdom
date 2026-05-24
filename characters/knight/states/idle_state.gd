@@ -19,7 +19,7 @@ func enter() -> void:
 
 func physics_update(delta: float) -> void:
 	elapsed += delta
-	actor.velocity = actor.velocity.move_toward(Vector2.ZERO, actor.move_speed * delta * 8.0)
+	actor.velocity = actor.velocity.move_toward(Vector2.ZERO, actor.get_effective_move_speed() * delta * 8.0)
 
 func evaluate_transitions() -> void:
 	var next_state: StringName = actor.get_state_request()

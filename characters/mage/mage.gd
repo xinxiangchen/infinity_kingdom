@@ -9,6 +9,7 @@ signal inspiration_changed(current_inspiration: float, max_inspiration_value: fl
 signal took_damage(amount: float, remaining_hp: float)
 signal shield_changed(current_shield: float)
 signal defense_changed(current_defense: float, max_defense_value: float)
+signal control_status_changed(summary: String)
 signal died
 
 const DAMAGE_NUMBER_SCENE := preload("res://effects/damage_number.tscn")
@@ -107,6 +108,12 @@ var attack_blade_bonus_hits_remaining: int = 0
 var enchant_active: bool = false
 var current_skill_target: Node2D = null
 var blade_nodes: Array[Polygon2D] = []
+var silenced_time_remaining: float = 0.0
+var root_time_remaining: float = 0.0
+var slow_time_remaining: float = 0.0
+var slow_factor: float = 1.0
+var control_ring: Line2D = null
+var last_control_summary: String = ""
 
 func _ready() -> void:
 	health_component.setup(max_hp, max_defense)
@@ -128,12 +135,17 @@ func _ready() -> void:
 	burst_ring.visible = false
 	enchant_sigil.visible = false
 	blade_orbit.visible = false
+	_setup_control_ring()
 	emit_stat_signals()
+	_emit_control_status_changed()
 	state_machine.initialize(self)
 
 func _physics_process(delta: float) -> void:
 	manual_movement_performed = false
+	_update_control_status(delta)
 	move_input = Input.get_vector("move_left", "move_right", "move_up", "move_down")
+	if is_rooted():
+		move_input = Vector2.ZERO
 	if move_input != Vector2.ZERO:
 		facing = move_input.normalized()
 	update_cooldowns(delta)
@@ -145,6 +157,7 @@ func _physics_process(delta: float) -> void:
 func _process(delta: float) -> void:
 	_update_blades(delta)
 	_update_targeting_visuals(delta)
+	_update_control_visual(delta)
 
 func emit_stat_signals() -> void:
 	hp_changed.emit(hp, max_hp)
@@ -184,6 +197,15 @@ func sync_visuals() -> void:
 	var body_color := Color(0.6, 0.78, 1.0, 1.0)
 	if hp <= 0.0:
 		modulate = Color(0.35, 0.35, 0.35, 1.0)
+	elif is_rooted():
+		modulate = Color(0.72, 0.86, 1.0, 1.0)
+		body_color = Color(0.76, 0.88, 1.0, 1.0)
+	elif is_silenced():
+		modulate = Color(0.88, 0.76, 1.0, 1.0)
+		body_color = Color(0.82, 0.84, 1.0, 1.0)
+	elif is_slowed():
+		modulate = Color(0.82, 0.96, 1.0, 1.0)
+		body_color = Color(0.70, 0.90, 1.0, 1.0)
 	elif state_machine.get_state_name() == &"Hit":
 		modulate = Color(1.0, 0.7, 0.7, 1.0)
 		body_color = Color(0.95, 0.58, 0.62, 1.0)
@@ -212,6 +234,8 @@ func can_attack() -> bool:
 	return float(cooldowns["attack"]) <= 0.0
 
 func can_cast_skill(skill_name: StringName) -> bool:
+	if is_silenced():
+		return false
 	match skill_name:
 		&"skill1":
 			return can_use_skill(skill1_cost) and float(cooldowns["skill1"]) <= 0.0
@@ -358,8 +382,11 @@ func receive_hit(payload: Dictionary) -> void:
 	var result: Dictionary = health_component.receive_hit(payload)
 	var final_damage := float(result.get("damage", 0.0))
 	var is_critical := bool(result.get("is_critical", false))
+	var displayed_damage := float(result.get("total_damage", final_damage))
 	if final_damage > 0.0:
 		spawn_damage_number(final_damage, is_critical, global_position)
+	if displayed_damage > 0.0:
+		apply_control_effects(payload)
 	if hp <= 0.0:
 		return
 	if final_damage >= hit_threshold:
@@ -386,6 +413,39 @@ func find_primary_target(max_range: float) -> Node2D:
 func heal(amount: float) -> void:
 	health_component.heal(amount)
 
+func apply_control_effects(payload: Dictionary) -> void:
+	var changed := false
+	var popup_text := ""
+	var popup_color := Color.WHITE
+	if payload.has("silence_duration"):
+		var duration := float(payload["silence_duration"])
+		if duration > silenced_time_remaining + 0.05:
+			changed = true
+			popup_text = "Silenced"
+			popup_color = Color(0.84, 0.70, 1.0, 1.0)
+		silenced_time_remaining = maxf(silenced_time_remaining, duration)
+	if payload.has("root_duration"):
+		var duration := float(payload["root_duration"])
+		if duration > root_time_remaining + 0.05:
+			changed = true
+			popup_text = "Rooted"
+			popup_color = Color(0.72, 0.86, 1.0, 1.0)
+		root_time_remaining = maxf(root_time_remaining, duration)
+	if payload.has("slow_duration"):
+		var duration := float(payload["slow_duration"])
+		var multiplier := clampf(float(payload.get("slow_multiplier", 1.0)), 0.25, 1.0)
+		if duration > slow_time_remaining + 0.05 or multiplier < slow_factor - 0.01:
+			changed = true
+			if popup_text.is_empty():
+				popup_text = "Slowed"
+				popup_color = Color(0.66, 0.94, 1.0, 1.0)
+		slow_time_remaining = maxf(slow_time_remaining, duration)
+		slow_factor = minf(slow_factor, multiplier)
+	if changed:
+		_emit_control_status_changed()
+		if not popup_text.is_empty():
+			_spawn_control_text(popup_text, popup_color)
+
 func _get_attack_direction() -> Vector2:
 	var target := find_primary_target(attack_targeting_range)
 	if target != null:
@@ -397,6 +457,28 @@ func _get_attack_direction() -> Vector2:
 
 func _get_current_crit_rate() -> float:
 	return crit_rate
+
+func get_effective_move_speed() -> float:
+	return move_speed * slow_factor
+
+func get_control_status_text() -> String:
+	var effects: Array[String] = []
+	if is_rooted():
+		effects.append("Rooted")
+	if is_silenced():
+		effects.append("Silenced")
+	if is_slowed():
+		effects.append("Slowed")
+	return ", ".join(effects)
+
+func is_silenced() -> bool:
+	return silenced_time_remaining > 0.0
+
+func is_rooted() -> bool:
+	return root_time_remaining > 0.0
+
+func is_slowed() -> bool:
+	return slow_time_remaining > 0.0 and slow_factor < 0.999
 
 func _spawn_arcane_bolt(direction: Vector2, damage: float, hit_crit_rate: float, attack_label: StringName) -> void:
 	var bolt := ARCANE_BOLT_SCENE.instantiate()
@@ -501,6 +583,58 @@ func spawn_damage_number(amount: float, is_critical: bool, world_position: Vecto
 	damage_number.position = to_local(world_position) + Vector2(0.0, -32.0)
 	damage_number.setup(amount, is_critical)
 	effects_layer.add_child(damage_number)
+
+func _setup_control_ring() -> void:
+	control_ring = Line2D.new()
+	control_ring.width = 2.5
+	control_ring.closed = true
+	control_ring.visible = false
+	control_ring.default_color = Color(0.74, 0.86, 1.0, 0.9)
+	control_ring.points = _build_ring_points(28.0, 16)
+	effects_layer.add_child(control_ring)
+
+func _update_control_status(delta: float) -> void:
+	var previous_summary := get_control_status_text()
+	silenced_time_remaining = maxf(silenced_time_remaining - delta, 0.0)
+	root_time_remaining = maxf(root_time_remaining - delta, 0.0)
+	if slow_time_remaining > 0.0:
+		slow_time_remaining = maxf(slow_time_remaining - delta, 0.0)
+	else:
+		slow_factor = 1.0
+	if slow_time_remaining <= 0.0:
+		slow_factor = 1.0
+	if previous_summary != get_control_status_text():
+		_emit_control_status_changed()
+
+func _update_control_visual(delta: float) -> void:
+	if control_ring == null:
+		return
+	var pulse := 0.82 + 0.18 * sin(Time.get_ticks_msec() * 0.01)
+	control_ring.visible = not get_control_status_text().is_empty() and hp > 0.0
+	if not control_ring.visible:
+		return
+	control_ring.rotation += delta * 1.9
+	control_ring.scale = Vector2.ONE * pulse
+	if is_rooted():
+		control_ring.default_color = Color(0.72, 0.86, 1.0, 0.92)
+	elif is_silenced():
+		control_ring.default_color = Color(0.84, 0.70, 1.0, 0.92)
+	else:
+		control_ring.default_color = Color(0.66, 0.94, 1.0, 0.88)
+
+func _emit_control_status_changed() -> void:
+	var summary := get_control_status_text()
+	if summary == last_control_summary:
+		return
+	last_control_summary = summary
+	control_status_changed.emit(summary)
+
+func _spawn_control_text(label_text: String, color_value: Color) -> void:
+	var popup := DAMAGE_NUMBER_SCENE.instantiate()
+	popup.position = Vector2(-32.0, -52.0)
+	if popup.has_method("setup_text"):
+		popup.setup_text(label_text, color_value, 0.72)
+	effects_layer.add_child(popup)
 
 func _on_hurtbox_area_entered(area: Area2D) -> void:
 	if area != null and area.has_method("build_damage_payload"):

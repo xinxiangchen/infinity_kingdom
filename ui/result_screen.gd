@@ -62,8 +62,8 @@ func _queue_layout_refresh() -> void:
 func _refresh_layout() -> void:
 	if panel == null:
 		return
-	var viewport_size := get_viewport().get_visible_rect().size
-	var compact := viewport_size.x < 900.0 or viewport_size.y < 620.0
+	var viewport_size: Vector2 = Vector2(get_window().size) if get_window() != null else get_viewport().get_visible_rect().size
+	var compact: bool = viewport_size.x < 900.0 or viewport_size.y < 620.0
 	panel.custom_minimum_size = Vector2(
 		clampf(viewport_size.x - 112.0, PANEL_MIN_SIZE.x, PANEL_MAX_SIZE.x),
 		clampf(viewport_size.y - 112.0, PANEL_MIN_SIZE.y, PANEL_MAX_SIZE.y)

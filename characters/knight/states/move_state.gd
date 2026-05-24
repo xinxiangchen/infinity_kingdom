@@ -19,9 +19,9 @@ func enter() -> void:
 func physics_update(delta: float) -> void:
 	elapsed += delta
 	if actor.move_input == Vector2.ZERO:
-		actor.velocity = actor.velocity.move_toward(Vector2.ZERO, actor.move_speed * delta * 10.0)
+		actor.velocity = actor.velocity.move_toward(Vector2.ZERO, actor.get_effective_move_speed() * delta * 10.0)
 		return
-	actor.velocity = actor.move_input.normalized() * actor.move_speed
+	actor.velocity = actor.move_input.normalized() * actor.get_effective_move_speed()
 
 func evaluate_transitions() -> void:
 	var next_state: StringName = actor.get_state_request()

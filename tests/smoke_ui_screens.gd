@@ -87,6 +87,41 @@ func _run() -> void:
 		push_error("Accessory choice is missing reroll signal")
 		quit(1)
 		return
+	var accessory_manager := root.get_node_or_null("/root/AccessoryManager")
+	if accessory_manager == null:
+		push_error("AccessoryManager missing for UI smoke")
+		quit(1)
+		return
+	accessory_manager.reset_run()
+	var test_sizes := [Vector2i(720, 540), Vector2i(1024, 720)]
+	for test_size in test_sizes:
+		root.size = test_size
+		await process_frame
+		var choices: Array = accessory_manager.generate_choices(3)
+		world.accessory_choice.open(choices, null, "Responsive Relic", 20, 50)
+		await process_frame
+		var accessory_panel := world.accessory_choice.get_node("Backdrop/CenterContainer/PanelContainer") as PanelContainer
+		if accessory_panel == null:
+			push_error("Accessory panel missing")
+			quit(1)
+			return
+		if accessory_panel.custom_minimum_size.x > float(test_size.x) or accessory_panel.custom_minimum_size.y > float(test_size.y):
+			push_error("Accessory choice panel exceeded viewport size %s" % str(test_size))
+			quit(1)
+			return
+		world.accessory_choice.close()
+		world.run_event_panel.open("shop", 100)
+		await process_frame
+		var event_panel := world.run_event_panel.get_node("Backdrop/CenterContainer/PanelContainer") as PanelContainer
+		if event_panel == null:
+			push_error("Run event panel missing")
+			quit(1)
+			return
+		if event_panel.custom_minimum_size.x > float(test_size.x) or event_panel.custom_minimum_size.y > float(test_size.y):
+			push_error("Run event panel exceeded viewport size %s" % str(test_size))
+			quit(1)
+			return
+		world.run_event_panel.close()
 
 	if world.result_screen == null or not world.result_screen.has_method("show_result"):
 		push_error("Result screen missing")
