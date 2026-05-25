@@ -70,6 +70,32 @@ horizontal_alignment = 1
 vertical_alignment = 1
 autowrap_mode = 3
 
+[node name="SummaryPanel" type="PanelContainer" parent="CenterContainer/PanelContainer/MarginContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="MarginContainer" type="MarginContainer" parent="CenterContainer/PanelContainer/MarginContainer/VBoxContainer/SummaryPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 10
+
+[node name="VBoxContainer" type="VBoxContainer" parent="CenterContainer/PanelContainer/MarginContainer/VBoxContainer/SummaryPanel/MarginContainer"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="Stats" type="Label" parent="CenterContainer/PanelContainer/MarginContainer/VBoxContainer/SummaryPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "Hero No Champion  |  Relic No Accessory"
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="Timeline" type="Label" parent="CenterContainer/PanelContainer/MarginContainer/VBoxContainer/SummaryPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "No event choices recorded."
+horizontal_alignment = 1
+autowrap_mode = 3
+
 [node name="ButtonRow" type="HBoxContainer" parent="CenterContainer/PanelContainer/MarginContainer/VBoxContainer"]
 layout_mode = 2
 

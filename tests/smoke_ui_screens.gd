@@ -399,10 +399,29 @@ func _run() -> void:
 		push_error("Result screen is missing quit signal")
 		quit(1)
 		return
-	world.result_screen.show_result("victory", "Smoke Victory", "UI loaded.", "Result screen rendered.")
+	world.result_screen.show_result(
+		"victory",
+		"Smoke Victory",
+		"UI loaded.",
+		"Result screen rendered.",
+		{
+			"stats": "Hero Knight  |  Relic Wolf Pendant  |  Gold 120",
+			"timeline": "Black Market -> Sharpening Oil  /  Scout Report -> Focus Route"
+		}
+	)
 	await process_frame
 	if not world.result_screen.visible:
 		push_error("Result screen did not open")
+		quit(1)
+		return
+	var result_stats := world.result_screen.get_node("CenterContainer/PanelContainer/MarginContainer/VBoxContainer/SummaryPanel/MarginContainer/VBoxContainer/Stats") as Label
+	var result_timeline := world.result_screen.get_node("CenterContainer/PanelContainer/MarginContainer/VBoxContainer/SummaryPanel/MarginContainer/VBoxContainer/Timeline") as Label
+	if result_stats == null or result_stats.text.find("Relic") == -1:
+		push_error("Result screen stats summary did not initialize")
+		quit(1)
+		return
+	if result_timeline == null or result_timeline.text.find("Scout Report") == -1:
+		push_error("Result screen route timeline did not initialize")
 		quit(1)
 		return
 	world.result_screen.visible = false

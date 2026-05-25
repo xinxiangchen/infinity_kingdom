@@ -212,6 +212,7 @@ func _refresh_context() -> void:
 	var next_kind := RunDirector.describe_event_kind(RunDirector.peek_next_event_kind())
 	var route_preview := RunDirector.describe_event_route(3)
 	var pending_prep := run_state.get("pending_encounter_prep", {}) as Dictionary
+	var recent_events_text := RunDirector.describe_event_history(2)
 	var encounter_name := "No active encounter"
 	var active_prep: Dictionary = {}
 	if target_world != null and is_instance_valid(target_world):
@@ -252,6 +253,8 @@ func _refresh_context() -> void:
 		accessory_name,
 		("  |  %s" % accessory_tags) if not accessory_tags.is_empty() else ""
 	]
+	if recent_events_text != "No event choices yet.":
+		relic_summary_label.text += "\nRecent %s" % recent_events_text
 	hint_label.text = "Esc resume  |  A/F10 audio  |  S settings  |  R select  |  Q quit"
 
 func _queue_layout_refresh() -> void:

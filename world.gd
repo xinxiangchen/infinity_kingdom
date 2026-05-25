@@ -43,6 +43,7 @@ var return_pause_after_settings_panel: bool = false
 var last_attack_feedback_msec: int = 0
 
 func _ready() -> void:
+	RunDirector.configure_event_count(maxi(ENCOUNTER_SCENES.size() - 1, 1))
 	if character_select != null:
 		character_select.character_selected.connect(_on_character_selected)
 		if character_select.has_signal("audio_requested"):
@@ -135,6 +136,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _on_character_selected(character_id: StringName) -> void:
 	_cancel_scheduled_title_music()
+	RunDirector.configure_event_count(maxi(ENCOUNTER_SCENES.size() - 1, 1))
 	if result_screen != null:
 		result_screen.visible = false
 	if audio_settings_panel != null and audio_settings_panel.has_method("hide_panel"):
@@ -247,7 +249,8 @@ func _on_player_died() -> void:
 			"defeat",
 			"Defeated",
 			"The town boss rush resets after death.",
-			"Continue to return to champion selection and try a different relic path."
+			"Continue to return to champion selection and try a different relic path.",
+			_build_result_summary()
 		)
 	_refresh_battle_status()
 	waiting_for_accessory_choice = false
@@ -333,6 +336,12 @@ func _on_run_event_choice_made(choice_id: String) -> void:
 		_run_event_summary(choice_id),
 		_detail_text("Gold: %d" % int(RunDirector.gold))
 	)
+	RunDirector.record_event_choice(
+		active_run_event_kind,
+		choice_id,
+		_run_event_summary(choice_id),
+		RunEffects.display_name(choice_id)
+	)
 	active_run_event_kind = ""
 	if choice_id == "shop_relic" and applied:
 		_offer_accessory("Purchased Relic")
@@ -350,6 +359,43 @@ func _apply_run_event_choice(choice_id: String) -> bool:
 
 func _run_event_summary(choice_id: String) -> String:
 	return RunEffects.summary(choice_id)
+
+func _build_result_summary() -> Dictionary:
+	var run_state := RunDirector.get_state()
+	var hero_name := "No Champion"
+	if player_character != null and is_instance_valid(player_character) and player_character.has_method("get_character_name"):
+		hero_name = String(player_character.get_character_name())
+	var accessory := AccessoryManager.get_equipped_accessory()
+	var accessory_name := String(accessory.get("name", "No Accessory"))
+	var reward_entries := run_state.get("reward_history", []) as Array
+	var total_reward_value := 0
+	for reward_entry in reward_entries:
+		total_reward_value += int(reward_entry)
+	var average_reward := int(round(float(total_reward_value) / float(reward_entries.size()))) if not reward_entries.is_empty() else 0
+	var event_history := run_state.get("event_history", []) as Array
+	var timeline_text := "No event choices recorded."
+	if not event_history.is_empty():
+		var parts: Array[String] = []
+		for entry in event_history:
+			if not (entry is Dictionary):
+				continue
+			var step := entry as Dictionary
+			parts.append("%s -> %s" % [
+				String(step.get("event_name", "Event")),
+				String(step.get("choice_name", "Choice"))
+			])
+		if not parts.is_empty():
+			timeline_text = "  /  ".join(parts)
+	return {
+		"stats": "Hero %s  |  Relic %s  |  Gold %d  |  Cleared %d  |  Avg reward %d" % [
+			hero_name,
+			accessory_name,
+			int(run_state.get("gold", 0)),
+			int(run_state.get("cleared_encounters", 0)),
+			average_reward
+		],
+		"timeline": timeline_text
+	}
 
 func _play_ui_feedback(success: bool) -> void:
 	if Sfx == null:
@@ -378,7 +424,8 @@ func _complete_run_victory() -> void:
 			"victory",
 			"Town Cleared",
 			"All enemy waves and bosses are defeated.",
-			"Your relic build survived the trial. Continue to select a new champion."
+			"Your relic build survived the trial. Continue to select a new champion.",
+			_build_result_summary()
 		)
 	_refresh_battle_status()
 

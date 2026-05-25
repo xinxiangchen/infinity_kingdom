@@ -11,7 +11,7 @@ const EVENT_POOL := [
 	"scout"
 ]
 
-const EVENTS_PER_RUN := 4
+const DEFAULT_EVENTS_PER_RUN := 3
 
 var gold: int = 0
 var cleared_encounters: int = 0
@@ -22,6 +22,9 @@ var event_deck: Array[String] = []
 var reward_flat_bonus: int = 0
 var reward_multiplier: float = 1.0
 var pending_encounter_prep: Dictionary = {}
+var events_per_run: int = DEFAULT_EVENTS_PER_RUN
+var event_history: Array[Dictionary] = []
+var reward_history: Array[int] = []
 var rng := RandomNumberGenerator.new()
 
 func _ready() -> void:
@@ -37,6 +40,8 @@ func reset_run() -> void:
 	reward_flat_bonus = 0
 	reward_multiplier = 1.0
 	pending_encounter_prep.clear()
+	event_history.clear()
+	reward_history.clear()
 	_emit_state()
 
 func reward_encounter(encounter_index: int, actor: Node = null) -> int:
@@ -45,6 +50,7 @@ func reward_encounter(encounter_index: int, actor: Node = null) -> int:
 	var performance_bonus: int = _performance_bonus(actor)
 	last_reward_gold = int(round((base_reward + performance_bonus) * reward_multiplier)) + reward_flat_bonus
 	gold += last_reward_gold
+	reward_history.append(last_reward_gold)
 	_emit_state()
 	return last_reward_gold
 
@@ -111,6 +117,10 @@ func describe_event_kind(kind: String) -> String:
 		_:
 			return "Unknown"
 
+func configure_event_count(count: int) -> void:
+	events_per_run = maxi(count, 1)
+	_emit_state()
+
 func set_pending_encounter_prep(prep: Dictionary) -> void:
 	pending_encounter_prep = prep.duplicate(true)
 	_emit_state()
@@ -123,6 +133,16 @@ func consume_pending_encounter_prep() -> Dictionary:
 	pending_encounter_prep.clear()
 	_emit_state()
 	return prep
+
+func record_event_choice(event_kind: String, choice_id: String, summary: String, choice_name: String = "") -> void:
+	event_history.append({
+		"kind": event_kind,
+		"event_name": describe_event_kind(event_kind),
+		"choice_id": choice_id,
+		"choice_name": choice_name if not choice_name.is_empty() else choice_id,
+		"summary": summary
+	})
+	_emit_state()
 
 func add_run_modifier(field: String, add_value: float = 0.0, multiplier: float = 1.0, floor_value: float = -INF) -> void:
 	if field.is_empty():
@@ -170,18 +190,40 @@ func apply_run_modifiers(actor: Node) -> void:
 func get_run_modifiers() -> Dictionary:
 	return run_modifiers.duplicate(true)
 
+func get_event_history() -> Array[Dictionary]:
+	return event_history.duplicate(true)
+
+func get_reward_history() -> Array[int]:
+	return reward_history.duplicate()
+
+func describe_event_history(limit: int = 3) -> String:
+	if event_history.is_empty():
+		return "No event choices yet."
+	var parts: Array[String] = []
+	var start_index := maxi(event_history.size() - maxi(limit, 1), 0)
+	for index in range(start_index, event_history.size()):
+		var entry := event_history[index]
+		parts.append("%s: %s" % [
+			String(entry.get("event_name", "Event")),
+			String(entry.get("choice_name", "Choice"))
+		])
+	return "  /  ".join(parts)
+
 func get_state() -> Dictionary:
 	return {
 		"gold": gold,
 		"cleared_encounters": cleared_encounters,
 		"event_cursor": event_cursor,
+		"events_per_run": events_per_run,
 		"last_reward_gold": last_reward_gold,
 		"next_event_kind": peek_next_event_kind(),
 		"event_deck": event_deck.duplicate(),
 		"run_modifiers": get_run_modifiers(),
 		"reward_flat_bonus": reward_flat_bonus,
 		"reward_multiplier": reward_multiplier,
-		"pending_encounter_prep": peek_pending_encounter_prep()
+		"pending_encounter_prep": peek_pending_encounter_prep(),
+		"event_history": get_event_history(),
+		"reward_history": get_reward_history()
 	}
 
 func _emit_state() -> void:
@@ -224,7 +266,7 @@ func _build_event_deck() -> Array[String]:
 	var pool: Array[String] = []
 	pool.append_array(EVENT_POOL)
 	var deck: Array[String] = ["shop"]
-	while deck.size() < EVENTS_PER_RUN and not pool.is_empty():
+	while deck.size() < events_per_run and not pool.is_empty():
 		var next_index := rng.randi_range(0, pool.size() - 1)
 		deck.append(pool[next_index])
 		pool.remove_at(next_index)

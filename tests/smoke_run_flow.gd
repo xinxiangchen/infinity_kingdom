@@ -70,10 +70,10 @@ func _run() -> void:
 
 	run_director.reset_run()
 	var event_sequence: Array[String] = []
-	for _index in range(4):
+	for _index in range(3):
 		event_sequence.append(run_director.next_event_kind())
-	if event_sequence.size() != 4 or event_sequence[0] != "shop":
-		push_error("RunDirector did not build a four-step event deck starting with shop")
+	if event_sequence.size() != 3 or event_sequence[0] != "shop":
+		push_error("RunDirector did not build a three-step event deck starting with shop")
 		quit(1)
 		return
 	for event_index in range(1, event_sequence.size()):
@@ -87,6 +87,12 @@ func _run() -> void:
 		push_error("RunDirector route preview did not describe the current event route")
 		quit(1)
 		return
+	run_director.record_event_choice("shop", "skip", "You move on.", "Skip")
+	if run_director.describe_event_history(1).find("Black Market") == -1:
+		push_error("RunDirector event history did not record the last event choice")
+		quit(1)
+		return
+	run_director.reset_run()
 	run_director.set_pending_encounter_prep({"title": "Scout Smoke"})
 	var pending_prep := run_director.get_state().get("pending_encounter_prep", {}) as Dictionary
 	if String(pending_prep.get("title", "")) != "Scout Smoke":

@@ -300,6 +300,48 @@ static func summary(choice_id: String) -> String:
 		_:
 			return "You move on."
 
+static func display_name(choice_id: String) -> String:
+	match choice_id:
+		"shop_attack":
+			return "Sharpening Oil"
+		"shop_defense":
+			return "Light Armor Pack"
+		"shop_relic":
+			return "Relic Map"
+		"bounty_cache":
+			return "Open Purse"
+		"bounty_contract":
+			return "Steady Contract"
+		"bounty_tithe":
+			return "Risk Contract"
+		"rest_heal":
+			return "Medkit"
+		"rest_focus":
+			return "Protective Candle"
+		"rest_repair":
+			return "Field Repair"
+		"train_crit":
+			return "Precision"
+		"train_speed":
+			return "Footwork"
+		"train_cooldown":
+			return "Rhythm"
+		"train_resource":
+			return "Focus Drill"
+		"pact_power":
+			return "Blood Price"
+		"pact_guard":
+			return "Iron Oath"
+		"pact_focus":
+			return "Astral Debt"
+		"skip":
+			return "Skip"
+	if ATTUNEMENT_CHOICE_DATA.has(choice_id):
+		return String((ATTUNEMENT_CHOICE_DATA.get(choice_id, {}) as Dictionary).get("title", choice_id))
+	if SCOUT_CHOICE_DATA.has(choice_id):
+		return String((SCOUT_CHOICE_DATA.get(choice_id, {}) as Dictionary).get("title", choice_id))
+	return choice_id.capitalize()
+
 static func attunement_choices() -> Array[Dictionary]:
 	var categories: Array[String] = []
 	for tag in AccessoryManager.get_equipped_tags():
