@@ -37,6 +37,7 @@ var audio_panel_was_open: bool = false
 var waiting_for_accessory_choice: bool = false
 var active_accessory_reason: String = ""
 var active_run_event_kind: String = ""
+var active_encounter_prep: Dictionary = {}
 var return_pause_after_audio_panel: bool = false
 var return_pause_after_settings_panel: bool = false
 var last_attack_feedback_msec: int = 0
@@ -144,6 +145,7 @@ func _on_character_selected(character_id: StringName) -> void:
 		_play_ui_feedback(true)
 	AccessoryManager.reset_run()
 	RunDirector.reset_run()
+	active_encounter_prep.clear()
 	if player_character != null and is_instance_valid(player_character):
 		player_character.queue_free()
 	if current_encounter != null and is_instance_valid(current_encounter):
@@ -176,14 +178,18 @@ func _start_next_encounter() -> void:
 	active_run_event_kind = ""
 	return_pause_after_audio_panel = false
 	return_pause_after_settings_panel = false
+	active_encounter_prep = RunDirector.consume_pending_encounter_prep()
 	encounter_index += 1
 	if encounter_index >= ENCOUNTER_SCENES.size():
+		active_encounter_prep.clear()
 		_complete_run_victory()
 		return
 	_play_audio_profile_for_encounter(encounter_index)
 	current_encounter = ENCOUNTER_SCENES[encounter_index].instantiate()
 	current_encounter.position = encounter_marker.position
 	encounter_root.add_child(current_encounter)
+	if not active_encounter_prep.is_empty():
+		RunEffects.activate_encounter_prep(player_character, active_encounter_prep)
 	if current_encounter.has_method("bind_player"):
 		current_encounter.bind_player(player_character)
 	if current_encounter.has_signal("defeated"):
@@ -192,8 +198,17 @@ func _start_next_encounter() -> void:
 
 func _on_encounter_defeated() -> void:
 	var reward := RunDirector.reward_encounter(encounter_index, player_character)
+	var reward_bonus := int(active_encounter_prep.get("reward_bonus", 0))
+	if reward_bonus > 0:
+		RunDirector.grant_gold(reward_bonus)
+		reward += reward_bonus
+	if not active_encounter_prep.is_empty() and player_character != null and is_instance_valid(player_character):
+		RunEffects.refresh_persistent_modifiers(player_character)
+		if bool(active_encounter_prep.get("clear_shield_on_end", false)):
+			RunEffects.clear_shield(player_character)
 	current_encounter = null
 	var defeated_final_encounter := encounter_index >= ENCOUNTER_SCENES.size() - 1
+	active_encounter_prep.clear()
 	_refresh_battle_status(
 		"Trial Complete" if defeated_final_encounter else "Encounter Cleared",
 		"+%d gold earned." % reward,
@@ -209,9 +224,14 @@ func _on_encounter_defeated() -> void:
 	)
 
 func _on_player_died() -> void:
+	if not active_encounter_prep.is_empty() and player_character != null and is_instance_valid(player_character):
+		RunEffects.refresh_persistent_modifiers(player_character)
+		if bool(active_encounter_prep.get("clear_shield_on_end", false)):
+			RunEffects.clear_shield(player_character)
 	if current_encounter != null and is_instance_valid(current_encounter):
 		current_encounter.queue_free()
 	current_encounter = null
+	active_encounter_prep.clear()
 	if Music != null:
 		Music.play_profile(&"defeat")
 	_schedule_title_music(2.4)
@@ -232,6 +252,7 @@ func _on_player_died() -> void:
 	_refresh_battle_status()
 	waiting_for_accessory_choice = false
 	active_accessory_reason = ""
+	active_run_event_kind = ""
 
 func _offer_accessory(reason: String) -> void:
 	if accessory_choice == null or not accessory_choice.has_method("open"):
@@ -500,8 +521,14 @@ func _objective_status_text() -> String:
 	if character_select != null and character_select.visible and player_character == null:
 		return "Select a champion to begin the town trial."
 	if current_encounter != null and is_instance_valid(current_encounter):
-		return "Encounter %d / %d: clear the arena." % [encounter_index + 1, ENCOUNTER_SCENES.size()]
+		var objective_text := "Encounter %d / %d: clear the arena." % [encounter_index + 1, ENCOUNTER_SCENES.size()]
+		if not active_encounter_prep.is_empty():
+			objective_text += " Prep %s is active." % _prep_title(active_encounter_prep)
+		return objective_text
 	if player_character != null and is_instance_valid(player_character):
+		var pending_prep := RunDirector.peek_pending_encounter_prep()
+		if not pending_prep.is_empty():
+			return "Prepare for the next encounter. Prep %s is queued." % _prep_title(pending_prep)
 		return "Prepare for the next encounter. Next event: %s." % RunDirector.describe_event_kind(RunDirector.peek_next_event_kind())
 	return "Pick a champion, then shape the run with relics."
 
@@ -521,14 +548,26 @@ func _threat_status_text() -> String:
 	if character_select != null and character_select.visible and player_character == null:
 		return "Knight is safest, Ranger snowballs tempo, Mage controls space and range."
 	if current_encounter != null and is_instance_valid(current_encounter):
-		return _encounter_threat_hint(current_encounter)
+		var threat_text := _encounter_threat_hint(current_encounter)
+		if not active_encounter_prep.is_empty():
+			threat_text += " Prep %s." % _prep_summary(active_encounter_prep)
+		return threat_text
 	if player_character != null and is_instance_valid(player_character):
+		var pending_prep := RunDirector.peek_pending_encounter_prep()
 		var hp_ratio := _property_ratio(player_character, "hp", "max_hp")
 		var defense_ratio := _property_ratio(player_character, "defense", "max_defense")
 		if hp_ratio <= 0.40:
-			return "Low health. Safe relics or recovery events are worth more than greed here."
+			var low_hp_text := "Low health. Safe relics or recovery events are worth more than greed here."
+			if not pending_prep.is_empty():
+				low_hp_text += " Queued prep: %s." % _prep_title(pending_prep)
+			return low_hp_text
 		if defense_ratio <= 0.25:
-			return "Defense is low. Clean dodges matter until armor is rebuilt."
+			var low_defense_text := "Defense is low. Clean dodges matter until armor is rebuilt."
+			if not pending_prep.is_empty():
+				low_defense_text += " Queued prep: %s." % _prep_title(pending_prep)
+			return low_defense_text
+		if not pending_prep.is_empty():
+			return "Queued prep: %s." % _prep_summary(pending_prep)
 	return "The route ramps from mixed enemy waves into three boss checks."
 
 func _hero_status_text() -> String:
@@ -572,8 +611,16 @@ func _event_status_hint(kind: String) -> String:
 			return "Pacts are permanent tradeoffs. Take only the drawback your current hero can absorb."
 		"attunement":
 			return "Attunement is the cleanest way to reinforce the relic identity you already built."
+		"scout":
+			return "Scout routes are one-fight spikes. Pick the opener that solves the next encounter best."
 		_:
 			return "Choose the cleanest upgrade and keep the route moving."
+
+func _prep_title(prep: Dictionary) -> String:
+	return String(prep.get("title", "Battle Plan"))
+
+func _prep_summary(prep: Dictionary) -> String:
+	return String(prep.get("summary", "Temporary opener active."))
 
 func _encounter_threat_hint(encounter: Node) -> String:
 	var script_path := _script_path(encounter)
@@ -779,6 +826,7 @@ func _reset_to_character_select() -> void:
 	waiting_for_accessory_choice = false
 	active_accessory_reason = ""
 	active_run_event_kind = ""
+	active_encounter_prep.clear()
 	return_pause_after_audio_panel = false
 	return_pause_after_settings_panel = false
 	AccessoryManager.reset_run()

@@ -7,7 +7,8 @@ const EVENT_POOL := [
 	"rest",
 	"training",
 	"pact",
-	"attunement"
+	"attunement",
+	"scout"
 ]
 
 const EVENTS_PER_RUN := 4
@@ -20,6 +21,7 @@ var last_reward_gold: int = 0
 var event_deck: Array[String] = []
 var reward_flat_bonus: int = 0
 var reward_multiplier: float = 1.0
+var pending_encounter_prep: Dictionary = {}
 var rng := RandomNumberGenerator.new()
 
 func _ready() -> void:
@@ -34,6 +36,7 @@ func reset_run() -> void:
 	event_deck = _build_event_deck()
 	reward_flat_bonus = 0
 	reward_multiplier = 1.0
+	pending_encounter_prep.clear()
 	_emit_state()
 
 func reward_encounter(encounter_index: int, actor: Node = null) -> int:
@@ -63,7 +66,7 @@ func grant_gold(amount: int) -> void:
 func next_event_kind() -> String:
 	if event_deck.is_empty():
 		event_deck = _build_event_deck()
-	var kind := String(event_deck.pop_front())
+	var kind := str(event_deck.pop_front())
 	event_cursor += 1
 	_emit_state()
 	return kind
@@ -71,12 +74,12 @@ func next_event_kind() -> String:
 func peek_next_event_kind() -> String:
 	if event_deck.is_empty():
 		return ""
-	return String(event_deck[0])
+	return str(event_deck[0])
 
 func get_upcoming_events(limit: int = -1) -> Array[String]:
 	var events: Array[String] = []
 	for event_kind in event_deck:
-		events.append(String(event_kind))
+		events.append(str(event_kind))
 		if limit > 0 and events.size() >= limit:
 			break
 	return events
@@ -103,8 +106,23 @@ func describe_event_kind(kind: String) -> String:
 			return "Forbidden Pact"
 		"attunement":
 			return "Relic Resonance"
+		"scout":
+			return "Scout Report"
 		_:
 			return "Unknown"
+
+func set_pending_encounter_prep(prep: Dictionary) -> void:
+	pending_encounter_prep = prep.duplicate(true)
+	_emit_state()
+
+func peek_pending_encounter_prep() -> Dictionary:
+	return pending_encounter_prep.duplicate(true)
+
+func consume_pending_encounter_prep() -> Dictionary:
+	var prep := pending_encounter_prep.duplicate(true)
+	pending_encounter_prep.clear()
+	_emit_state()
+	return prep
 
 func add_run_modifier(field: String, add_value: float = 0.0, multiplier: float = 1.0, floor_value: float = -INF) -> void:
 	if field.is_empty():
@@ -162,7 +180,8 @@ func get_state() -> Dictionary:
 		"event_deck": event_deck.duplicate(),
 		"run_modifiers": get_run_modifiers(),
 		"reward_flat_bonus": reward_flat_bonus,
-		"reward_multiplier": reward_multiplier
+		"reward_multiplier": reward_multiplier,
+		"pending_encounter_prep": peek_pending_encounter_prep()
 	}
 
 func _emit_state() -> void:
@@ -202,7 +221,8 @@ func _performance_bonus(actor: Node) -> int:
 	return bonus
 
 func _build_event_deck() -> Array[String]:
-	var pool: Array[String] = ["bounty", "rest", "training", "pact", "attunement"]
+	var pool: Array[String] = []
+	pool.append_array(EVENT_POOL)
 	var deck: Array[String] = ["shop"]
 	while deck.size() < EVENTS_PER_RUN and not pool.is_empty():
 		var next_index := rng.randi_range(0, pool.size() - 1)

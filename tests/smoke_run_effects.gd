@@ -131,6 +131,59 @@ func _run() -> void:
 		push_error("attune_offense did not increase attack damage")
 		quit(1)
 		return
+	var persistent_damage := float(actor.attack_damage)
+	run_effects.apply_choice("scout_assault", actor)
+	var pending_prep: Dictionary = run_director.peek_pending_encounter_prep()
+	if String(pending_prep.get("title", "")) != "Assault Route":
+		push_error("Scout assault did not queue the correct encounter prep")
+		quit(1)
+		return
+	run_effects.activate_encounter_prep(actor, pending_prep)
+	if float(actor.attack_damage) <= persistent_damage:
+		push_error("Scout assault prep did not increase attack damage for the encounter")
+		quit(1)
+		return
+	if int(pending_prep.get("reward_bonus", 0)) <= 0:
+		push_error("Scout assault prep did not include its reward bonus")
+		quit(1)
+		return
+	run_effects.refresh_persistent_modifiers(actor)
+	if not is_equal_approx(float(actor.attack_damage), persistent_damage):
+		push_error("Encounter prep cleanup did not restore persistent attack damage")
+		quit(1)
+		return
+	run_effects.apply_choice("scout_bulwark", actor)
+	pending_prep = run_director.peek_pending_encounter_prep()
+	actor.defense = 3.0
+	actor.shield = 0.0
+	run_effects.activate_encounter_prep(actor, pending_prep)
+	if float(actor.defense) < float(actor.max_defense):
+		push_error("Scout bulwark did not restore defense")
+		quit(1)
+		return
+	if float(actor.shield) <= 0.0:
+		push_error("Scout bulwark did not grant shield")
+		quit(1)
+		return
+	run_effects.clear_shield(actor)
+	if float(actor.shield) > 0.0:
+		push_error("Shield cleanup did not clear the encounter shield")
+		quit(1)
+		return
+	run_effects.apply_choice("scout_focus", actor)
+	pending_prep = run_director.consume_pending_encounter_prep()
+	actor.inspiration = 2.0
+	var base_cooldown := float(actor.skill1_cooldown)
+	run_effects.activate_encounter_prep(actor, pending_prep)
+	if float(actor.inspiration) < float(actor.max_inspiration):
+		push_error("Scout focus did not restore inspiration")
+		quit(1)
+		return
+	if float(actor.skill1_cooldown) >= base_cooldown:
+		push_error("Scout focus did not reduce skill cooldowns")
+		quit(1)
+		return
+	run_effects.refresh_persistent_modifiers(actor)
 	accessory_manager.equip("iron_branch_pendant", actor)
 	run_effects.refresh_persistent_modifiers(actor)
 	if float(actor.attack_damage) <= base_damage:

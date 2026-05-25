@@ -51,6 +51,51 @@ const ATTUNEMENT_CHOICE_DATA := {
 	}
 }
 
+const SCOUT_CHOICE_DATA := {
+	"scout_assault": {
+		"title": "Assault Route",
+		"summary": "Next encounter: +14% attack damage, +6% crit chance, and +30 gold on clear.",
+		"icon": "res://assets/ui/trait/trait_damage.png",
+		"prep": {
+			"title": "Assault Route",
+			"summary": "Opening assault: +14% attack damage, +6% crit chance, and +30 gold on clear.",
+			"temporary_effects": {
+				"attack_damage_pct": 0.14,
+				"crit_rate": 0.06
+			},
+			"reward_bonus": 30
+		}
+	},
+	"scout_bulwark": {
+		"title": "Bulwark Route",
+		"summary": "Next encounter: full defense, +45 shield, and +10% move speed.",
+		"icon": "res://assets/ui/icon/ui_shield.png",
+		"prep": {
+			"title": "Bulwark Route",
+			"summary": "Defensive opener: restore defense, gain +45 shield, and +10% move speed.",
+			"restore_defense": true,
+			"shield": 45.0,
+			"temporary_effects": {
+				"move_speed_pct": 0.10
+			},
+			"clear_shield_on_end": true
+		}
+	},
+	"scout_focus": {
+		"title": "Focus Route",
+		"summary": "Next encounter: full inspiration and 18% faster skill cooldowns.",
+		"icon": "res://assets/ui/icon/ui_mana_flame.png",
+		"prep": {
+			"title": "Focus Route",
+			"summary": "Prepared casting: restore inspiration and reduce skill cooldowns by 18%.",
+			"restore_inspiration": true,
+			"temporary_effects": {
+				"skill_cooldown_pct": -0.18
+			}
+		}
+	}
+}
+
 const HERO_TAG_PROFILES := {
 	"Knight": ["defense", "survival", "power"],
 	"Ranger": ["crit", "speed", "tempo", "damage"],
@@ -74,6 +119,9 @@ const CHOICE_TAGS := {
 	"pact_power": ["power", "damage", "risk"],
 	"pact_guard": ["defense", "survival"],
 	"pact_focus": ["skill", "resource", "power"],
+	"scout_assault": ["damage", "crit", "tempo"],
+	"scout_bulwark": ["defense", "survival", "speed"],
+	"scout_focus": ["skill", "resource", "tempo"],
 	"attune_offense": ["damage", "crit"],
 	"attune_focus": ["skill", "resource"],
 	"attune_guard": ["defense", "survival"],
@@ -144,6 +192,8 @@ static func apply_choice(choice_id: String, actor: Node) -> void:
 			for field in ["skill1_cooldown", "skill2_cooldown", "skill3_cooldown"]:
 				RunDirector.add_run_modifier(field, 0.0, 0.92, 0.0)
 			persistent_changed = true
+		"scout_assault", "scout_bulwark", "scout_focus":
+			RunDirector.set_pending_encounter_prep(_scout_prep_for_choice(choice_id))
 		"attune_offense":
 			RunDirector.add_run_modifier("attack_damage", 0.0, 1.12)
 			RunDirector.add_run_modifier("crit_rate", 0.04)
@@ -231,6 +281,12 @@ static func summary(choice_id: String) -> String:
 			return "Iron Oath accepted."
 		"pact_focus":
 			return "Astral Debt accepted."
+		"scout_assault":
+			return "Assault route prepared."
+		"scout_bulwark":
+			return "Bulwark route prepared."
+		"scout_focus":
+			return "Focus route prepared."
 		"attune_offense":
 			return "Battle Temper attuned."
 		"attune_focus":
@@ -262,6 +318,17 @@ static func attunement_choices() -> Array[Dictionary]:
 		if choices.size() >= 3:
 			break
 		var data: Dictionary = (ATTUNEMENT_CHOICE_DATA.get(choice_id, {}) as Dictionary).duplicate(true)
+		if data.is_empty():
+			continue
+		data["id"] = choice_id
+		data["cost"] = 0
+		choices.append(data)
+	return choices
+
+static func scout_choices() -> Array[Dictionary]:
+	var choices: Array[Dictionary] = []
+	for choice_id in ["scout_assault", "scout_bulwark", "scout_focus"]:
+		var data: Dictionary = (SCOUT_CHOICE_DATA.get(choice_id, {}) as Dictionary).duplicate(true)
 		if data.is_empty():
 			continue
 		data["id"] = choice_id
@@ -317,6 +384,15 @@ static func evaluate_choice(choice_id: String, actor: Node = null) -> Dictionary
 	if choice_id == "rest_focus" and (defense_ratio <= 0.35 or inspiration_ratio <= 0.35):
 		score += 2
 		reasons.append("You are short on armor or inspiration for the next check.")
+	if choice_id == "scout_assault" and hp_ratio >= 0.70:
+		score += 2
+		reasons.append("Your health buffer is healthy enough to cash in on a fast opener.")
+	if choice_id == "scout_bulwark" and (hp_ratio <= 0.55 or defense_ratio <= 0.35):
+		score += 3
+		reasons.append("This covers a weak defensive start and buys room to stabilize.")
+	if choice_id == "scout_focus" and inspiration_ratio <= 0.45:
+		score += 2
+		reasons.append("Your inspiration economy is low enough that a reset is meaningful.")
 	if choice_id == "shop_defense" and defense_ratio <= 0.40:
 		score += 2
 		reasons.append("Defense is already thin, so armor value is immediate.")
@@ -354,6 +430,64 @@ static func evaluate_choice(choice_id: String, actor: Node = null) -> Dictionary
 		"reason": reasons[0] if not reasons.is_empty() else "Keeps the run moving without a special synergy hook."
 	}
 
+static func activate_encounter_prep(actor: Node, prep: Dictionary) -> void:
+	if actor == null or not is_instance_valid(actor) or prep.is_empty():
+		return
+	if bool(prep.get("restore_defense", false)):
+		restore_defense(actor)
+	if bool(prep.get("restore_inspiration", false)):
+		restore_inspiration(actor)
+	apply_shield(actor, float(prep.get("shield", 0.0)))
+	apply_temporary_effects(actor, prep.get("temporary_effects", {}) as Dictionary)
+	if actor.has_method("emit_stat_signals"):
+		actor.emit_stat_signals()
+
+static func apply_temporary_effects(actor: Node, effects: Dictionary) -> void:
+	if actor == null or not is_instance_valid(actor) or effects.is_empty():
+		return
+	for key in effects.keys():
+		var value := float(effects[key])
+		match String(key):
+			"max_hp", "max_inspiration", "max_defense", "defense", "move_speed", "attack_damage", "crit_rate", "inspiration_gain_on_attack_hit":
+				_apply_actor_flat(actor, String(key), value)
+			"move_speed_pct":
+				_apply_actor_percent(actor, "move_speed", value)
+			"attack_damage_pct":
+				_apply_actor_percent(actor, "attack_damage", value)
+			"attack_interval_pct":
+				_scale_actor(actor, "attack_interval", 1.0 + value, 0.15)
+			"skill_cooldown_pct":
+				for field in ["skill1_cooldown", "skill2_cooldown", "skill3_cooldown"]:
+					_scale_actor(actor, field, 1.0 + value, 0.0)
+			"skill_cost_pct":
+				for field in ["skill1_cost", "skill2_cost", "skill3_cost"]:
+					_scale_actor(actor, field, 1.0 + value, 0.0)
+			"skill_damage_pct":
+				for field in ["skill1_damage", "skill2_damage", "skill3_damage"]:
+					_scale_actor(actor, field, 1.0 + value, 0.0)
+
+static func apply_shield(actor: Node, amount: float) -> void:
+	if actor == null or not is_instance_valid(actor) or amount <= 0.0:
+		return
+	var health_component := _health_component(actor)
+	if health_component != null and health_component.has_method("apply_shield"):
+		health_component.apply_shield(amount)
+	elif _has_property(actor, "shield"):
+		actor.shield = float(actor.get("shield")) + amount
+	if actor.has_method("emit_stat_signals"):
+		actor.emit_stat_signals()
+
+static func clear_shield(actor: Node) -> void:
+	if actor == null or not is_instance_valid(actor):
+		return
+	var health_component := _health_component(actor)
+	if health_component != null and health_component.has_method("clear_shield"):
+		health_component.clear_shield()
+	elif _has_property(actor, "shield"):
+		actor.shield = 0.0
+	if actor.has_method("emit_stat_signals"):
+		actor.emit_stat_signals()
+
 static func heal_percent(actor: Node, percent: float) -> void:
 	if not _has_property(actor, "max_hp") or not actor.has_method("heal"):
 		return
@@ -380,6 +514,14 @@ static func _apply_actor_percent(actor: Node, field: String, percent: float) -> 
 		return
 	actor.set(field, float(actor.get(field)) * (1.0 + percent))
 
+static func _scale_actor(actor: Node, field: String, multiplier: float, floor_value: float = -INF) -> void:
+	if not _has_property(actor, field):
+		return
+	var next_value := float(actor.get(field)) * multiplier
+	if floor_value != -INF:
+		next_value = maxf(next_value, floor_value)
+	actor.set(field, next_value)
+
 static func _has_property(actor: Node, field: String) -> bool:
 	for property in actor.get_property_list():
 		if String(property.get("name", "")) == field:
@@ -400,3 +542,14 @@ static func _hero_name(actor: Node) -> String:
 	if actor == null or not is_instance_valid(actor) or not actor.has_method("get_character_name"):
 		return ""
 	return String(actor.get_character_name())
+
+static func _health_component(actor: Node) -> Node:
+	if actor == null:
+		return null
+	return actor.get("health_component") if _has_property(actor, "health_component") else actor.get_node_or_null("HealthComponent")
+
+static func _scout_prep_for_choice(choice_id: String) -> Dictionary:
+	var data := SCOUT_CHOICE_DATA.get(choice_id, {}) as Dictionary
+	if data.is_empty():
+		return {}
+	return (data.get("prep", {}) as Dictionary).duplicate(true)

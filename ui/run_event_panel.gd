@@ -113,6 +113,12 @@ func _rebuild(kind: String, gold: int) -> void:
 			for choice in RunEffects.attunement_choices():
 				choice_row.add_child(_choice_card_from_data(choice, gold))
 			choice_row.add_child(_choice_card("skip", "Leave It Still", "Keep the relic unchanged and move on.", "res://assets/ui/icon/ui_back.png", 0, gold))
+		"scout":
+			title_label.text = "Scout Report"
+			subtitle_label.text = "Choose one battle plan for the next encounter. Each route changes the opening differently."
+			for choice in RunEffects.scout_choices():
+				choice_row.add_child(_choice_card_from_data(choice, gold))
+			choice_row.add_child(_choice_card("skip", "Ignore the Report", "Keep your current opener and fight without extra prep.", "res://assets/ui/icon/ui_back.png", 0, gold))
 		_:
 			title_label.text = "Travel"
 			subtitle_label.text = "No event is available."
@@ -280,6 +286,8 @@ func _rule_summary_for_kind(kind: String) -> String:
 			return "Pacts are permanent. They raise power now and reshape future fights."
 		"attunement":
 			return "Attunement follows your relic tags and lasts for the rest of this run."
+		"scout":
+			return "Scout routes are single-encounter spikes. Pick the opener that solves the very next fight."
 		_:
 			return "Move on when you are ready."
 
@@ -297,6 +305,8 @@ func _default_detail_for_kind(kind: String) -> String:
 			return "Every pact is a commitment. Look for the tradeoff your current hero can absorb best."
 		"attunement":
 			return "Resonance is the cleanest way to reinforce your current relic identity."
+		"scout":
+			return "Scout routes are short-term plans. Pick aggression, stability, or skill tempo for the next arena only."
 		_:
 			return "Choose a path and continue."
 
@@ -318,6 +328,8 @@ func _footer_text_for_kind(kind: String) -> String:
 			return "%s  |  Pact tradeoffs are permanent." % lead
 		"attunement":
 			return "%s  |  Resonance lasts for the rest of the run." % lead
+		"scout":
+			return "%s  |  Scout prep expires when the next encounter ends." % lead
 		_:
 			return "%s  |  Continue when ready." % lead
 
@@ -384,6 +396,11 @@ func _choice_meta(choice_id: String, cost: int) -> Dictionary:
 		meta["timing"] = "Tradeoff"
 		meta["detail"] = "Permanent power with a permanent drawback."
 		meta["color"] = Color(1.0, 0.74, 0.66)
+	elif choice_id.begins_with("scout_"):
+		meta["type"] = "Scout"
+		meta["timing"] = "Next Fight"
+		meta["detail"] = "Queues a one-fight opener instead of a permanent run bonus."
+		meta["color"] = Color(0.80, 0.96, 0.90)
 	elif choice_id.begins_with("attune_"):
 		meta["type"] = "Attunement"
 		meta["timing"] = "Permanent"

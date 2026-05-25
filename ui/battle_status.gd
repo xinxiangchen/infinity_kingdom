@@ -168,6 +168,7 @@ func _on_run_state_changed(state: Dictionary) -> void:
 	var modifier_count := (state.get("run_modifiers", {}) as Dictionary).size()
 	var reward_flat_bonus := int(state.get("reward_flat_bonus", 0))
 	var reward_multiplier := float(state.get("reward_multiplier", 1.0))
+	var pending_prep := state.get("pending_encounter_prep", {}) as Dictionary
 	var reward_bonus_text := "None"
 	if reward_flat_bonus > 0 or reward_multiplier > 1.001:
 		var parts: Array[String] = []
@@ -177,11 +178,13 @@ func _on_run_state_changed(state: Dictionary) -> void:
 			parts.append("x%.2f reward" % reward_multiplier)
 		reward_bonus_text = " ".join(parts)
 	var route_preview := RunDirector.describe_event_route(3)
-	run_label.text = "Gold %d  |  Last +%d  |  Cleared %d\nNext %s  |  Run effects %d  |  Bounty %s\nRoute %s" % [
+	var prep_text := "  |  Prep %s" % String(pending_prep.get("title", "Ready")) if not pending_prep.is_empty() else ""
+	run_label.text = "Gold %d  |  Last +%d  |  Cleared %d\nNext %s%s  |  Run effects %d  |  Bounty %s\nRoute %s" % [
 		int(state.get("gold", 0)),
 		int(state.get("last_reward_gold", 0)),
 		int(state.get("cleared_encounters", 0)),
 		next_text,
+		prep_text,
 		modifier_count,
 		reward_bonus_text,
 		route_preview

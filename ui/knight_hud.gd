@@ -94,6 +94,7 @@ func _process(_delta: float) -> void:
 	state_label.text = "State %s" % String(player_character.state_machine.get_state_name())
 	_update_skill_slots()
 	_update_danger_visuals()
+	_refresh_run_state_label(RunDirector.get_state())
 
 func _build_ui() -> void:
 	layer = 5
@@ -356,10 +357,16 @@ func _on_accessory_equipped(accessory: Dictionary) -> void:
 func _on_run_state_changed(state: Dictionary) -> void:
 	if run_state_label == null:
 		return
+	_refresh_run_state_label(state)
+
+func _refresh_run_state_label(state: Dictionary) -> void:
+	if run_state_label == null:
+		return
 	var next_kind := String(state.get("next_event_kind", ""))
 	var next_label := RunDirector.describe_event_kind(next_kind) if not next_kind.is_empty() else "Victory"
 	var reward_flat_bonus := int(state.get("reward_flat_bonus", 0))
 	var reward_multiplier := float(state.get("reward_multiplier", 1.0))
+	var pending_prep := state.get("pending_encounter_prep", {}) as Dictionary
 	var reward_bonus_text := ""
 	if reward_flat_bonus > 0 or reward_multiplier > 1.001:
 		var parts: Array[String] = []
@@ -368,10 +375,19 @@ func _on_run_state_changed(state: Dictionary) -> void:
 		if reward_multiplier > 1.001:
 			parts.append("x%.2f reward" % reward_multiplier)
 		reward_bonus_text = "  |  %s" % " ".join(parts)
-	run_state_label.text = "Gold %d  |  Last +%d  |  Next %s%s" % [
+	var prep_text := ""
+	var current_scene := get_tree().current_scene
+	if current_scene != null:
+		var active_prep := current_scene.get("active_encounter_prep") as Dictionary
+		if not active_prep.is_empty():
+			prep_text = "  |  Prep %s" % String(active_prep.get("title", "Active"))
+	if prep_text.is_empty() and not pending_prep.is_empty():
+		prep_text = "  |  Prep %s" % String(pending_prep.get("title", "Queued"))
+	run_state_label.text = "Gold %d  |  Last +%d  |  Next %s%s%s" % [
 		int(state.get("gold", 0)),
 		int(state.get("last_reward_gold", 0)),
 		next_label,
+		prep_text,
 		reward_bonus_text
 	]
 

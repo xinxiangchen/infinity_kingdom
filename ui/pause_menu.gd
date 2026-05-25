@@ -204,13 +204,16 @@ func _refresh_subtitle() -> void:
 
 func _refresh_context() -> void:
 	var hero_name := "No Champion"
-	var gold_value := int(RunDirector.gold)
-	var cleared_value := int(RunDirector.cleared_encounters)
-	var reward_flat_bonus := int(RunDirector.get_state().get("reward_flat_bonus", 0))
-	var reward_multiplier := float(RunDirector.get_state().get("reward_multiplier", 1.0))
+	var run_state := RunDirector.get_state()
+	var gold_value := int(run_state.get("gold", 0))
+	var cleared_value := int(run_state.get("cleared_encounters", 0))
+	var reward_flat_bonus := int(run_state.get("reward_flat_bonus", 0))
+	var reward_multiplier := float(run_state.get("reward_multiplier", 1.0))
 	var next_kind := RunDirector.describe_event_kind(RunDirector.peek_next_event_kind())
 	var route_preview := RunDirector.describe_event_route(3)
+	var pending_prep := run_state.get("pending_encounter_prep", {}) as Dictionary
 	var encounter_name := "No active encounter"
+	var active_prep: Dictionary = {}
 	if target_world != null and is_instance_valid(target_world):
 		var player: Node = target_world.get("player_character")
 		if player != null and is_instance_valid(player) and player.has_method("get_character_name"):
@@ -224,13 +227,24 @@ func _refresh_context() -> void:
 					encounter_name = String(encounter.get_status_title())
 				else:
 					encounter_name = String(encounter.name)
+		active_prep = target_world.get("active_encounter_prep") as Dictionary
 	var bounty_text := ""
 	if reward_flat_bonus > 0:
 		bounty_text += "  |  +%d gold" % reward_flat_bonus
 	if reward_multiplier > 1.001:
 		bounty_text += "  |  x%.2f reward" % reward_multiplier
 	run_summary_label.text = "Hero %s  |  Gold %d  |  Cleared %d%s" % [hero_name, gold_value, cleared_value, bounty_text]
-	encounter_summary_label.text = "Current %s  |  Next %s\nRoute %s" % [encounter_name, next_kind if not next_kind.is_empty() else "Victory", route_preview]
+	var prep_parts: Array[String] = []
+	if not active_prep.is_empty():
+		prep_parts.append("Active prep %s" % String(active_prep.get("title", "Battle Plan")))
+	elif not pending_prep.is_empty():
+		prep_parts.append("Queued prep %s" % String(pending_prep.get("title", "Battle Plan")))
+	encounter_summary_label.text = "Current %s  |  Next %s\nRoute %s%s" % [
+		encounter_name,
+		next_kind if not next_kind.is_empty() else "Victory",
+		route_preview,
+		("\n%s" % "  |  ".join(prep_parts)) if not prep_parts.is_empty() else ""
+	]
 	var equipped_accessory: Dictionary = AccessoryManager.get_equipped_accessory()
 	var accessory_name := String(equipped_accessory.get("name", "No Accessory"))
 	var accessory_tags := AccessoryManager.describe_tags(equipped_accessory.get("tags", []))

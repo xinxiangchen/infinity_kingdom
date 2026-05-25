@@ -87,6 +87,17 @@ func _run() -> void:
 		push_error("RunDirector route preview did not describe the current event route")
 		quit(1)
 		return
+	run_director.set_pending_encounter_prep({"title": "Scout Smoke"})
+	var pending_prep := run_director.get_state().get("pending_encounter_prep", {}) as Dictionary
+	if String(pending_prep.get("title", "")) != "Scout Smoke":
+		push_error("RunDirector state did not expose pending encounter prep")
+		quit(1)
+		return
+	pending_prep = run_director.consume_pending_encounter_prep()
+	if String(pending_prep.get("title", "")) != "Scout Smoke":
+		push_error("RunDirector did not return the queued encounter prep")
+		quit(1)
+		return
 
 	world._on_character_selected(&"knight")
 	await process_frame
