@@ -22,6 +22,8 @@ RunDirector="*res://systems/run/run_director.gd"
 Feedback="*res://systems/feedback/feedback_manager.gd"
 Music="*res://audio/music_manager.gd"
 Sfx="*res://audio/sfx_manager.gd"
+UISettings="*res://systems/ui/ui_settings.gd"
+UIText="*res://systems/ui/ui_text.gd"
 
 [display]
 

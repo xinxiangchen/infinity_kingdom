@@ -21,6 +21,7 @@ var control_label: Label
 var combat_feed_label: Label
 var run_state_label: Label
 var accessory_icon: TextureRect
+var accessory_badge_label: Label
 var accessory_name_label: Label
 var accessory_tags_label: Label
 var accessory_summary_label: Label
@@ -31,22 +32,25 @@ var meter_bars: Array[TextureProgressBar] = []
 var combat_feed_tween: Tween = null
 var last_control_summary: String = ""
 var layout_size_override: Vector2 = Vector2.ZERO
-var skill_icon_paths := {
-	"Knight": [
-		"res://assets/ui/skill/knight_charge_slash.png",
-		"res://assets/ui/skill/knight_counter_shock.png",
-		"res://assets/ui/skill/knight_holy_field.png"
-	],
-	"Ranger": [
-		"res://assets/ui/skill/ranger_wind_arrow.png",
-		"res://assets/ui/skill/ranger_shadow_step.png",
-		"res://assets/ui/skill/ranger_hunt_rush.png"
-	],
-	"Mage": [
-		"res://assets/ui/skill/mage_blade_whirl.png",
-		"res://assets/ui/skill/mage_arcane_burst.png",
-		"res://assets/ui/skill/mage_silence_decree.png"
-	]
+var skill_badge_text := {
+	"Knight": {
+		"attack": "ATK",
+		"skill1": "SLASH",
+		"skill2": "GUARD",
+		"skill3": "FIELD"
+	},
+	"Ranger": {
+		"attack": "ATK",
+		"skill1": "ARROW",
+		"skill2": "STEP",
+		"skill3": "HUNT"
+	},
+	"Mage": {
+		"attack": "ATK",
+		"skill1": "BLADE",
+		"skill2": "BURST",
+		"skill3": "SEAL"
+	}
 }
 
 func _ready() -> void:
@@ -197,7 +201,15 @@ func _build_ui() -> void:
 	accessory_icon.custom_minimum_size = Vector2(52, 52)
 	accessory_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	accessory_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	accessory_icon.texture = null
 	slot.add_child(accessory_icon)
+	accessory_badge_label = Label.new()
+	accessory_badge_label.set_anchors_preset(Control.PRESET_FULL_RECT)
+	accessory_badge_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	accessory_badge_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	accessory_badge_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	UISkin.label(accessory_badge_label, 11, Color(0.88, 0.92, 0.98))
+	accessory_icon.add_child(accessory_badge_label)
 
 	var accessory_text := VBoxContainer.new()
 	accessory_text.name = "AccessoryText"
@@ -242,11 +254,11 @@ func _meter(meter_id: String, label_text: String, _fill_color: Color) -> VBoxCon
 			inspiration_label = label
 	return box
 
-func _skill_slot(key: String, hotkey: String, icon_path: String) -> Dictionary:
+func _skill_slot(key: String, hotkey: String, _icon_path: String) -> Dictionary:
 	var root := PanelContainer.new()
 	root.custom_minimum_size = Vector2(84, 76)
 	root.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	root.add_theme_stylebox_override("panel", UISkin.texture_style(UISkin.asset("frame/icon_slot_dark.png"), 22, 5))
+	root.add_theme_stylebox_override("panel", UISkin.choice_panel_style())
 
 	var stack := VBoxContainer.new()
 	stack.add_theme_constant_override("separation", 2)
@@ -255,10 +267,17 @@ func _skill_slot(key: String, hotkey: String, icon_path: String) -> Dictionary:
 	var icon := TextureRect.new()
 	icon.custom_minimum_size = Vector2(44, 44)
 	icon.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	icon.texture = load(icon_path) as Texture2D
+	icon.texture = null
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	stack.add_child(icon)
+	var badge_label := Label.new()
+	badge_label.set_anchors_preset(Control.PRESET_FULL_RECT)
+	badge_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	badge_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	badge_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	UISkin.label(badge_label, 10, Color(0.88, 0.92, 0.98))
+	icon.add_child(badge_label)
 
 	var label := Label.new()
 	label.text = "%s Ready" % hotkey
@@ -267,7 +286,7 @@ func _skill_slot(key: String, hotkey: String, icon_path: String) -> Dictionary:
 	UISkin.label(label, 11, Color(0.86, 0.88, 0.92))
 	stack.add_child(label)
 
-	return {"root": root, "icon": icon, "label": label, "hotkey": hotkey, "key": key}
+	return {"root": root, "icon": icon, "badge": badge_label, "label": label, "hotkey": hotkey, "key": key}
 
 func _make_label(text: String, size: int, color: Color) -> Label:
 	var label := Label.new()
@@ -341,7 +360,10 @@ func _on_attack_hit(attack_name: StringName, target: Node) -> void:
 func _on_accessory_equipped(accessory: Dictionary) -> void:
 	if accessory_icon == null:
 		return
-	accessory_icon.texture = load(String(accessory.get("icon", "res://assets/ui/icon/ui_unknown.png"))) as Texture2D
+	accessory_icon.texture = null
+	if accessory_badge_label != null:
+		var tag_text := AccessoryManager.describe_tags(accessory.get("tags", []))
+		accessory_badge_label.text = _compact_badge_text(tag_text if not tag_text.is_empty() else String(accessory.get("name", UIText.text("hud_accessory"))))
 	accessory_name_label.text = String(accessory.get("name", "No Accessory"))
 	var tags := AccessoryManager.describe_tags(accessory.get("tags", []))
 	accessory_tags_label.text = "Tags: %s" % (tags if not tags.is_empty() else "None")
@@ -395,14 +417,14 @@ func _refresh_skill_icons() -> void:
 	if player_character == null or not is_instance_valid(player_character):
 		return
 	var character_name := String(player_character.get_character_name())
-	var icons: Array = skill_icon_paths.get(character_name, [])
-	for index in range(icons.size()):
-		var slot_key := "skill%d" % (index + 1)
-		if not skill_slots.has(slot_key):
-			continue
+	var badge_map := skill_badge_text.get(character_name, {}) as Dictionary
+	for slot_key in skill_slots.keys():
 		var slot: Dictionary = skill_slots[slot_key]
 		var icon: TextureRect = slot["icon"]
-		icon.texture = load(String(icons[index])) as Texture2D
+		var badge: Label = slot["badge"]
+		icon.texture = null
+		if badge != null:
+			badge.text = _compact_badge_text(String(badge_map.get(slot_key, String(slot["hotkey"]))))
 
 func _update_skill_slots() -> void:
 	if player_character == null or not is_instance_valid(player_character):
@@ -539,11 +561,30 @@ func _refresh_layout() -> void:
 	for slot_data in skill_slots.values():
 		var root: PanelContainer = slot_data["root"]
 		var icon: TextureRect = slot_data["icon"]
+		var badge: Label = slot_data["badge"]
 		var label: Label = slot_data["label"]
 		root.custom_minimum_size = Vector2(slot_width, slot_height)
 		icon.custom_minimum_size = Vector2(34.0 if very_compact else 40.0, 34.0 if very_compact else 40.0)
+		if badge != null:
+			UISkin.label(badge, 9 if very_compact else 10, Color(0.88, 0.92, 0.98))
 		UISkin.label(label, 9 if very_compact else 11, Color(0.86, 0.88, 0.92))
 	var accessory_slot := accessory_grid.get_node("AccessorySlot") as PanelContainer
 	if accessory_slot != null:
 		accessory_slot.custom_minimum_size = Vector2(56.0 if compact else 64.0, 56.0 if compact else 64.0)
 	accessory_icon.custom_minimum_size = Vector2(44.0 if compact else 52.0, 44.0 if compact else 52.0)
+	if accessory_badge_label != null:
+		UISkin.label(accessory_badge_label, 9 if compact else 11, Color(0.88, 0.92, 0.98))
+
+func _compact_badge_text(source: String) -> String:
+	var trimmed := source.strip_edges()
+	if trimmed.is_empty():
+		return "UI"
+	if trimmed.contains(" "):
+		var initials := ""
+		for word in trimmed.split(" ", false):
+			if initials.length() >= 4:
+				break
+			initials += word.substr(0, 1).to_upper()
+		if not initials.is_empty():
+			return initials
+	return trimmed.replace("\n", " ").substr(0, mini(trimmed.length(), 6)).to_upper()

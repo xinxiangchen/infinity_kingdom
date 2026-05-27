@@ -9,13 +9,6 @@ signal quit_requested
 const UISkin := preload("res://ui/ui_skin.gd")
 const PANEL_MIN_SIZE := Vector2(340, 360)
 const PANEL_MAX_SIZE := Vector2(460, 590)
-const BUTTON_DESCRIPTIONS := {
-	"resume": "Return to the fight immediately.",
-	"audio": "Adjust the current chapter mix without leaving the run.",
-	"settings": "Switch fullscreen and sync options.",
-	"restart": "Return to champion select and reset this run.",
-	"quit": "Close the game client."
-}
 
 @onready var backdrop: ColorRect = $Backdrop
 @onready var panel: PanelContainer = $Backdrop/CenterContainer/PanelContainer
@@ -180,27 +173,30 @@ func _clear_confirm_state() -> void:
 	_refresh_subtitle()
 
 func _refresh_button_labels() -> void:
-	restart_button.text = "Confirm Select" if confirm_action == &"restart" else "Champion Select"
-	quit_button.text = "Confirm Quit" if confirm_action == &"quit" else "Quit Game"
+	resume_button.text = UIText.text("battle_resume")
+	audio_button.text = UIText.text("audio_mix")
+	settings_button.text = UIText.text("menu_settings")
+	restart_button.text = UIText.text("pause_restart_confirm_button") if confirm_action == &"restart" else UIText.text("pause_restart_button")
+	quit_button.text = UIText.text("pause_quit_confirm_button") if confirm_action == &"quit" else UIText.text("pause_quit_button")
 
 func _refresh_subtitle() -> void:
 	if confirm_action == &"restart":
-		subtitle_label.text = "Press Champion Select again to abandon this run. Esc cancels."
+		subtitle_label.text = UIText.text("pause_restart_confirm")
 		return
 	if confirm_action == &"quit":
-		subtitle_label.text = "Press Quit Game again to close the client. Esc cancels."
+		subtitle_label.text = UIText.text("pause_quit_confirm")
 		return
 	var focus_owner := get_viewport().gui_get_focus_owner()
 	if focus_owner == audio_button:
-		subtitle_label.text = BUTTON_DESCRIPTIONS["audio"]
+		subtitle_label.text = UIText.text("pause_audio_desc")
 	elif focus_owner == settings_button:
-		subtitle_label.text = BUTTON_DESCRIPTIONS["settings"]
+		subtitle_label.text = UIText.text("pause_settings_desc")
 	elif focus_owner == restart_button:
-		subtitle_label.text = BUTTON_DESCRIPTIONS["restart"]
+		subtitle_label.text = UIText.text("pause_restart_desc")
 	elif focus_owner == quit_button:
-		subtitle_label.text = BUTTON_DESCRIPTIONS["quit"]
+		subtitle_label.text = UIText.text("pause_quit_desc")
 	else:
-		subtitle_label.text = BUTTON_DESCRIPTIONS["resume"]
+		subtitle_label.text = UIText.text("pause_resume_desc")
 
 func _refresh_context() -> void:
 	var hero_name := "No Champion"
@@ -255,7 +251,8 @@ func _refresh_context() -> void:
 	]
 	if recent_events_text != "No event choices yet.":
 		relic_summary_label.text += "\nRecent %s" % recent_events_text
-	hint_label.text = "Esc resume  |  A/F10 audio  |  S settings  |  R select  |  Q quit"
+	title_label.text = UIText.text("pause_title")
+	hint_label.text = UIText.text("pause_hint")
 
 func _queue_layout_refresh() -> void:
 	call_deferred("_refresh_layout")

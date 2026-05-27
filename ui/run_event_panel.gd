@@ -71,58 +71,60 @@ func _rebuild(kind: String, gold: int) -> void:
 	active_default_detail = _default_detail_for_kind(kind)
 	match kind:
 		"shop":
-			title_label.text = "Black Market"
-			subtitle_label.text = "Spend gold for a focused advantage before the next fight."
-			choice_row.add_child(_choice_card("shop_attack", "Sharpening Oil", "Gain +10% attack damage this run.", "res://assets/ui/consumable/sharpening_oil.png", 45, gold))
-			choice_row.add_child(_choice_card("shop_defense", "Light Armor Pack", "Restore defense and gain +12 max defense.", "res://assets/ui/consumable/light_armor_pack.png", 40, gold))
-			choice_row.add_child(_choice_card("shop_relic", "Relic Map", "Buy an extra relic choice before the next fight.", "res://assets/ui/icon/ui_shop.png", 55, gold))
-			choice_row.add_child(_choice_card("skip", "Save Gold", "Keep your gold for a later event.", "res://assets/ui/icon/currency_gold_pixel.png", 0, gold))
+			title_label.text = UIText.text("event_shop_title")
+			subtitle_label.text = UIText.text("event_shop_subtitle")
+			choice_row.add_child(_choice_card("shop_attack", "Sharpening Oil", "Gain +10% attack damage this run.", 45, gold))
+			choice_row.add_child(_choice_card("shop_defense", "Light Armor Pack", "Restore defense and gain +12 max defense.", 40, gold))
+			choice_row.add_child(_choice_card("shop_relic", "Relic Map", "Buy an extra relic choice before the next fight.", 55, gold))
+			choice_row.add_child(_choice_card("skip", "Save Gold", "Keep your gold for a later event.", 0, gold))
 		"bounty":
-			title_label.text = "Bounty Board"
-			subtitle_label.text = "Take coin now, or lock in richer encounter payouts for the rest of this run."
-			choice_row.add_child(_choice_card("bounty_cache", "Open Purse", "Claim 40 gold immediately.", "res://assets/ui/icon/currency_gold_pixel.png", 0, gold))
-			choice_row.add_child(_choice_card("bounty_contract", "Steady Contract", "Future encounters grant +18 bonus gold.", "res://assets/ui/icon/ui_shop.png", 0, gold))
-			choice_row.add_child(_choice_card("bounty_tithe", "Risk Contract", "Future encounters grant +28% gold, but lose 10 max hp.", "res://assets/ui/trait/trait_execute.png", 0, gold))
-			choice_row.add_child(_choice_card("skip", "Walk Past", "Keep the build unchanged and move on.", "res://assets/ui/icon/ui_back.png", 0, gold))
+			title_label.text = UIText.text("event_bounty_title")
+			subtitle_label.text = UIText.text("event_bounty_subtitle")
+			choice_row.add_child(_choice_card("bounty_cache", "Open Purse", "Claim 40 gold immediately.", 0, gold))
+			choice_row.add_child(_choice_card("bounty_contract", "Steady Contract", "Future encounters grant +18 bonus gold.", 0, gold))
+			choice_row.add_child(_choice_card("bounty_tithe", "Risk Contract", "Future encounters grant +28% gold, but lose 10 max hp.", 0, gold))
+			choice_row.add_child(_choice_card("skip", "Walk Past", "Keep the build unchanged and move on.", 0, gold))
 		"rest":
-			title_label.text = "Church Refuge"
-			subtitle_label.text = "Recover before the next encounter."
-			choice_row.add_child(_choice_card("rest_heal", "Medkit", "Restore 45% health.", "res://assets/ui/consumable/medkit.png", 0, gold))
-			choice_row.add_child(_choice_card("rest_focus", "Protective Candle", "Restore inspiration and defense.", "res://assets/ui/consumable/protective_candle.png", 0, gold))
-			choice_row.add_child(_choice_card("rest_repair", "Field Repair", "Restore defense and gain +8 max hp.", "res://assets/ui/icon/ui_shield.png", 0, gold))
-			choice_row.add_child(_choice_card("skip", "Push Forward", "Skip recovery and continue.", "res://assets/ui/icon/ui_check.png", 0, gold))
+			title_label.text = UIText.text("event_rest_title")
+			subtitle_label.text = UIText.text("event_rest_subtitle")
+			choice_row.add_child(_choice_card("rest_heal", "Medkit", "Restore 45% health.", 0, gold))
+			choice_row.add_child(_choice_card("rest_focus", "Protective Candle", "Restore inspiration and defense.", 0, gold))
+			choice_row.add_child(_choice_card("rest_repair", "Field Repair", "Restore defense and gain +8 max hp.", 0, gold))
+			choice_row.add_child(_choice_card("skip", "Push Forward", "Skip recovery and continue.", 0, gold))
 		"training":
-			title_label.text = "Training Drill"
-			subtitle_label.text = "Choose one stat technique for the rest of this run."
-			choice_row.add_child(_choice_card("train_crit", "Precision", "+5% critical chance.", "res://assets/ui/trait/trait_crit.png", 0, gold))
-			choice_row.add_child(_choice_card("train_speed", "Footwork", "+8% move speed.", "res://assets/ui/icon/stat_speed_pixel.png", 0, gold))
-			choice_row.add_child(_choice_card("train_cooldown", "Rhythm", "-6% skill cooldowns.", "res://assets/ui/icon/stat_cooldown_pixel.png", 0, gold))
-			choice_row.add_child(_choice_card("train_resource", "Focus Drill", "+12 max inspiration.", "res://assets/ui/icon/stat_mana_pixel.png", 0, gold))
-			choice_row.add_child(_choice_card("skip", "Leave the Yard", "Skip training and keep the build unchanged.", "res://assets/ui/icon/ui_back.png", 0, gold))
+			title_label.text = UIText.text("event_training_title")
+			subtitle_label.text = UIText.text("event_training_subtitle")
+			choice_row.add_child(_choice_card("train_crit", "Precision", "+5% critical chance.", 0, gold))
+			choice_row.add_child(_choice_card("train_speed", "Footwork", "+8% move speed.", 0, gold))
+			choice_row.add_child(_choice_card("train_cooldown", "Rhythm", "-6% skill cooldowns.", 0, gold))
+			choice_row.add_child(_choice_card("train_resource", "Focus Drill", "+12 max inspiration.", 0, gold))
+			choice_row.add_child(_choice_card("skip", "Leave the Yard", "Skip training and keep the build unchanged.", 0, gold))
 		"pact":
-			title_label.text = "Forbidden Pact"
-			subtitle_label.text = "Take a sharp edge now, and live with the tradeoff for the rest of the run."
-			choice_row.add_child(_choice_card("pact_power", "Blood Price", "+18% attack, +10% skill damage, but skills cost more inspiration.", "res://assets/ui/trait/trait_damage.png", 0, gold))
-			choice_row.add_child(_choice_card("pact_guard", "Iron Oath", "Gain heavy defense and restore armor, but move slower.", "res://assets/ui/icon/ui_shield.png", 0, gold))
-			choice_row.add_child(_choice_card("pact_focus", "Astral Debt", "Gain inspiration and cooldown efficiency, but lose max hp.", "res://assets/ui/icon/ui_mana_flame.png", 0, gold))
-			choice_row.add_child(_choice_card("skip", "Refuse", "Walk away without changing the build.", "res://assets/ui/icon/ui_back.png", 0, gold))
+			title_label.text = UIText.text("event_pact_title")
+			subtitle_label.text = UIText.text("event_pact_subtitle")
+			choice_row.add_child(_choice_card("pact_power", "Blood Price", "+18% attack, +10% skill damage, but skills cost more inspiration.", 0, gold))
+			choice_row.add_child(_choice_card("pact_guard", "Iron Oath", "Gain heavy defense and restore armor, but move slower.", 0, gold))
+			choice_row.add_child(_choice_card("pact_focus", "Astral Debt", "Gain inspiration and cooldown efficiency, but lose max hp.", 0, gold))
+			choice_row.add_child(_choice_card("skip", "Refuse", "Walk away without changing the build.", 0, gold))
 		"attunement":
 			var tags_text := AccessoryManager.describe_tags()
-			title_label.text = "Relic Resonance"
-			subtitle_label.text = "Your relic leans toward %s. Draw out one matching response for the rest of this run." % (tags_text if not tags_text.is_empty() else "an unknown path")
+			title_label.text = UIText.text("event_attunement_title")
+			subtitle_label.text = UIText.text("event_attunement_subtitle", {
+				"path": tags_text if not tags_text.is_empty() else "an unknown path"
+			})
 			for choice in RunEffects.attunement_choices():
 				choice_row.add_child(_choice_card_from_data(choice, gold))
-			choice_row.add_child(_choice_card("skip", "Leave It Still", "Keep the relic unchanged and move on.", "res://assets/ui/icon/ui_back.png", 0, gold))
+			choice_row.add_child(_choice_card("skip", "Leave It Still", "Keep the relic unchanged and move on.", 0, gold))
 		"scout":
-			title_label.text = "Scout Report"
-			subtitle_label.text = "Choose one battle plan for the next encounter. Each route changes the opening differently."
+			title_label.text = UIText.text("event_scout_title")
+			subtitle_label.text = UIText.text("event_scout_subtitle")
 			for choice in RunEffects.scout_choices():
 				choice_row.add_child(_choice_card_from_data(choice, gold))
-			choice_row.add_child(_choice_card("skip", "Ignore the Report", "Keep your current opener and fight without extra prep.", "res://assets/ui/icon/ui_back.png", 0, gold))
+			choice_row.add_child(_choice_card("skip", "Ignore the Report", "Keep your current opener and fight without extra prep.", 0, gold))
 		_:
-			title_label.text = "Travel"
-			subtitle_label.text = "No event is available."
-			choice_row.add_child(_choice_card("skip", "Continue", "Move to the next encounter.", "res://assets/ui/icon/ui_check.png", 0, gold))
+			title_label.text = UIText.text("event_travel_title")
+			subtitle_label.text = UIText.text("event_travel_subtitle")
+			choice_row.add_child(_choice_card("skip", UIText.text("event_skip_continue"), "Move to the next encounter.", 0, gold))
 	detail_label.text = active_default_detail
 	footer_label.text = _footer_text_for_kind(kind)
 	_refresh_layout()
@@ -133,12 +135,11 @@ func _choice_card_from_data(choice: Dictionary, gold: int) -> Button:
 		String(choice.get("id", "")),
 		String(choice.get("title", "Choice")),
 		String(choice.get("summary", "")),
-		String(choice.get("icon", "res://assets/ui/icon/ui_unknown.png")),
 		int(choice.get("cost", 0)),
 		gold
 	)
 
-func _choice_card(choice_id: String, title: String, summary: String, icon_path: String, cost: int, gold: int) -> Button:
+func _choice_card(choice_id: String, title: String, summary: String, cost: int, gold: int) -> Button:
 	var button := Button.new()
 	button.text = ""
 	button.focus_mode = Control.FOCUS_ALL
@@ -146,10 +147,10 @@ func _choice_card(choice_id: String, title: String, summary: String, icon_path: 
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	button.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	button.disabled = cost > gold
-	button.add_theme_stylebox_override("normal", UISkin.texture_style(UISkin.asset("choice/choice_card_normal.png"), 30, 12))
-	button.add_theme_stylebox_override("hover", UISkin.texture_style(UISkin.asset("choice/choice_card_hover.png"), 30, 12))
-	button.add_theme_stylebox_override("pressed", UISkin.texture_style(UISkin.asset("choice/choice_card_selected.png"), 30, 12))
-	button.add_theme_stylebox_override("disabled", UISkin.texture_style(UISkin.asset("choice/choice_card_disabled.png"), 30, 12))
+	button.add_theme_stylebox_override("normal", UISkin.choice_panel_style())
+	button.add_theme_stylebox_override("hover", UISkin.flat_style(Color(0.20, 0.22, 0.26, 0.98), UISkin.COLOR_ACCENT, 2, 4, Vector4(16, 14, 16, 14)))
+	button.add_theme_stylebox_override("pressed", UISkin.flat_style(Color(0.12, 0.13, 0.16, 1.0), UISkin.COLOR_ACCENT.darkened(0.18), 2, 4, Vector4(16, 14, 16, 14)))
+	button.add_theme_stylebox_override("disabled", UISkin.flat_style(Color(0.12, 0.13, 0.15, 0.72), Color(0.34, 0.36, 0.40, 0.8), 1, 4, Vector4(16, 14, 16, 14)))
 	button.set_meta("choice_id", choice_id)
 	choice_buttons.append(button)
 
@@ -179,13 +180,14 @@ func _choice_card(choice_id: String, title: String, summary: String, icon_path: 
 	slot.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	slot.add_theme_stylebox_override("panel", UISkin.icon_slot_style())
 	box.add_child(slot)
-
-	var icon := TextureRect.new()
-	icon.custom_minimum_size = Vector2(70, 70)
-	icon.texture = load(icon_path) as Texture2D
-	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	slot.add_child(icon)
+	var icon_label := Label.new()
+	icon_label.set_anchors_preset(Control.PRESET_FULL_RECT)
+	icon_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	icon_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	icon_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	icon_label.text = String(meta.get("type", "Choice"))
+	UISkin.label(icon_label, 12, Color(0.90, 0.92, 0.98))
+	slot.add_child(icon_label)
 
 	var title_text := Label.new()
 	title_text.text = title
@@ -203,7 +205,7 @@ func _choice_card(choice_id: String, title: String, summary: String, icon_path: 
 	box.add_child(summary_label)
 
 	var cost_label := Label.new()
-	cost_label.text = "Cost %d gold" % cost if cost > 0 else "Free"
+	cost_label.text = UIText.text("event_cost_gold", {"gold": cost}) if cost > 0 else UIText.text("event_cost_free")
 	cost_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	UISkin.label(cost_label, 13, Color(1.0, 0.86, 0.55) if not button.disabled else Color(0.72, 0.54, 0.48))
 	box.add_child(cost_label)
@@ -312,35 +314,36 @@ func _default_detail_for_kind(kind: String) -> String:
 
 func _footer_text_for_kind(kind: String) -> String:
 	var shortcut_count := mini(maxi(choice_row.get_child_count(), 1), 5)
-	var lead := "1-%d choose" % shortcut_count
+	var lead := UIText.text("event_footer_base", {"count": shortcut_count})
 	if _has_skip_choice():
-		lead += "  |  Esc skip"
+		lead += UIText.text("event_footer_skip")
 	match kind:
 		"shop":
-			return "%s  |  Gold is spent immediately." % lead
+			return UIText.text("event_footer_shop", {"lead": lead})
 		"bounty":
-			return "%s  |  Payout bonuses last for the rest of the run." % lead
+			return UIText.text("event_footer_bounty", {"lead": lead})
 		"rest":
-			return "%s  |  Recovery resolves instantly." % lead
+			return UIText.text("event_footer_rest", {"lead": lead})
 		"training":
-			return "%s  |  Training stacks for the rest of the run." % lead
+			return UIText.text("event_footer_training", {"lead": lead})
 		"pact":
-			return "%s  |  Pact tradeoffs are permanent." % lead
+			return UIText.text("event_footer_pact", {"lead": lead})
 		"attunement":
-			return "%s  |  Resonance lasts for the rest of the run." % lead
+			return UIText.text("event_footer_attunement", {"lead": lead})
 		"scout":
-			return "%s  |  Scout prep expires when the next encounter ends." % lead
+			return UIText.text("event_footer_scout", {"lead": lead})
 		_:
-			return "%s  |  Continue when ready." % lead
+			return UIText.text("event_footer_travel", {"lead": lead})
 
 func _preview_choice(choice_id: String, title: String, summary: String, cost: int, disabled: bool) -> void:
 	var meta := _choice_meta(choice_id, cost)
 	var fit_data := RunEffects.evaluate_choice(choice_id, _current_actor())
-	var cost_text := "Cost %d gold." % cost if cost > 0 else "No gold cost."
+	var cost_text := UIText.text("event_cost_gold", {"gold": cost}) + "." if cost > 0 else UIText.text("event_cost_free") + "."
 	if disabled:
 		cost_text = "Not enough gold yet."
-	detail_label.text = "%s: Fit %s. %s %s %s" % [
+	detail_label.text = "%s: %s %s. %s %s %s" % [
 		title,
+		UIText.text("event_fit_label"),
 		String(fit_data.get("label", "Flexible")),
 		String(fit_data.get("reason", meta.get("detail", ""))),
 		summary,
@@ -461,10 +464,9 @@ func _refresh_layout() -> void:
 	UISkin.label(detail_label, 11 if compact else 12, Color(0.92, 0.86, 0.72))
 	UISkin.label(footer_label, 11 if compact else 12, Color(0.74, 0.80, 0.88))
 	if very_compact:
-		footer_label.text = "1-%d choose%s" % [
-			mini(maxi(choice_row.get_child_count(), 1), 5),
-			"  |  Esc skip" if _has_skip_choice() else ""
-		]
+		footer_label.text = UIText.text("event_footer_base", {"count": mini(maxi(choice_row.get_child_count(), 1), 5)})
+		if _has_skip_choice():
+			footer_label.text += UIText.text("event_footer_skip")
 	var card_width := 212.0 if very_compact else (224.0 if compact else 236.0)
 	var card_height := 238.0 if very_compact else (252.0 if compact else 274.0)
 	var available_width := maxf(choice_scroll.size.x, panel.custom_minimum_size.x - (56.0 if very_compact else 96.0))

@@ -28,7 +28,10 @@ func _ready() -> void:
 	layer = 24
 	visible = false
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	backdrop.texture = null
+	backdrop.modulate = Color(1.0, 1.0, 1.0, 0.0)
 	dimmer.color = Color(0.01, 0.012, 0.018, 0.42)
+	panel.add_theme_stylebox_override("panel", UISkin.menu_panel_style())
 	UISkin.label(title_label, 34, Color(0.98, 0.90, 0.66))
 	UISkin.label(subtitle_label, 17, Color(0.88, 0.90, 0.94))
 	UISkin.label(detail_label, 14, Color(0.74, 0.80, 0.88))
@@ -37,9 +40,12 @@ func _ready() -> void:
 	UISkin.label(timeline_label, 12, Color(0.78, 0.84, 0.92))
 	UISkin.button_styles(continue_button, "large")
 	UISkin.button_styles(quit_button, "large")
+	decoration.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	decoration.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	if get_viewport() != null and not get_viewport().size_changed.is_connected(_queue_layout_refresh):
 		get_viewport().size_changed.connect(_queue_layout_refresh)
 	_queue_layout_refresh()
+	_refresh_copy()
 	continue_button.pressed.connect(_close_result)
 	quit_button.pressed.connect(func() -> void:
 		get_tree().paused = false
@@ -47,24 +53,26 @@ func _ready() -> void:
 	)
 
 func show_result(kind: String, title: String, subtitle: String, detail: String, summary: Dictionary = {}) -> void:
-	var bg_path := "res://assets/ui/background/result_success_bg.png"
-	var panel_path := "res://assets/ui/result/victory_panel.png"
-	var deco_path := "res://assets/ui/result/victory_decoration.png"
+	var accent := Color(0.92, 0.88, 0.64)
+	var badge_text := UIText.text("result_badge")
 	if kind == "defeat":
-		bg_path = "res://assets/ui/background/result_failure_bg.png"
-		panel_path = "res://assets/ui/result/defeat_panel.png"
-		deco_path = "res://assets/ui/result/defeat_decoration.png"
+		accent = Color(0.98, 0.70, 0.64)
+		badge_text = UIText.text("result_defeat_badge")
 	elif kind == "relic":
-		bg_path = "res://assets/ui/background/result_reincarnation_bg.png"
-		panel_path = "res://assets/ui/result/reincarnation_panel.png"
-		deco_path = "res://assets/ui/result/reincarnation_decoration.png"
-	backdrop.texture = load(bg_path) as Texture2D
-	panel.add_theme_stylebox_override("panel", UISkin.texture_style(panel_path, 40, 16))
-	decoration.texture = load(deco_path) as Texture2D
+		accent = Color(0.82, 0.94, 0.76)
+		badge_text = UIText.text("result_relic_badge")
+	else:
+		badge_text = UIText.text("result_victory_badge")
+	panel.add_theme_stylebox_override("panel", UISkin.menu_panel_style())
+	decoration.texture = null
+	decoration.modulate = Color.WHITE
+	decoration.tooltip_text = ""
 	title_label.text = title
 	subtitle_label.text = subtitle
 	detail_label.text = detail
+	_set_decoration_badge(badge_text, accent)
 	_apply_summary(summary)
+	_refresh_copy()
 	visible = true
 	get_tree().paused = true
 	continue_button.grab_focus()
@@ -95,8 +103,35 @@ func _apply_summary(summary: Dictionary) -> void:
 	var timeline_text := String(summary.get("timeline", ""))
 	var has_summary := not stats_text.is_empty() or not timeline_text.is_empty()
 	summary_panel.visible = has_summary
-	stats_label.text = stats_text if not stats_text.is_empty() else "Run summary unavailable."
-	timeline_label.text = timeline_text if not timeline_text.is_empty() else "No route timeline recorded."
+	stats_label.text = stats_text if not stats_text.is_empty() else UIText.text("result_summary_missing")
+	timeline_label.text = timeline_text if not timeline_text.is_empty() else UIText.text("result_timeline_missing")
+
+func _refresh_copy() -> void:
+	continue_button.text = UIText.text("result_continue")
+	quit_button.text = UIText.text("result_quit")
+
+func _set_decoration_badge(text_value: String, accent: Color) -> void:
+	for child in decoration.get_children():
+		child.queue_free()
+	var badge_panel := PanelContainer.new()
+	badge_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	badge_panel.offset_left = 0.0
+	badge_panel.offset_top = 0.0
+	badge_panel.offset_right = 0.0
+	badge_panel.offset_bottom = 0.0
+	badge_panel.add_theme_stylebox_override(
+		"panel",
+		UISkin.flat_style(accent.darkened(0.82), accent, 1, 3, Vector4(12, 10, 12, 10))
+	)
+	decoration.add_child(badge_panel)
+	var badge_label := Label.new()
+	badge_label.set_anchors_preset(Control.PRESET_FULL_RECT)
+	badge_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	badge_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	badge_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	badge_label.text = text_value
+	UISkin.label(badge_label, 16, accent.lightened(0.1))
+	badge_panel.add_child(badge_label)
 
 func _refresh_layout() -> void:
 	if panel == null:

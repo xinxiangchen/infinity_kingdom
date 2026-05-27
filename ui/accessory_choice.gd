@@ -54,8 +54,8 @@ func open(choices: Array[Dictionary], actor: Node, reason: String = "Relic Offer
 	active_reroll_cost = reroll_cost
 	active_gold = gold
 	title_label.text = reason
-	subtitle_label.text = "Equip one relic. The current relic is replaced immediately. Use 1 / 2 / 3 to choose fast."
-	reroll_button.text = "Reroll - %d Gold" % reroll_cost
+	subtitle_label.text = UIText.text("accessory_subtitle")
+	reroll_button.text = UIText.text("accessory_reroll", {"gold": reroll_cost})
 	reroll_button.disabled = reroll_cost > gold
 	_refresh_current()
 	_rebuild_choices()
@@ -86,11 +86,15 @@ func _apply_skin() -> void:
 	footer_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	UISkin.button_styles(keep_button, "thin")
 	UISkin.button_styles(reroll_button, "thin")
+	current_icon.visible = false
+	_ensure_slot_placeholder(current_icon_slot)
 
 func _refresh_current() -> void:
 	var current := AccessoryManager.get_equipped_accessory()
-	current_icon.texture = load(String(current.get("icon", "res://assets/ui/icon/ui_unknown.png"))) as Texture2D
-	current_name_label.text = "Current: %s" % String(current.get("name", "No Accessory"))
+	current_icon.texture = null
+	var current_placeholder := _ensure_slot_placeholder(current_icon_slot)
+	current_placeholder.text = _accessory_placeholder_text(current, UIText.text("status_relic"))
+	current_name_label.text = "%s: %s" % [UIText.text("accessory_current"), String(current.get("name", UIText.text("accessory_none")))]
 	var tags_text := AccessoryManager.describe_tags(current.get("tags", []))
 	var playstyle_text := AccessoryManager.describe_playstyle(current.get("tags", []))
 	var detail_parts: Array[String] = []
@@ -118,8 +122,8 @@ func _rebuild_choices() -> void:
 		choice_data.append(accessory.duplicate(true))
 		choices_row.add_child(button)
 		choice_index += 1
-	preview_title_label.text = "Preview"
-	preview_detail_label.text = "Hover or focus a relic to preview its run plan."
+	preview_title_label.text = UIText.text("accessory_preview")
+	preview_detail_label.text = UIText.text("accessory_preview_hint")
 	footer_label.text = _footer_text(false)
 	_refresh_layout()
 
@@ -130,9 +134,9 @@ func _choice_card(accessory: Dictionary, choice_index: int) -> Button:
 	button.custom_minimum_size = Vector2(296, 326)
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	button.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	button.add_theme_stylebox_override("normal", UISkin.texture_style(UISkin.asset("choice/choice_card_normal.png"), 30, 12))
-	button.add_theme_stylebox_override("hover", UISkin.texture_style(UISkin.asset("choice/choice_card_hover.png"), 30, 12))
-	button.add_theme_stylebox_override("pressed", UISkin.texture_style(UISkin.asset("choice/choice_card_selected.png"), 30, 12))
+	button.add_theme_stylebox_override("normal", UISkin.choice_panel_style())
+	button.add_theme_stylebox_override("hover", UISkin.flat_style(Color(0.20, 0.22, 0.26, 0.98), UISkin.COLOR_ACCENT, 2, 4, Vector4(16, 14, 16, 14)))
+	button.add_theme_stylebox_override("pressed", UISkin.flat_style(Color(0.12, 0.13, 0.16, 1.0), UISkin.COLOR_ACCENT.darkened(0.18), 2, 4, Vector4(16, 14, 16, 14)))
 	button.set_meta("accessory_id", String(accessory.get("id", "")))
 
 	var margin := MarginContainer.new()
@@ -151,14 +155,10 @@ func _choice_card(accessory: Dictionary, choice_index: int) -> Button:
 	var slot := PanelContainer.new()
 	slot.custom_minimum_size = Vector2(86, 86)
 	slot.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	slot.add_theme_stylebox_override("panel", UISkin.texture_style(UISkin.asset("choice/choice_icon_slot.png"), 22, 4))
+	slot.add_theme_stylebox_override("panel", UISkin.icon_slot_style())
 	box.add_child(slot)
-	var icon := TextureRect.new()
-	icon.custom_minimum_size = Vector2(72, 72)
-	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	icon.texture = load(String(accessory.get("icon", "res://assets/ui/icon/ui_unknown.png"))) as Texture2D
-	slot.add_child(icon)
+	var slot_label := _ensure_slot_placeholder(slot)
+	slot_label.text = _accessory_placeholder_text(accessory, str(choice_index + 1))
 	var name_label := Label.new()
 	name_label.text = String(accessory.get("name", "Accessory"))
 	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -167,11 +167,9 @@ func _choice_card(accessory: Dictionary, choice_index: int) -> Button:
 	UISkin.label(name_label, 18, Color.WHITE)
 	box.add_child(name_label)
 
-	var divider := TextureRect.new()
-	divider.custom_minimum_size = Vector2(0, 8)
-	divider.texture = UISkin.tex(UISkin.asset("frame/divider_gold_h_long.png"))
-	divider.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	divider.stretch_mode = TextureRect.STRETCH_SCALE
+	var divider := ColorRect.new()
+	divider.custom_minimum_size = Vector2(0, 2)
+	divider.color = Color(0.40, 0.44, 0.52, 0.92)
 	box.add_child(divider)
 
 	var rarity_label := Label.new()
@@ -264,7 +262,8 @@ func _preview_accessory(choice_index: int) -> void:
 	var summary_text := String(accessory.get("summary", ""))
 	var effect_text := AccessoryManager.describe_effects(accessory)
 	var playstyle_text := AccessoryManager.describe_playstyle(accessory.get("tags", []))
-	preview_title_label.text = "Preview %d: %s%s" % [
+	preview_title_label.text = "%s %d: %s%s" % [
+		UIText.text("accessory_preview"),
 		choice_index + 1,
 		accessory_name,
 		("  |  %s" % tags_text) if not tags_text.is_empty() else ""
@@ -286,8 +285,11 @@ func _focus_first_choice() -> void:
 
 func _footer_text(compact: bool) -> String:
 	if compact:
-		return "1-3 choose  |  K keep  |  R reroll"
-	return "1 / 2 / 3 choose  |  K keep  |  R reroll %d gold  |  Gold %d  |  Esc keep" % [active_reroll_cost, active_gold]
+		return UIText.text("accessory_footer_short")
+	return UIText.text("accessory_footer", {
+		"gold": active_reroll_cost,
+		"current_gold": active_gold
+	})
 
 func _rarity_color(rarity: String) -> Color:
 	match rarity:
@@ -301,6 +303,34 @@ func _rarity_color(rarity: String) -> Color:
 			return Color(1.0, 0.72, 0.35)
 		_:
 			return Color(0.78, 0.80, 0.84)
+
+func _ensure_slot_placeholder(slot: PanelContainer) -> Label:
+	var placeholder := slot.get_node_or_null("PlaceholderLabel") as Label
+	if placeholder == null:
+		placeholder = Label.new()
+		placeholder.name = "PlaceholderLabel"
+		placeholder.set_anchors_preset(Control.PRESET_FULL_RECT)
+		placeholder.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		placeholder.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		placeholder.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		slot.add_child(placeholder)
+	UISkin.label(placeholder, 12, Color(0.90, 0.92, 0.98))
+	return placeholder
+
+func _accessory_placeholder_text(accessory: Dictionary, fallback: String) -> String:
+	var tags := accessory.get("tags", []) as Array
+	if not tags.is_empty():
+		var primary_tag := str(tags[0]).replace("_", " ").to_upper()
+		return primary_tag.substr(0, mini(primary_tag.length(), 6))
+	var name := String(accessory.get("name", ""))
+	var initials := ""
+	for word in name.split(" ", false):
+		if initials.length() >= 3:
+			break
+		initials += word.substr(0, 1).to_upper()
+	if not initials.is_empty():
+		return initials
+	return fallback
 
 func _queue_layout_refresh() -> void:
 	call_deferred("_refresh_layout")
@@ -350,8 +380,8 @@ func _refresh_layout() -> void:
 	reroll_button.custom_minimum_size = Vector2(0.0, 48.0 if compact else 54.0)
 	keep_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	reroll_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	keep_button.text = "Keep" if very_compact else "Keep Current"
-	reroll_button.text = "Reroll" if compact else "Reroll - %d Gold" % active_reroll_cost
+	keep_button.text = UIText.text("accessory_keep_short") if very_compact else UIText.text("accessory_keep")
+	reroll_button.text = UIText.text("accessory_reroll_short") if compact else UIText.text("accessory_reroll", {"gold": active_reroll_cost})
 	footer_label.text = _footer_text(very_compact)
 	for child in choices_row.get_children():
 		if child is Button:

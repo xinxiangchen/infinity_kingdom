@@ -39,6 +39,9 @@ func _initialize() -> void:
 	call_deferred("_run")
 
 func _run() -> void:
+	var ui_settings := root.get_node_or_null("/root/UISettings")
+	if ui_settings != null and ui_settings.has_method("set_locale"):
+		ui_settings.call("set_locale", "en", false)
 	var world_scene := load("res://world.tscn") as PackedScene
 	if world_scene == null:
 		push_error("world.tscn did not load")
