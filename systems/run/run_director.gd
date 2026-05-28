@@ -74,6 +74,10 @@ var pending_encounter_prep: Dictionary = {}
 var events_per_run: int = DEFAULT_EVENTS_PER_RUN
 var event_history: Array[Dictionary] = []
 var reward_history: Array[int] = []
+var hero_level: int = 1
+var hero_xp: int = 0
+var hero_xp_to_next: int = 45
+var total_kills: int = 0
 var rng := RandomNumberGenerator.new()
 
 func _ready() -> void:
@@ -91,6 +95,10 @@ func reset_run() -> void:
 	pending_encounter_prep.clear()
 	event_history.clear()
 	reward_history.clear()
+	hero_level = 1
+	hero_xp = 0
+	hero_xp_to_next = _xp_needed_for_level(hero_level)
+	total_kills = 0
 	_emit_state()
 
 func reward_encounter(encounter_index: int, actor: Node = null) -> int:
@@ -116,6 +124,42 @@ func grant_gold(amount: int) -> void:
 	if amount <= 0:
 		return
 	gold += amount
+	_emit_state()
+
+func grant_experience(amount: int) -> Dictionary:
+	var granted := maxi(amount, 0)
+	var previous_level := hero_level
+	if granted <= 0:
+		return {
+			"granted": 0,
+			"previous_level": previous_level,
+			"current_level": hero_level,
+			"levels_gained": 0,
+			"xp": hero_xp,
+			"xp_to_next": hero_xp_to_next
+		}
+	hero_xp += granted
+	var levels_gained := 0
+	while hero_xp >= hero_xp_to_next:
+		hero_xp -= hero_xp_to_next
+		hero_level += 1
+		levels_gained += 1
+		hero_xp_to_next = _xp_needed_for_level(hero_level)
+	_emit_state()
+	return {
+		"granted": granted,
+		"previous_level": previous_level,
+		"current_level": hero_level,
+		"levels_gained": levels_gained,
+		"xp": hero_xp,
+		"xp_to_next": hero_xp_to_next
+	}
+
+func record_kill(amount: int = 1) -> void:
+	var granted := maxi(amount, 0)
+	if granted <= 0:
+		return
+	total_kills += granted
 	_emit_state()
 
 func next_event_kind() -> String:
@@ -256,7 +300,11 @@ func get_state() -> Dictionary:
 		"reward_multiplier": reward_multiplier,
 		"pending_encounter_prep": peek_pending_encounter_prep(),
 		"event_history": get_event_history(),
-		"reward_history": get_reward_history()
+		"reward_history": get_reward_history(),
+		"hero_level": hero_level,
+		"hero_xp": hero_xp,
+		"hero_xp_to_next": hero_xp_to_next,
+		"total_kills": total_kills
 	}
 
 func _emit_state() -> void:
@@ -304,6 +352,10 @@ func _build_event_deck() -> Array[String]:
 		deck.append(pool[next_index])
 		pool.remove_at(next_index)
 	return deck
+
+func _xp_needed_for_level(level: int) -> int:
+	var normalized_level := maxi(level, 1)
+	return 45 + maxi(normalized_level - 1, 0) * 18 + maxi(normalized_level - 2, 0) * 8
 
 func _ratio(actor: Node, current_field: String, max_field: String) -> float:
 	if not _has_property(actor, current_field) or not _has_property(actor, max_field):

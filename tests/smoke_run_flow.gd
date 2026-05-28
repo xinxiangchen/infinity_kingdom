@@ -107,6 +107,23 @@ func _run() -> void:
 		push_error("RunDirector did not return the queued encounter prep")
 		quit(1)
 		return
+	var xp_result: Dictionary = run_director.grant_experience(80)
+	if int(xp_result.get("current_level", 1)) < 2 or int(run_director.get_state().get("hero_xp_to_next", 0)) <= 0:
+		push_error("RunDirector experience did not level the hero up")
+		quit(1)
+		return
+	run_director.record_kill(3)
+	var progression_state: Dictionary = run_director.get_state()
+	if int(progression_state.get("total_kills", 0)) != 3:
+		push_error("RunDirector kill counter did not update")
+		quit(1)
+		return
+	run_director.reset_run()
+	progression_state = run_director.get_state()
+	if int(progression_state.get("hero_level", 0)) != 1 or int(progression_state.get("hero_xp", -1)) != 0 or int(progression_state.get("total_kills", -1)) != 0:
+		push_error("RunDirector progression did not reset cleanly")
+		quit(1)
+		return
 
 	world._on_character_selected(&"knight")
 	await process_frame
@@ -163,9 +180,15 @@ func _run() -> void:
 		push_error("Encounter did not begin after keep shortcut")
 		quit(1)
 		return
+	await process_frame
+	var encounter_health_bars: Array = world.current_encounter.find_children("WorldHealthBar", "", true, false)
+	if encounter_health_bars.is_empty():
+		push_error("Encounter actors did not receive world health bars")
+		quit(1)
+		return
 	var hud_run_state := world.character_hud.get("run_state_label") as Label
-	if hud_run_state == null or hud_run_state.text.find("Next") == -1:
-		push_error("Character HUD run state did not populate")
+	if hud_run_state == null or hud_run_state.text.find("Level") == -1:
+		push_error("Character HUD run state did not include progression details")
 		quit(1)
 		return
 	var threat_value := world.battle_status.get("threat_value_label") as Label

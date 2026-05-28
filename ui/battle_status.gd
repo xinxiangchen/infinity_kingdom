@@ -247,6 +247,10 @@ func _on_run_state_changed(state: Dictionary) -> void:
 	var reward_flat_bonus := int(state.get("reward_flat_bonus", 0))
 	var reward_multiplier := float(state.get("reward_multiplier", 1.0))
 	var pending_prep := state.get("pending_encounter_prep", {}) as Dictionary
+	var hero_level := int(state.get("hero_level", 1))
+	var hero_xp := int(state.get("hero_xp", 0))
+	var hero_xp_to_next := int(state.get("hero_xp_to_next", 45))
+	var total_kills := int(state.get("total_kills", 0))
 	var route_preview := RunDirector.describe_event_route(3) if RunDirector != null else _locale_text("No route data", "暂无路线数据", "暫無路線資料")
 	var prep_text := ""
 	if not pending_prep.is_empty():
@@ -269,17 +273,29 @@ func _on_run_state_changed(state: Dictionary) -> void:
 	(metric_value_labels.get("next") as Label).text = next_text
 	(metric_value_labels.get("effects") as Label).text = _locale_text("%d active", "%d 条激活", "%d 條啟動") % modifier_count
 
-	run_bonus_label.text = "%s %s" % [_locale_text("Bounty", "赏金", "賞金"), bonus_text]
+	run_bonus_label.text = "%s %d  |  %s %d/%d  |  %s %d  |  %s %s" % [
+		_locale_text("Level", "等级", "等級"),
+		hero_level,
+		_locale_text("XP", "经验", "經驗"),
+		hero_xp,
+		hero_xp_to_next,
+		_locale_text("Kills", "击杀", "擊殺"),
+		total_kills,
+		_locale_text("Bounty", "赏金", "賞金"),
+		bonus_text
+	]
 	run_route_label.text = "%s %s%s" % [
 		_locale_text("Route", "路线", "路線"),
 		route_preview,
 		("  |  %s" % prep_text) if not prep_text.is_empty() else ""
 	]
-	run_label.text = "%s +%d  |  %s %s" % [
+	run_label.text = "%s +%d  |  %s %d  |  %s %s" % [
 		_locale_text("Last reward", "上次奖励", "上次獎勵"),
 		int(state.get("last_reward_gold", 0)),
+		_locale_text("Run Effects", "局内加成", "局內加成"),
+		modifier_count,
 		_locale_text("Current focus", "当前重心", "當前重心"),
-		_locale_text("Build the next spike cleanly.", "把下一次强势窗口做得更干净。", "把下一次強勢窗口做得更乾淨。")
+		_locale_text("Kill cleanly, scoop drops, and turn levels into safer boss checks.", "打干净、捡掉落，把等级优势转成更稳的 Boss 检定。", "打乾淨、撿掉落，把等級優勢轉成更穩的 Boss 檢定。")
 	]
 
 func _refresh_copy(_locale: String = "") -> void:

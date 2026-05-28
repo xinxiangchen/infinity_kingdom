@@ -231,7 +231,19 @@ func _refresh_context() -> void:
 		bounty_text += _locale_text("  |  +%d gold", "  |  +%d 金币", "  |  +%d 金幣") % reward_flat_bonus
 	if reward_multiplier > 1.001:
 		bounty_text += _locale_text("  |  x%.2f reward", "  |  x%.2f 奖励", "  |  x%.2f 獎勵") % reward_multiplier
-	run_summary_label.text = "%s %s  |  %s %d  |  %s %d%s" % [_locale_text("Hero", "角色", "角色"), hero_name, _locale_text("Gold", "金币", "金幣"), gold_value, _locale_text("Cleared", "完成", "完成"), cleared_value, bounty_text]
+	run_summary_label.text = "%s %s  |  %s %d  |  %s %d  |  %s %d  |  %s %d%s" % [
+		_locale_text("Hero", "角色", "角色"),
+		hero_name,
+		_locale_text("Gold", "金币", "金幣"),
+		gold_value,
+		_locale_text("Cleared", "完成", "完成"),
+		cleared_value,
+		_locale_text("Level", "等级", "等級"),
+		int(run_state.get("hero_level", 1)),
+		_locale_text("Kills", "击杀", "擊殺"),
+		int(run_state.get("total_kills", 0)),
+		bounty_text
+	]
 	var prep_parts: Array[String] = []
 	if not active_prep.is_empty():
 		prep_parts.append(_locale_text("Active prep %s", "已生效准备：%s", "已生效準備：%s") % RunEffects.prep_title(active_prep))

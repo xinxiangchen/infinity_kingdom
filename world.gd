@@ -4,6 +4,9 @@ const KNIGHT_SCENE := preload("res://characters/knight/knight.tscn")
 const RANGER_SCENE := preload("res://characters/ranger/ranger.tscn")
 const MAGE_SCENE := preload("res://characters/mage/mage.tscn")
 const RunEffects := preload("res://systems/run/run_effects.gd")
+const DAMAGE_NUMBER_SCENE := preload("res://effects/damage_number.tscn")
+const RUN_PICKUP_SCRIPT := preload("res://systems/pickups/run_pickup.gd")
+const WORLD_HEALTH_BAR_SCRIPT := preload("res://ui/world_health_bar.gd")
 const ENCOUNTER_SCENES := [
 	preload("res://actors/encounters/town_mob_encounter.tscn"),
 	preload("res://actors/bosses/town/judicator_boss.tscn"),
@@ -12,6 +15,11 @@ const ENCOUNTER_SCENES := [
 ]
 const RELIC_REROLL_COST := 20
 const HIT_FEEDBACK_COOLDOWN_MSEC := 55
+const LEVEL_UP_FLASH_COLOR := Color(1.0, 0.92, 0.62, 1.0)
+const XP_FLASH_COLOR := Color(0.68, 0.86, 1.0, 1.0)
+const GOLD_FLASH_COLOR := Color(1.0, 0.88, 0.52, 1.0)
+const HEAL_FLASH_COLOR := Color(0.62, 1.0, 0.76, 1.0)
+const REPAIR_FLASH_COLOR := Color(0.58, 0.94, 0.96, 1.0)
 
 @onready var spawn_marker: Marker2D = $PlayerSpawn
 @onready var encounter_marker: Marker2D = $EncounterSpawn
@@ -41,8 +49,12 @@ var active_encounter_prep: Dictionary = {}
 var return_pause_after_audio_panel: bool = false
 var return_pause_after_settings_panel: bool = false
 var last_attack_feedback_msec: int = 0
+var reward_rng := RandomNumberGenerator.new()
 
 func _ready() -> void:
+	reward_rng.randomize()
+	if get_tree() != null and not get_tree().node_added.is_connected(_on_tree_node_added):
+		get_tree().node_added.connect(_on_tree_node_added)
 	RunDirector.configure_event_count(maxi(ENCOUNTER_SCENES.size() - 1, 1))
 	if character_select != null:
 		character_select.character_selected.connect(_on_character_selected)
@@ -199,6 +211,8 @@ func _start_next_encounter() -> void:
 		current_encounter.bind_player(player_character)
 	if current_encounter.has_signal("defeated"):
 		current_encounter.defeated.connect(_on_encounter_defeated)
+	_bind_encounter_actor_if_needed(current_encounter)
+	_bind_existing_encounter_actors(current_encounter)
 	_refresh_battle_status()
 
 func _on_encounter_defeated() -> void:
@@ -404,7 +418,7 @@ func _build_result_summary() -> Dictionary:
 		if not parts.is_empty():
 			timeline_text = "  /  ".join(parts)
 	return {
-		"stats": _ui_text("Hero", "角色", "角色") + " %s  |  " % hero_name + _ui_text("Relic", "饰品", "飾品") + " %s  |  " % accessory_name + _ui_text("Gold", "金币", "金幣") + " %d  |  " % int(run_state.get("gold", 0)) + _ui_text("Cleared", "完成", "完成") + " %d  |  " % int(run_state.get("cleared_encounters", 0)) + _ui_text("Avg reward", "平均奖励", "平均獎勵") + " %d" % average_reward,
+		"stats": _ui_text("Hero", "角色", "角色") + " %s  |  " % hero_name + _ui_text("Relic", "饰品", "飾品") + " %s  |  " % accessory_name + _ui_text("Gold", "金币", "金幣") + " %d  |  " % int(run_state.get("gold", 0)) + _ui_text("Cleared", "完成", "完成") + " %d  |  " % int(run_state.get("cleared_encounters", 0)) + _ui_text("Level", "等级", "等級") + " %d  |  " % int(run_state.get("hero_level", 1)) + _ui_text("Kills", "击杀", "擊殺") + " %d  |  " % int(run_state.get("total_kills", 0)) + _ui_text("Avg reward", "平均奖励", "平均獎勵") + " %d" % average_reward,
 		"timeline": timeline_text
 	}
 
@@ -512,6 +526,356 @@ func _on_actor_died(actor: Node) -> void:
 		return
 	var event_id := "%s_dead" % String(actor.get_character_name()).to_lower()
 	Sfx.play_event(StringName(event_id), actor.global_position)
+
+func _on_tree_node_added(node: Node) -> void:
+	call_deferred("_bind_encounter_actor_if_needed", node)
+
+func _bind_existing_encounter_actors(root: Node) -> void:
+	if root == null or not is_instance_valid(root):
+		return
+	_bind_encounter_actor_if_needed(root)
+	for child in root.get_children():
+		if child is Node:
+			_bind_existing_encounter_actors(child)
+
+func _bind_encounter_actor_if_needed(node: Node) -> void:
+	if node == null or not is_instance_valid(node):
+		return
+	if current_encounter == null or not is_instance_valid(current_encounter):
+		return
+	if node == player_character or not (node is Node2D):
+		return
+	var within_active_encounter := node == current_encounter or current_encounter.is_ancestor_of(node)
+	if not within_active_encounter:
+		return
+	if not node.has_method("receive_hit") or not node.has_signal("defeated"):
+		return
+	if not node.has_meta("world_reward_bound"):
+		node.set_meta("world_reward_bound", true)
+		node.defeated.connect(_on_encounter_actor_defeated.bind(node))
+	if not node.has_meta("world_health_bar_bound"):
+		node.set_meta("world_health_bar_bound", true)
+		var health_bar := WORLD_HEALTH_BAR_SCRIPT.new()
+		node.add_child(health_bar)
+		health_bar.setup(node, _health_bar_options(node))
+
+func _health_bar_options(actor: Node) -> Dictionary:
+	var script_path := _script_path(actor)
+	var max_hp_value := _actor_max_hp(actor)
+	var boss := script_path.contains("actors/bosses/")
+	var elite := boss or (_has_property(actor, "elite") and bool(actor.get("elite")))
+	var bar_width := 58.0
+	var y_offset := -48.0
+	if elite:
+		bar_width = 78.0
+		y_offset = -58.0
+	if boss:
+		bar_width = 108.0 if max_hp_value < 5000.0 else 124.0
+		y_offset = -76.0
+	return {
+		"always_visible": elite or boss,
+		"elite": elite,
+		"boss": boss,
+		"bar_width": bar_width,
+		"y_offset": y_offset,
+		"hp_height": 9.0 if boss else (8.0 if elite else 7.0),
+		"defense_height": 4.0 if boss else 3.0
+	}
+
+func _on_encounter_actor_defeated(actor: Node) -> void:
+	if actor == null or not is_instance_valid(actor):
+		return
+	if actor.has_meta("world_reward_claimed"):
+		return
+	actor.set_meta("world_reward_claimed", true)
+	if player_character == null or not is_instance_valid(player_character):
+		return
+	if _has_property(player_character, "hp") and float(player_character.get("hp")) <= 0.0:
+		return
+	RunDirector.record_kill()
+	var reward := _build_defeat_rewards(actor)
+	var xp_amount := int(reward.get("xp", 0))
+	var reward_position := (actor as Node2D).global_position
+	if xp_amount > 0:
+		var xp_result := RunDirector.grant_experience(xp_amount)
+		_spawn_world_text(
+			reward_position + Vector2(0.0, -20.0),
+			_ui_text("+%d XP", "+%d 经验", "+%d 經驗") % xp_amount,
+			XP_FLASH_COLOR,
+			0.8
+		)
+		_push_hud_feed(
+			_ui_text("+%d XP secured", "获得 +%d 经验", "獲得 +%d 經驗") % xp_amount,
+			XP_FLASH_COLOR,
+			1.03
+		)
+		var levels_gained := int(xp_result.get("levels_gained", 0))
+		if levels_gained > 0:
+			_apply_level_up_rewards(player_character, levels_gained)
+			var level_value := int(xp_result.get("current_level", 1))
+			_spawn_world_text(
+				player_character.global_position + Vector2(0.0, -54.0),
+				_ui_text("Level %d", "等级 %d", "等級 %d") % level_value,
+				LEVEL_UP_FLASH_COLOR,
+				0.96
+			)
+			_push_hud_feed(
+				_ui_text("Level %d reached", "达到等级 %d", "達到等級 %d") % level_value,
+				LEVEL_UP_FLASH_COLOR,
+				1.08
+			)
+	_spawn_reward_pickups(reward_position, reward.get("drops", []) as Array)
+
+func _build_defeat_rewards(actor: Node) -> Dictionary:
+	var script_path := _script_path(actor)
+	var boss := script_path.contains("actors/bosses/")
+	var elite := boss or (_has_property(actor, "elite") and bool(actor.get("elite")))
+	var max_hp_value := _actor_max_hp(actor)
+	var max_defense_value := _actor_max_defense(actor)
+	var attack_value := _actor_attack_damage(actor)
+	var power_score := max_hp_value * 0.022 + max_defense_value * 0.028 + attack_value * 0.42
+	var xp_amount := int(round(8.0 + power_score * (2.2 if boss else (1.38 if elite else 1.0))))
+	if boss:
+		xp_amount = maxi(xp_amount, 90)
+	elif elite:
+		xp_amount = maxi(xp_amount, 20)
+	else:
+		xp_amount = maxi(xp_amount, 10)
+	var gold_total := int(round(2.0 + power_score * (0.72 if boss else (0.56 if elite else 0.38))))
+	if boss:
+		gold_total = maxi(gold_total, 26)
+	elif elite:
+		gold_total = maxi(gold_total, 8)
+	else:
+		gold_total = maxi(gold_total, 3)
+	var drops: Array[Dictionary] = []
+	var gold_chunks := 1 if gold_total <= 6 else (2 if gold_total <= 16 else 3)
+	for gold_amount in _split_drop_amount(gold_total, gold_chunks):
+		drops.append(_drop_entry("gold", float(gold_amount)))
+	var is_shield := script_path.contains("shield") or script_path.contains("guard")
+	var is_arcane := script_path.contains("mage") or script_path.contains("arcanist") or script_path.contains("judicator")
+	var is_hunter := script_path.contains("hunter") or script_path.contains("twin")
+	if boss:
+		drops.append(_drop_entry("repair", maxf(22.0, _player_stat_value("max_defense") * 0.28)))
+		drops.append(_drop_entry("inspiration", maxf(8.0, _player_stat_value("max_inspiration") * 0.40)))
+		drops.append(_drop_entry("heal", maxf(12.0, _player_stat_value("max_hp") * 0.14)))
+	else:
+		if is_shield or max_defense_value >= 90.0 or reward_rng.randf() < (0.18 + (0.16 if elite else 0.0)):
+			drops.append(_drop_entry("repair", clampf(10.0 + max_defense_value * 0.09, 10.0, 28.0)))
+		if is_arcane or reward_rng.randf() < (0.20 + (0.14 if elite else 0.0)):
+			drops.append(_drop_entry("inspiration", clampf(4.0 + attack_value * 0.08, 4.0, 12.0)))
+		if is_hunter or reward_rng.randf() < (0.12 + (0.12 if elite else 0.0)):
+			drops.append(_drop_entry("heal", clampf(6.0 + max_hp_value * 0.025, 6.0, 18.0)))
+		if elite and drops.size() < 3:
+			drops.append(_drop_entry("inspiration", 8.0))
+	return {
+		"xp": xp_amount,
+		"drops": drops
+	}
+
+func _spawn_reward_pickups(world_position: Vector2, drops: Array) -> void:
+	if drops.is_empty():
+		return
+	for index in range(drops.size()):
+		var drop := drops[index] as Dictionary
+		var pickup := RUN_PICKUP_SCRIPT.new()
+		pickup.global_position = world_position
+		var angle := TAU * float(index) / float(max(drops.size(), 1)) + reward_rng.randf_range(-0.22, 0.22)
+		pickup.setup(
+			String(drop.get("kind", "gold")),
+			float(drop.get("amount", 0.0)),
+			{
+				"tint": _pickup_tint(String(drop.get("kind", "gold"))),
+				"launch_speed": 34.0 + float(index) * 8.0,
+				"launch_angle": angle
+			}
+		)
+		pickup.collected.connect(_on_run_pickup_collected)
+		add_child(pickup)
+
+func _on_run_pickup_collected(kind: String, amount: float, world_position: Vector2) -> void:
+	if player_character == null or not is_instance_valid(player_character):
+		return
+	match kind:
+		"gold":
+			var gold_amount := int(round(amount))
+			RunDirector.grant_gold(gold_amount)
+			_spawn_world_text(world_position, _ui_text("+%d Gold", "+%d 金币", "+%d 金幣") % gold_amount, GOLD_FLASH_COLOR, 0.78)
+			_push_hud_feed(_ui_text("+%d gold picked up", "拾取 +%d 金币", "拾取 +%d 金幣") % gold_amount, GOLD_FLASH_COLOR, 1.02)
+		"inspiration":
+			_grant_actor_inspiration(player_character, amount)
+			_spawn_world_text(world_position, _ui_text("+%d Insp", "+%d 灵感", "+%d 靈感") % int(round(amount)), XP_FLASH_COLOR, 0.76)
+			_push_hud_feed(_ui_text("Inspiration +%d", "灵感 +%d", "靈感 +%d") % int(round(amount)), XP_FLASH_COLOR, 1.02)
+		"repair":
+			_restore_actor_defense(player_character, amount)
+			_spawn_world_text(world_position, _ui_text("+%d DEF", "+%d 护甲", "+%d 護甲") % int(round(amount)), REPAIR_FLASH_COLOR, 0.76)
+			_push_hud_feed(_ui_text("Defense +%d", "护甲 +%d", "護甲 +%d") % int(round(amount)), REPAIR_FLASH_COLOR, 1.02)
+		"heal":
+			_heal_actor(player_character, amount)
+			_spawn_world_text(world_position, _ui_text("+%d HP", "+%d 生命", "+%d 生命") % int(round(amount)), HEAL_FLASH_COLOR, 0.76)
+			_push_hud_feed(_ui_text("Recovered +%d HP", "恢复 +%d 生命", "恢復 +%d 生命") % int(round(amount)), HEAL_FLASH_COLOR, 1.02)
+
+func _apply_level_up_rewards(actor: Node, levels_gained: int) -> void:
+	if actor == null or not is_instance_valid(actor):
+		return
+	for _level_index in range(levels_gained):
+		_apply_single_level_bonus(actor)
+	_sync_actor_progression(actor)
+
+func _apply_single_level_bonus(actor: Node) -> void:
+	if _has_property(actor, "max_hp"):
+		var hp_gain := maxf(float(actor.get("max_hp")) * 0.10, 12.0)
+		actor.set("max_hp", float(actor.get("max_hp")) + hp_gain)
+		if _has_property(actor, "hp"):
+			actor.set("hp", minf(float(actor.get("hp")) + hp_gain, float(actor.get("max_hp"))))
+	if _has_property(actor, "max_defense"):
+		var defense_gain := maxf(float(actor.get("max_defense")) * 0.10, 10.0)
+		actor.set("max_defense", float(actor.get("max_defense")) + defense_gain)
+		if _has_property(actor, "defense"):
+			actor.set("defense", float(actor.get("max_defense")))
+	if _has_property(actor, "max_inspiration"):
+		var inspiration_gain := maxf(float(actor.get("max_inspiration")) * 0.06, 3.0)
+		actor.set("max_inspiration", float(actor.get("max_inspiration")) + inspiration_gain)
+		if _has_property(actor, "inspiration"):
+			actor.set("inspiration", minf(float(actor.get("inspiration")) + inspiration_gain + 4.0, float(actor.get("max_inspiration"))))
+	if _has_property(actor, "attack_damage"):
+		actor.set("attack_damage", float(actor.get("attack_damage")) * 1.06)
+	if _has_property(actor, "crit_rate"):
+		actor.set("crit_rate", clampf(float(actor.get("crit_rate")) + 0.02, 0.0, 0.85))
+	if _has_property(actor, "attack_interval"):
+		actor.set("attack_interval", maxf(float(actor.get("attack_interval")) * 0.985, 0.22))
+
+func _sync_actor_progression(actor: Node) -> void:
+	var health_component := _health_component(actor)
+	if health_component != null:
+		if _has_property(actor, "max_hp"):
+			health_component.max_hp = float(actor.get("max_hp"))
+		if _has_property(actor, "hp"):
+			health_component.hp = clampf(float(actor.get("hp")), 0.0, float(actor.get("max_hp")))
+		if _has_property(actor, "max_defense"):
+			health_component.max_defense = float(actor.get("max_defense"))
+		if _has_property(actor, "defense"):
+			health_component.defense = clampf(float(actor.get("defense")), 0.0, float(actor.get("max_defense")))
+		if health_component.has_signal("defense_changed"):
+			health_component.defense_changed.emit(float(health_component.defense), float(health_component.max_defense))
+	if actor.has_method("emit_stat_signals"):
+		actor.emit_stat_signals()
+
+func _health_component(actor: Node) -> Node:
+	if actor == null:
+		return null
+	if _has_property(actor, "health_component"):
+		return actor.get("health_component") as Node
+	return actor.get_node_or_null("HealthComponent")
+
+func _heal_actor(actor: Node, amount: float) -> void:
+	if actor == null or not is_instance_valid(actor) or amount <= 0.0:
+		return
+	var health_component := _health_component(actor)
+	if health_component != null and health_component.has_method("heal"):
+		health_component.heal(amount)
+	elif _has_property(actor, "hp") and _has_property(actor, "max_hp"):
+		actor.set("hp", minf(float(actor.get("hp")) + amount, float(actor.get("max_hp"))))
+		if actor.has_method("emit_stat_signals"):
+			actor.emit_stat_signals()
+
+func _restore_actor_defense(actor: Node, amount: float) -> void:
+	if actor == null or not is_instance_valid(actor) or amount <= 0.0:
+		return
+	var health_component := _health_component(actor)
+	if health_component == null:
+		return
+	var next_defense := minf(float(health_component.defense) + amount, float(health_component.max_defense))
+	health_component.defense = next_defense
+	if _has_property(actor, "defense"):
+		actor.set("defense", next_defense)
+	if health_component.has_signal("defense_changed"):
+		health_component.defense_changed.emit(next_defense, float(health_component.max_defense))
+
+func _grant_actor_inspiration(actor: Node, amount: float) -> void:
+	if actor == null or not is_instance_valid(actor) or amount <= 0.0:
+		return
+	if actor.has_method("gain_inspiration"):
+		actor.gain_inspiration(amount)
+		return
+	if _has_property(actor, "inspiration") and _has_property(actor, "max_inspiration"):
+		actor.set("inspiration", minf(float(actor.get("inspiration")) + amount, float(actor.get("max_inspiration"))))
+		if actor.has_method("emit_stat_signals"):
+			actor.emit_stat_signals()
+
+func _spawn_world_text(world_position: Vector2, label_text: String, color_value: Color, scale_value: float = 0.8) -> void:
+	var scene_root := get_tree().current_scene
+	if scene_root == null:
+		return
+	var popup := DAMAGE_NUMBER_SCENE.instantiate()
+	popup.position = world_position
+	if popup.has_method("setup_text"):
+		popup.setup_text(label_text, color_value, scale_value)
+	scene_root.add_child(popup)
+
+func _push_hud_feed(text: String, color_value: Color, scale_value: float = 1.0) -> void:
+	if character_hud != null and character_hud.has_method("push_feed_message"):
+		character_hud.push_feed_message(text, color_value, scale_value)
+
+func _drop_entry(kind: String, amount: float) -> Dictionary:
+	return {
+		"kind": kind,
+		"amount": amount
+	}
+
+func _split_drop_amount(total_amount: int, parts: int) -> Array[int]:
+	var result: Array[int] = []
+	var safe_parts := maxi(parts, 1)
+	var remaining := maxi(total_amount, 0)
+	for part_index in range(safe_parts):
+		var slots_left := safe_parts - part_index
+		var share := maxi(int(round(float(remaining) / float(slots_left))), 1)
+		if part_index == safe_parts - 1:
+			share = remaining
+		result.append(share)
+		remaining = maxi(remaining - share, 0)
+	return result
+
+func _pickup_tint(kind: String) -> Color:
+	match kind:
+		"inspiration":
+			return XP_FLASH_COLOR
+		"repair":
+			return REPAIR_FLASH_COLOR
+		"heal":
+			return HEAL_FLASH_COLOR
+		_:
+			return GOLD_FLASH_COLOR
+
+func _player_stat_value(field: String) -> float:
+	if player_character == null or not is_instance_valid(player_character) or not _has_property(player_character, field):
+		return 0.0
+	return float(player_character.get(field))
+
+func _actor_max_hp(actor: Node) -> float:
+	var health_component := _health_component(actor)
+	if health_component != null and _has_property(health_component, "max_hp"):
+		return float(health_component.max_hp)
+	if _has_property(actor, "max_hp"):
+		return float(actor.get("max_hp"))
+	return 100.0
+
+func _actor_max_defense(actor: Node) -> float:
+	var health_component := _health_component(actor)
+	if health_component != null and _has_property(health_component, "max_defense"):
+		return float(health_component.max_defense)
+	if _has_property(actor, "max_defense"):
+		return float(actor.get("max_defense"))
+	if _has_property(actor, "defense_value"):
+		return float(actor.get("defense_value"))
+	if _has_property(actor, "defense"):
+		return float(actor.get("defense"))
+	return 0.0
+
+func _actor_attack_damage(actor: Node) -> float:
+	if _has_property(actor, "attack_damage"):
+		return float(actor.get("attack_damage"))
+	return 10.0
 
 func _play_audio_profile_for_encounter(next_encounter_index: int) -> void:
 	if Music == null:
@@ -657,13 +1021,17 @@ func _hero_status_text() -> String:
 	if player_character == null or not is_instance_valid(player_character):
 		return _ui_text("No champion selected.", "未选择角色。", "未選擇角色。")
 	var hero_name := _hero_display_name(String(player_character.get_character_name())) if player_character.has_method("get_character_name") else _ui_text("Champion", "角色", "角色")
+	var run_state := RunDirector.get_state()
 	var stats: Array[String] = []
+	stats.append("%s %d" % [_ui_text("Lv", "等级", "等級"), int(run_state.get("hero_level", 1))])
 	if _has_property(player_character, "hp") and _has_property(player_character, "max_hp"):
 		stats.append("%s %d/%d" % [_ui_text("HP", "生命", "生命"), int(round(float(player_character.get("hp")))), int(round(float(player_character.get("max_hp"))))])
 	if _has_property(player_character, "defense") and _has_property(player_character, "max_defense"):
 		stats.append("%s %d/%d" % [_ui_text("DEF", "护甲", "護甲"), int(round(float(player_character.get("defense")))), int(round(float(player_character.get("max_defense"))))])
 	if _has_property(player_character, "inspiration") and _has_property(player_character, "max_inspiration"):
 		stats.append("%s %d/%d" % [_ui_text("Insp", "灵感", "靈感"), int(round(float(player_character.get("inspiration")))), int(round(float(player_character.get("max_inspiration"))))])
+	stats.append("%s %d/%d" % [_ui_text("XP", "经验", "經驗"), int(run_state.get("hero_xp", 0)), int(run_state.get("hero_xp_to_next", 45))])
+	stats.append("%s %d" % [_ui_text("Kills", "击杀", "擊殺"), int(run_state.get("total_kills", 0))])
 	return "%s\n%s" % [hero_name, "  |  ".join(stats)] if not stats.is_empty() else hero_name
 
 func _relic_status_text() -> String:

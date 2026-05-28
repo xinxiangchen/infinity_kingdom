@@ -36,6 +36,8 @@ var inspiration_bar: TextureProgressBar
 var inspiration_label: Label
 var shield_label: Label
 var state_label: Label
+var level_label: Label
+var xp_label: Label
 var status_grid: GridContainer
 var control_label: Label
 var combat_feed_label: Label
@@ -194,11 +196,18 @@ func _build_ui() -> void:
 
 	shield_label = _make_label(_locale_text("Shield 0", "护盾 0", "護盾 0"), 13, Color(0.82, 0.90, 0.98))
 	state_label = _make_label(_locale_text("State Idle", "状态 Idle", "狀態 Idle"), 13, Color(0.82, 0.90, 0.98))
+	level_label = _make_label(_locale_text("Level 1", "等级 1", "等級 1"), 13, Color(0.94, 0.88, 0.68))
+	xp_label = _make_label(_locale_text("XP 0 / 45", "经验 0 / 45", "經驗 0 / 45"), 13, Color(0.74, 0.88, 1.0))
 	shield_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	state_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	level_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	xp_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	state_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	xp_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	status_grid.add_child(shield_label)
 	status_grid.add_child(state_label)
+	status_grid.add_child(level_label)
+	status_grid.add_child(xp_label)
 
 	var status_panel := PanelContainer.new()
 	status_panel.add_theme_stylebox_override("panel", UISkin.content_panel_style())
@@ -386,7 +395,12 @@ func _meter(meter_id: String, label_text: String, _fill_color: Color) -> VBoxCon
 	var label := _make_label("%s 0 / 0" % label_text, 13, Color(0.86, 0.88, 0.92))
 	box.add_child(label)
 	var bar := TextureProgressBar.new()
-	bar.custom_minimum_size = Vector2(386, 22)
+	var bar_height := 20.0
+	if meter_id == "hp":
+		bar_height = 28.0
+	elif meter_id == "defense":
+		bar_height = 22.0
+	bar.custom_minimum_size = Vector2(386, bar_height)
 	UISkin.texture_bar(bar, meter_id)
 	meter_bars.append(bar)
 	box.add_child(bar)
@@ -450,15 +464,18 @@ func _connect_character_signal(signal_name: String, callable: Callable) -> void:
 
 func _on_hp_changed(current_hp: float, max_hp_value: float) -> void:
 	hp_bar.value = 0.0 if max_hp_value <= 0.0 else clampf(current_hp / max_hp_value, 0.0, 1.0)
-	hp_label.text = "%s %d / %d" % [_locale_text("HP", "生命", "生命"), int(round(current_hp)), int(round(max_hp_value))]
+	var hp_percent := 0 if max_hp_value <= 0.0 else int(round(clampf(current_hp / max_hp_value, 0.0, 1.0) * 100.0))
+	hp_label.text = "%s %d / %d  |  %d%%" % [_locale_text("HP", "生命", "生命"), int(round(current_hp)), int(round(max_hp_value)), hp_percent]
 
 func _on_inspiration_changed(current_inspiration: float, max_inspiration_value: float) -> void:
 	inspiration_bar.value = 0.0 if max_inspiration_value <= 0.0 else clampf(current_inspiration / max_inspiration_value, 0.0, 1.0)
-	inspiration_label.text = "%s %d / %d" % [_locale_text("Inspiration", "灵感", "靈感"), int(round(current_inspiration)), int(round(max_inspiration_value))]
+	var inspiration_percent := 0 if max_inspiration_value <= 0.0 else int(round(clampf(current_inspiration / max_inspiration_value, 0.0, 1.0) * 100.0))
+	inspiration_label.text = "%s %d / %d  |  %d%%" % [_locale_text("Inspiration", "灵感", "靈感"), int(round(current_inspiration)), int(round(max_inspiration_value)), inspiration_percent]
 
 func _on_defense_changed(current_defense: float, max_defense_value: float) -> void:
 	defense_bar.value = 0.0 if max_defense_value <= 0.0 else clampf(current_defense / max_defense_value, 0.0, 1.0)
-	defense_label.text = "%s %d / %d" % [_locale_text("Defense", "护甲", "護甲"), int(round(current_defense)), int(round(max_defense_value))]
+	var defense_percent := 0 if max_defense_value <= 0.0 else int(round(clampf(current_defense / max_defense_value, 0.0, 1.0) * 100.0))
+	defense_label.text = "%s %d / %d  |  %d%%" % [_locale_text("Defense", "护甲", "護甲"), int(round(current_defense)), int(round(max_defense_value)), defense_percent]
 
 func _on_shield_changed(current_shield: float) -> void:
 	shield_label.text = "%s %d" % [_locale_text("Shield", "护盾", "護盾"), int(round(current_shield))]
@@ -539,6 +556,10 @@ func _refresh_run_state_label(state: Dictionary) -> void:
 	var reward_flat_bonus := int(state.get("reward_flat_bonus", 0))
 	var reward_multiplier := float(state.get("reward_multiplier", 1.0))
 	var pending_prep := state.get("pending_encounter_prep", {}) as Dictionary
+	var hero_level := int(state.get("hero_level", 1))
+	var hero_xp := int(state.get("hero_xp", 0))
+	var hero_xp_to_next := int(state.get("hero_xp_to_next", 45))
+	var total_kills := int(state.get("total_kills", 0))
 	var bounty_text := _locale_text("None", "无", "無")
 	if reward_flat_bonus > 0 or reward_multiplier > 1.001:
 		var parts: Array[String] = []
@@ -555,17 +576,22 @@ func _refresh_run_state_label(state: Dictionary) -> void:
 	_set_run_metric_value("bounty", bounty_text)
 	_set_run_metric_value("prep", prep_display)
 	var route_preview := RunDirector.describe_event_route(3) if RunDirector != null else _locale_text("No route data", "暂无路线数据", "暫無路線資料")
-	run_state_label.text = "%s %s  |  %s %s%s  |  %s +%d  |  %s %d" % [
-		_locale_text("Next", "下一步", "下一步"),
-		next_label,
+	run_state_label.text = "%s %d  |  %s %d/%d  |  %s %d  |  %s %s%s" % [
+		_locale_text("Level", "等级", "等級"),
+		hero_level,
+		_locale_text("XP", "经验", "經驗"),
+		hero_xp,
+		hero_xp_to_next,
+		_locale_text("Kills", "击杀", "擊殺"),
+		total_kills,
 		_locale_text("Route", "路线", "路線"),
 		route_preview,
-		prep_text,
-		_locale_text("Last", "上次", "上次"),
-		int(state.get("last_reward_gold", 0)),
-		_locale_text("Effects", "加成", "加成"),
-		(state.get("run_modifiers", {}) as Dictionary).size()
+		prep_text
 	]
+	if level_label != null:
+		level_label.text = "%s %d  |  %s %d" % [_locale_text("Level", "等级", "等級"), hero_level, _locale_text("Kills", "击杀", "擊殺"), total_kills]
+	if xp_label != null:
+		xp_label.text = "%s %d / %d" % [_locale_text("XP", "经验", "經驗"), hero_xp, hero_xp_to_next]
 
 func _set_run_metric_value(metric_id: String, value: String) -> void:
 	if not run_metric_labels.has(metric_id):
@@ -642,7 +668,11 @@ func _update_danger_visuals() -> void:
 	if player_character == null or not is_instance_valid(player_character):
 		return
 	var max_hp_value := float(player_character.max_hp)
+	var max_defense_value := float(player_character.max_defense)
+	var max_inspiration_value := float(player_character.max_inspiration)
 	var hp_ratio := 0.0 if max_hp_value <= 0.0 else clampf(float(player_character.hp) / max_hp_value, 0.0, 1.0)
+	var defense_ratio := 0.0 if max_defense_value <= 0.0 else clampf(float(player_character.defense) / max_defense_value, 0.0, 1.0)
+	var inspiration_ratio := 0.0 if max_inspiration_value <= 0.0 else clampf(float(player_character.inspiration) / max_inspiration_value, 0.0, 1.0)
 	if hp_ratio <= 0.30:
 		var pulse := 0.78 + 0.22 * sin(Time.get_ticks_msec() * 0.01)
 		hp_label.modulate = Color(1.0, 0.70 + 0.12 * pulse, 0.70 + 0.10 * pulse, 1.0)
@@ -650,6 +680,20 @@ func _update_danger_visuals() -> void:
 	else:
 		hp_label.modulate = Color.WHITE
 		hp_bar.modulate = Color.WHITE
+	if defense_ratio <= 0.22:
+		var defense_pulse := 0.82 + 0.18 * sin(Time.get_ticks_msec() * 0.012 + 0.7)
+		defense_label.modulate = Color(0.74 + 0.18 * defense_pulse, 0.92, 1.0, 1.0)
+		defense_bar.modulate = Color(0.90, 0.98, 1.0, 0.90 + 0.10 * defense_pulse)
+	else:
+		defense_label.modulate = Color.WHITE
+		defense_bar.modulate = Color.WHITE
+	if inspiration_ratio >= 0.95:
+		var inspiration_pulse := 0.86 + 0.14 * sin(Time.get_ticks_msec() * 0.011 + 1.5)
+		inspiration_label.modulate = Color(0.90, 0.96, 1.0, 1.0)
+		inspiration_bar.modulate = Color(1.0, 1.0, 1.0, 0.92 + 0.08 * inspiration_pulse)
+	else:
+		inspiration_label.modulate = Color.WHITE
+		inspiration_bar.modulate = Color.WHITE
 
 func _set_combat_feed(text: String, color_value: Color, scale_value: float = 1.0) -> void:
 	if combat_feed_label == null:
@@ -661,6 +705,9 @@ func _set_combat_feed(text: String, color_value: Color, scale_value: float = 1.0
 		combat_feed_tween.kill()
 	combat_feed_tween = create_tween()
 	combat_feed_tween.tween_property(combat_feed_label, "scale", Vector2.ONE, 0.16)
+
+func push_feed_message(text: String, color_value: Color = Color.WHITE, scale_value: float = 1.0) -> void:
+	_set_combat_feed(text, color_value, scale_value)
 
 func _attack_display_name(attack_name: StringName) -> String:
 	var character_name := String(player_character.get_character_name()) if player_character != null and is_instance_valid(player_character) and player_character.has_method("get_character_name") else ""
