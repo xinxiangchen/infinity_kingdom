@@ -22,6 +22,17 @@ const ROOM_TITLES := [
 	"12 King Gate"
 ]
 
+const ROOM_PROP_LAYER_PATHS := [
+	"res://assets/maps/stitched_demo/props/room_01_props.png",
+	"res://assets/maps/stitched_demo/props/room_02_props.png",
+	"res://assets/maps/stitched_demo/props/room_03_props.png",
+	"res://assets/maps/stitched_demo/props/room_04_props.png",
+	"res://assets/maps/stitched_demo/props/room_09_props.png",
+	"res://assets/maps/stitched_demo/props/room_10_props.png",
+	"res://assets/maps/stitched_demo/props/room_11_props.png",
+	"res://assets/maps/stitched_demo/props/room_12_props.png"
+]
+
 const ENEMY_PREVIEWS := [
 	{
 		"name": "Swordsman",
@@ -66,7 +77,10 @@ const PLAYER_SPEED := 520.0
 const PLAYER_RADIUS := 22.0
 const ENEMY_PREVIEW_SCALE := Vector2(0.82, 0.82)
 const COLLISION_WALL_THICKNESS := 80.0
-const COLLISION_DEBUG_VISIBLE := true
+const COLLISION_DEBUG_VISIBLE := false
+const PROP_COLLISION_DEBUG_VISIBLE := true
+const RANDOM_PROP_MIN_PER_ROOM := 2
+const RANDOM_PROP_MAX_PER_ROOM := 4
 
 const WALKABLE_AREAS := [
 	Rect2(0.0, 0.52, 1.0, 0.32),
@@ -79,13 +93,54 @@ const WALKABLE_AREAS := [
 	Rect2(0.0, 0.51, 1.0, 0.33)
 ]
 
+const PROP_CANDIDATES := [
+	{"room": 0, "name": "WoodCrateLeft", "source": Rect2(0.07, 0.07, 0.17, 0.18), "position": Vector2(0.16, 0.61), "collision": Vector2(0.10, 0.07)},
+	{"room": 0, "name": "WoodBench", "source": Rect2(0.35, 0.35, 0.23, 0.11), "position": Vector2(0.45, 0.63), "collision": Vector2(0.19, 0.06)},
+	{"room": 0, "name": "FireBrazier", "source": Rect2(0.48, 0.50, 0.10, 0.16), "position": Vector2(0.52, 0.70), "collision": Vector2(0.07, 0.06)},
+	{"room": 0, "name": "StoneRubble", "source": Rect2(0.34, 0.75, 0.16, 0.12), "position": Vector2(0.40, 0.79), "collision": Vector2(0.13, 0.06)},
+	{"room": 0, "name": "RightBarricade", "source": Rect2(0.75, 0.33, 0.15, 0.18), "position": Vector2(0.79, 0.62), "collision": Vector2(0.11, 0.08)},
+	{"room": 1, "name": "SpikeFence", "source": Rect2(0.07, 0.34, 0.21, 0.13), "position": Vector2(0.18, 0.61), "collision": Vector2(0.18, 0.07)},
+	{"room": 1, "name": "StreetBench", "source": Rect2(0.36, 0.36, 0.22, 0.10), "position": Vector2(0.45, 0.63), "collision": Vector2(0.19, 0.06)},
+	{"room": 1, "name": "WoodBarricade", "source": Rect2(0.62, 0.33, 0.18, 0.14), "position": Vector2(0.66, 0.62), "collision": Vector2(0.14, 0.08)},
+	{"room": 1, "name": "CampfirePile", "source": Rect2(0.78, 0.32, 0.16, 0.16), "position": Vector2(0.80, 0.62), "collision": Vector2(0.11, 0.07)},
+	{"room": 1, "name": "BottomRubble", "source": Rect2(0.16, 0.73, 0.18, 0.12), "position": Vector2(0.21, 0.76), "collision": Vector2(0.13, 0.06)},
+	{"room": 2, "name": "RoundWellLeft", "source": Rect2(0.05, 0.17, 0.14, 0.13), "position": Vector2(0.15, 0.56), "collision": Vector2(0.11, 0.07)},
+	{"room": 2, "name": "RoundWellCenter", "source": Rect2(0.26, 0.14, 0.18, 0.14), "position": Vector2(0.38, 0.55), "collision": Vector2(0.14, 0.08)},
+	{"room": 2, "name": "StoneBlock", "source": Rect2(0.50, 0.17, 0.14, 0.15), "position": Vector2(0.55, 0.56), "collision": Vector2(0.10, 0.08)},
+	{"room": 2, "name": "BrokenWood", "source": Rect2(0.31, 0.65, 0.21, 0.11), "position": Vector2(0.38, 0.70), "collision": Vector2(0.16, 0.07)},
+	{"room": 2, "name": "RockPile", "source": Rect2(0.63, 0.52, 0.14, 0.09), "position": Vector2(0.67, 0.65), "collision": Vector2(0.11, 0.06)},
+	{"room": 3, "name": "LeftFountain", "source": Rect2(0.07, 0.44, 0.19, 0.20), "position": Vector2(0.20, 0.63), "collision": Vector2(0.16, 0.09)},
+	{"room": 3, "name": "CenterFountain", "source": Rect2(0.30, 0.42, 0.20, 0.20), "position": Vector2(0.40, 0.62), "collision": Vector2(0.16, 0.10)},
+	{"room": 3, "name": "BarrelCluster", "source": Rect2(0.10, 0.28, 0.20, 0.08), "position": Vector2(0.20, 0.53), "collision": Vector2(0.16, 0.06)},
+	{"room": 3, "name": "StatueLine", "source": Rect2(0.59, 0.44, 0.19, 0.12), "position": Vector2(0.65, 0.61), "collision": Vector2(0.15, 0.07)},
+	{"room": 3, "name": "RightPot", "source": Rect2(0.82, 0.44, 0.08, 0.11), "position": Vector2(0.84, 0.62), "collision": Vector2(0.06, 0.06)},
+	{"room": 4, "name": "StonePillarLeft", "source": Rect2(0.17, 0.43, 0.08, 0.16), "position": Vector2(0.21, 0.61), "collision": Vector2(0.06, 0.08)},
+	{"room": 4, "name": "StonePillarCenter", "source": Rect2(0.40, 0.42, 0.08, 0.17), "position": Vector2(0.43, 0.61), "collision": Vector2(0.06, 0.08)},
+	{"room": 4, "name": "Altar", "source": Rect2(0.48, 0.56, 0.16, 0.13), "position": Vector2(0.53, 0.70), "collision": Vector2(0.13, 0.07)},
+	{"room": 4, "name": "StoneBasin", "source": Rect2(0.73, 0.60, 0.13, 0.10), "position": Vector2(0.78, 0.70), "collision": Vector2(0.10, 0.06)},
+	{"room": 5, "name": "PalaceColumnLeft", "source": Rect2(0.11, 0.07, 0.09, 0.30), "position": Vector2(0.17, 0.56), "collision": Vector2(0.07, 0.09)},
+	{"room": 5, "name": "PalaceColumnRight", "source": Rect2(0.70, 0.07, 0.09, 0.30), "position": Vector2(0.76, 0.56), "collision": Vector2(0.07, 0.09)},
+	{"room": 5, "name": "FireLine", "source": Rect2(0.07, 0.43, 0.23, 0.13), "position": Vector2(0.19, 0.62), "collision": Vector2(0.17, 0.07)},
+	{"room": 5, "name": "StoneBowl", "source": Rect2(0.74, 0.46, 0.12, 0.10), "position": Vector2(0.78, 0.63), "collision": Vector2(0.09, 0.06)},
+	{"room": 6, "name": "TopTableLeft", "source": Rect2(0.11, 0.03, 0.20, 0.14), "position": Vector2(0.20, 0.55), "collision": Vector2(0.16, 0.07)},
+	{"room": 6, "name": "TopTableCenter", "source": Rect2(0.38, 0.03, 0.17, 0.14), "position": Vector2(0.45, 0.55), "collision": Vector2(0.14, 0.07)},
+	{"room": 6, "name": "CurtainBarrier", "source": Rect2(0.48, 0.51, 0.28, 0.12), "position": Vector2(0.60, 0.70), "collision": Vector2(0.22, 0.06)},
+	{"room": 6, "name": "LowerFires", "source": Rect2(0.18, 0.76, 0.19, 0.12), "position": Vector2(0.27, 0.78), "collision": Vector2(0.14, 0.06)},
+	{"room": 7, "name": "ThroneLeftColumn", "source": Rect2(0.18, 0.57, 0.10, 0.16), "position": Vector2(0.24, 0.65), "collision": Vector2(0.07, 0.08)},
+	{"room": 7, "name": "ThroneCenterCrate", "source": Rect2(0.45, 0.61, 0.10, 0.10), "position": Vector2(0.51, 0.68), "collision": Vector2(0.08, 0.06)},
+	{"room": 7, "name": "ThroneRightColumn", "source": Rect2(0.69, 0.57, 0.10, 0.16), "position": Vector2(0.74, 0.65), "collision": Vector2(0.07, 0.08)},
+	{"room": 7, "name": "BannerStand", "source": Rect2(0.83, 0.18, 0.12, 0.32), "position": Vector2(0.85, 0.61), "collision": Vector2(0.08, 0.09)}
+]
+
 var player: CharacterBody2D
 var camera: Camera2D
 var map_bounds := Rect2(Vector2.ZERO, Vector2.ZERO)
 var room_rects: Array[Rect2] = []
 var walkable_rects: Array[Rect2] = []
+var rng := RandomNumberGenerator.new()
 
 func _ready() -> void:
+	rng.randomize()
 	_build_map()
 	_build_player()
 	_build_camera()
@@ -139,6 +194,7 @@ func _build_map() -> void:
 	map_bounds = Rect2(Vector2.ZERO, Vector2(maxf(x_cursor - ROOM_GAP, 0.0), max_height))
 	_add_bounds_outline(map_root)
 	_add_collision_boxes(map_root)
+	_add_random_cover_props(map_root)
 	_add_enemy_previews(map_root)
 
 func _build_player() -> void:
@@ -274,7 +330,7 @@ func _add_bounds_outline(parent: Node) -> void:
 
 func _add_collision_boxes(parent: Node) -> void:
 	var collision_root := Node2D.new()
-	collision_root.name = "CollisionBoxes"
+	collision_root.name = "RoomBoundaryCollision"
 	collision_root.z_index = 35
 	parent.add_child(collision_root)
 
@@ -335,6 +391,89 @@ func _add_blocker(parent: Node, blocker_name: String, rect: Rect2) -> void:
 			Vector2(-rect.size.x * 0.5, rect.size.y * 0.5)
 		])
 		body.add_child(visual)
+
+func _add_random_cover_props(parent: Node) -> void:
+	var prop_root := Node2D.new()
+	prop_root.name = "RandomCoverProps"
+	prop_root.z_index = 38
+	parent.add_child(prop_root)
+
+	for room_index in range(room_rects.size()):
+		var candidates := _get_prop_candidates_for_room(room_index)
+		if candidates.is_empty():
+			continue
+		candidates.shuffle()
+		var count: int = min(rng.randi_range(RANDOM_PROP_MIN_PER_ROOM, RANDOM_PROP_MAX_PER_ROOM), candidates.size())
+		for index in range(count):
+			_add_cover_prop(prop_root, candidates[index])
+
+func _get_prop_candidates_for_room(room_index: int) -> Array:
+	var result := []
+	for candidate in PROP_CANDIDATES:
+		if int(candidate["room"]) == room_index:
+			result.append(candidate)
+	return result
+
+func _add_cover_prop(parent: Node, candidate: Dictionary) -> void:
+	var room_index := int(candidate["room"])
+	if room_index < 0 or room_index >= room_rects.size() or room_index >= ROOM_PROP_LAYER_PATHS.size():
+		return
+
+	var texture := load(String(ROOM_PROP_LAYER_PATHS[room_index])) as Texture2D
+	if texture == null:
+		push_warning("Prop layer texture missing: %s" % ROOM_PROP_LAYER_PATHS[room_index])
+		return
+
+	var room_rect := room_rects[room_index]
+	var source_ratio: Rect2 = candidate["source"]
+	var source_rect := Rect2(
+		Vector2(float(texture.get_width()) * source_ratio.position.x, float(texture.get_height()) * source_ratio.position.y),
+		Vector2(float(texture.get_width()) * source_ratio.size.x, float(texture.get_height()) * source_ratio.size.y)
+	)
+	var texture_to_room_scale := Vector2(room_rect.size.x / float(texture.get_width()), room_rect.size.y / float(texture.get_height()))
+	var prop_position_ratio: Vector2 = candidate["position"]
+	var collision_ratio: Vector2 = candidate["collision"]
+	var world_position := room_rect.position + Vector2(room_rect.size.x * prop_position_ratio.x, room_rect.size.y * prop_position_ratio.y)
+	var collision_size := Vector2(room_rect.size.x * collision_ratio.x, room_rect.size.y * collision_ratio.y)
+
+	var body := StaticBody2D.new()
+	body.name = "%sCover" % String(candidate["name"])
+	body.collision_layer = 1
+	body.collision_mask = 2
+	body.position = world_position
+	parent.add_child(body)
+
+	var sprite := Sprite2D.new()
+	sprite.name = "Sprite"
+	sprite.texture = texture
+	sprite.region_enabled = true
+	sprite.region_rect = source_rect
+	sprite.scale = texture_to_room_scale
+	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	sprite.z_index = 1
+	body.add_child(sprite)
+
+	var shape := CollisionShape2D.new()
+	shape.name = "CollisionShape2D"
+	var rectangle := RectangleShape2D.new()
+	rectangle.size = collision_size
+	shape.shape = rectangle
+	body.add_child(shape)
+
+	if PROP_COLLISION_DEBUG_VISIBLE:
+		_add_collision_debug_outline(body, collision_size)
+
+func _add_collision_debug_outline(parent: Node, size: Vector2) -> void:
+	var outline := Line2D.new()
+	outline.name = "CollisionDebugOutline"
+	outline.width = 3.0
+	outline.closed = true
+	outline.default_color = Color(0.25, 0.9, 1.0, 0.82)
+	outline.add_point(Vector2(-size.x * 0.5, -size.y * 0.5))
+	outline.add_point(Vector2(size.x * 0.5, -size.y * 0.5))
+	outline.add_point(Vector2(size.x * 0.5, size.y * 0.5))
+	outline.add_point(Vector2(-size.x * 0.5, size.y * 0.5))
+	parent.add_child(outline)
 
 func _add_enemy_previews(parent: Node) -> void:
 	var enemy_root := Node2D.new()
