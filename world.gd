@@ -4,7 +4,8 @@ const KNIGHT_SCENE := preload("res://characters/knight/knight.tscn")
 const RANGER_SCENE := preload("res://characters/ranger/ranger.tscn")
 const MAGE_SCENE := preload("res://characters/mage/mage.tscn")
 const RunEffects := preload("res://systems/run/run_effects.gd")
-const MapBrowserDemo := preload("res://tools/map_browser_demo.gd")
+const MapRuntime := preload("res://systems/map/map_runtime.gd")
+const AudioRoute := preload("res://systems/run/audio_route.gd")
 const DAMAGE_NUMBER_SCENE := preload("res://effects/damage_number.tscn")
 const RUN_PICKUP_SCRIPT := preload("res://systems/pickups/run_pickup.gd")
 const WORLD_HEALTH_BAR_SCRIPT := preload("res://ui/world_health_bar.gd")
@@ -18,37 +19,6 @@ const ENCOUNTER_SCENES := [
 	preload("res://actors/bosses/town/royal_guard_formation.tscn"),
 	preload("res://actors/bosses/town/twin_princes_boss.tscn")
 ]
-const MAP_ROOM_TEXTURES := [
-	"res://assets/maps/stitched_demo/room_01_outer_entrance.png",
-	"res://assets/maps/stitched_demo/room_02_street_battle_1.png",
-	"res://assets/maps/stitched_demo/room_03_street_battle_2.png",
-	"res://assets/maps/stitched_demo/room_04_central_plaza.png",
-	"res://assets/maps/stitched_demo/room_09_elite_zone.png",
-	"res://assets/maps/stitched_demo/room_10_palace_hall.png",
-	"res://assets/maps/stitched_demo/room_11_palace_corridor.png",
-	"res://assets/maps/stitched_demo/room_12_king_gate.png"
-]
-const MAP_ROOM_TITLES := [
-	"Outer Entrance",
-	"Street Battle I",
-	"Street Battle II",
-	"Central Plaza",
-	"Elite Gate",
-	"Palace Hall",
-	"Palace Corridor",
-	"King Gate"
-]
-const MAP_WALKABLE_AREAS := [
-	Rect2(0.02, 0.08, 0.96, 0.86),
-	Rect2(0.02, 0.12, 0.96, 0.78),
-	Rect2(0.02, 0.14, 0.96, 0.76),
-	Rect2(0.02, 0.08, 0.96, 0.84),
-	Rect2(0.02, 0.08, 0.96, 0.84),
-	Rect2(0.02, 0.10, 0.96, 0.80),
-	Rect2(0.02, 0.10, 0.96, 0.80),
-	Rect2(0.02, 0.10, 0.96, 0.80)
-]
-const MAP_CAMERA_ZOOM := Vector2(1.7, 1.7)
 const RELIC_REROLL_COST := 20
 const HIT_FEEDBACK_COOLDOWN_MSEC := 55
 const LEVEL_UP_FLASH_COLOR := Color(1.0, 0.92, 0.62, 1.0)
@@ -86,11 +56,7 @@ var return_pause_after_audio_panel: bool = false
 var return_pause_after_settings_panel: bool = false
 var last_attack_feedback_msec: int = 0
 var reward_rng := RandomNumberGenerator.new()
-var map_root: Node2D = null
-var map_camera: Camera2D = null
-var map_prop_root: Node2D = null
-var map_room_rects: Array[Rect2] = []
-var map_walkable_rects: Array[Rect2] = []
+var map_runtime: Node = null
 
 func _ready() -> void:
 	reward_rng.randomize()
@@ -148,18 +114,10 @@ func _process(_delta: float) -> void:
 
 func _prepare_map_runtime() -> void:
 	_hide_legacy_arena()
-	map_root = Node2D.new()
-	map_root.name = "RuntimeMapRooms"
-	map_root.z_index = -20
-	add_child(map_root)
-	_build_runtime_map_rooms()
-	map_camera = Camera2D.new()
-	map_camera.name = "RoomCamera2D"
-	map_camera.enabled = true
-	map_camera.zoom = MAP_CAMERA_ZOOM
-	map_camera.position_smoothing_enabled = true
-	map_camera.position_smoothing_speed = 9.0
-	add_child(map_camera)
+	map_runtime = MapRuntime.new()
+	map_runtime.setup(self, spawn_marker, encounter_marker, reward_rng)
+	add_child(map_runtime)
+	map_runtime.build()
 
 func _hide_legacy_arena() -> void:
 	for node_name in ["BackdropImage", "Backdrop", "CenterLane", "ThroneDais", "ThroneBanner"]:
@@ -175,181 +133,25 @@ func _hide_legacy_arena() -> void:
 			if child is CanvasItem:
 				(child as CanvasItem).visible = false
 
-func _build_runtime_map_rooms() -> void:
-	map_room_rects.clear()
-	map_walkable_rects.clear()
-	var x_cursor := 0.0
-	for index in range(MAP_ROOM_TEXTURES.size()):
-		var texture := load(String(MAP_ROOM_TEXTURES[index])) as Texture2D
-		if texture == null:
-			push_warning("Missing map texture: %s" % MAP_ROOM_TEXTURES[index])
-			continue
-		var sprite := Sprite2D.new()
-		sprite.name = "MapRoom%02d" % [index + 1]
-		sprite.texture = texture
-		sprite.centered = false
-		sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
-		sprite.position = Vector2(x_cursor, 0.0)
-		map_root.add_child(sprite)
-		var room_rect := Rect2(sprite.position, Vector2(float(texture.get_width()), float(texture.get_height())))
-		map_room_rects.append(room_rect)
-		map_walkable_rects.append(_map_walkable_rect(index, room_rect))
-		_add_runtime_room_walls(index, room_rect, map_walkable_rects[index])
-		x_cursor += room_rect.size.x
-	_add_runtime_cover_props()
-
-func _map_walkable_rect(index: int, room_rect: Rect2) -> Rect2:
-	var ratio: Rect2 = MAP_WALKABLE_AREAS[min(index, MAP_WALKABLE_AREAS.size() - 1)]
-	return Rect2(
-		room_rect.position + Vector2(room_rect.size.x * ratio.position.x, room_rect.size.y * ratio.position.y),
-		Vector2(room_rect.size.x * ratio.size.x, room_rect.size.y * ratio.size.y)
-	)
-
-func _add_runtime_room_walls(index: int, room_rect: Rect2, _walk_rect: Rect2) -> void:
-	var wall_rects := MapBrowserDemo.get_room_wall_rects(index, room_rect)
-	for wall_index in range(wall_rects.size()):
-		_add_runtime_wall("Room%02dWall%02d" % [index + 1, wall_index + 1], wall_rects[wall_index])
-
-func _add_runtime_wall(wall_name: String, rect: Rect2) -> void:
-	if map_root == null or rect.size.x <= 0.0 or rect.size.y <= 0.0:
-		return
-	var body := StaticBody2D.new()
-	body.name = wall_name
-	body.collision_layer = 1
-	body.collision_mask = 2
-	body.add_to_group("projectile_blocker")
-	body.position = rect.get_center()
-	map_root.add_child(body)
-	var shape := CollisionShape2D.new()
-	var rectangle := RectangleShape2D.new()
-	rectangle.size = rect.size
-	shape.shape = rectangle
-	body.add_child(shape)
-
 func _activate_map_room(room_index: int) -> void:
-	if map_walkable_rects.is_empty():
+	if map_runtime == null:
 		return
-	var clamped_index := clampi(room_index, 0, map_walkable_rects.size() - 1)
-	spawn_marker.position = _player_spawn_for_room(clamped_index)
-	encounter_marker.position = _encounter_spawn_for_room(clamped_index)
-	if player_character != null and is_instance_valid(player_character):
-		player_character.position = spawn_marker.position
-	_update_map_camera(true)
-
-func _add_runtime_cover_props() -> void:
-	if map_root == null:
-		return
-	map_prop_root = Node2D.new()
-	map_prop_root.name = "RuntimeCoverProps"
-	map_prop_root.z_index = 5
-	map_root.add_child(map_prop_root)
-	for room_index in range(map_room_rects.size()):
-		var candidates := _get_cover_candidates_for_room(room_index)
-		if candidates.is_empty():
-			continue
-		candidates.shuffle()
-		var count: int = min(reward_rng.randi_range(2, 4), candidates.size())
-		for index in range(count):
-			_add_runtime_cover_prop(candidates[index])
-
-func _get_cover_candidates_for_room(room_index: int) -> Array:
-	var result := []
-	for candidate in MapBrowserDemo.PROP_CANDIDATES:
-		if int(candidate["room"]) == room_index:
-			result.append(candidate)
-	return result
-
-func _add_runtime_cover_prop(candidate: Dictionary) -> void:
-	var room_index := int(candidate["room"])
-	if map_prop_root == null or room_index < 0 or room_index >= map_room_rects.size() or room_index >= MapBrowserDemo.ROOM_PROP_LAYER_PATHS.size():
-		return
-	var texture := load(String(MapBrowserDemo.ROOM_PROP_LAYER_PATHS[room_index])) as Texture2D
-	if texture == null:
-		push_warning("Missing cover prop layer: %s" % MapBrowserDemo.ROOM_PROP_LAYER_PATHS[room_index])
-		return
-	var room_rect := map_room_rects[room_index]
-	var source_ratio: Rect2 = candidate["source"]
-	var source_rect := Rect2(
-		Vector2(float(texture.get_width()) * source_ratio.position.x, float(texture.get_height()) * source_ratio.position.y),
-		Vector2(float(texture.get_width()) * source_ratio.size.x, float(texture.get_height()) * source_ratio.size.y)
-	)
-	var texture_to_room_scale := Vector2(room_rect.size.x / float(texture.get_width()), room_rect.size.y / float(texture.get_height()))
-	var position_ratio: Vector2 = candidate["position"]
-	var collision_rect := MapBrowserDemo.calculate_prop_collision_rect(texture, source_rect, texture_to_room_scale)
-	var body := StaticBody2D.new()
-	body.name = "%sCover" % String(candidate["name"])
-	body.collision_layer = 1
-	body.collision_mask = 2
-	body.add_to_group("projectile_blocker")
-	body.global_position = room_rect.position + Vector2(room_rect.size.x * position_ratio.x, room_rect.size.y * position_ratio.y)
-	map_prop_root.add_child(body)
-	var sprite := Sprite2D.new()
-	sprite.name = "Sprite"
-	sprite.texture = texture
-	sprite.region_enabled = true
-	sprite.region_rect = source_rect
-	sprite.scale = texture_to_room_scale
-	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
-	sprite.z_index = 1
-	body.add_child(sprite)
-	var shape := CollisionShape2D.new()
-	shape.position = collision_rect.get_center()
-	var rectangle := RectangleShape2D.new()
-	rectangle.size = collision_rect.size
-	shape.shape = rectangle
-	body.add_child(shape)
-	_add_cover_collision_debug(body, collision_rect)
-
-func _add_cover_collision_debug(parent: Node, rect: Rect2) -> void:
-	var outline := Line2D.new()
-	outline.name = "CoverCollisionDebug"
-	outline.width = 2.5
-	outline.closed = true
-	outline.default_color = Color(0.25, 0.9, 1.0, 0.72)
-	outline.add_point(rect.position)
-	outline.add_point(Vector2(rect.end.x, rect.position.y))
-	outline.add_point(rect.end)
-	outline.add_point(Vector2(rect.position.x, rect.end.y))
-	parent.add_child(outline)
+	map_runtime.activate_room(room_index, player_character)
 
 func _player_spawn_for_room(room_index: int) -> Vector2:
-	if map_walkable_rects.is_empty():
+	if map_runtime == null:
 		return spawn_marker.position
-	var walk_rect := map_walkable_rects[clampi(room_index, 0, map_walkable_rects.size() - 1)]
-	return walk_rect.position + Vector2(walk_rect.size.x * 0.14, walk_rect.size.y * 0.54)
+	return map_runtime.player_spawn_for_room(room_index)
 
 func _encounter_spawn_for_room(room_index: int) -> Vector2:
-	if map_walkable_rects.is_empty():
+	if map_runtime == null:
 		return encounter_marker.position
-	var walk_rect := map_walkable_rects[clampi(room_index, 0, map_walkable_rects.size() - 1)]
-	var y_ratio: float = 0.76 if room_index <= 4 else 0.58
-	return walk_rect.position + Vector2(walk_rect.size.x * 0.56, walk_rect.size.y * y_ratio)
+	return map_runtime.encounter_spawn_for_room(room_index)
 
 func _update_map_camera(force: bool = false) -> void:
-	if map_camera == null or player_character == null or not is_instance_valid(player_character) or map_room_rects.is_empty():
+	if map_runtime == null:
 		return
-	var room_index := clampi(encounter_index, 0, map_room_rects.size() - 1)
-	var target := _clamped_camera_position(room_index, (player_character as Node2D).global_position)
-	if force:
-		map_camera.position_smoothing_enabled = false
-		map_camera.global_position = target
-		map_camera.position_smoothing_enabled = true
-	else:
-		map_camera.global_position = target
-
-func _clamped_camera_position(room_index: int, target: Vector2) -> Vector2:
-	var room_rect := map_room_rects[clampi(room_index, 0, map_room_rects.size() - 1)]
-	var viewport_size := Vector2(get_viewport_rect().size)
-	var visible_size := Vector2(viewport_size.x / MAP_CAMERA_ZOOM.x, viewport_size.y / MAP_CAMERA_ZOOM.y)
-	var half_size := visible_size * 0.5
-	var min_x := room_rect.position.x + half_size.x
-	var max_x := room_rect.end.x - half_size.x
-	var min_y := room_rect.position.y + half_size.y
-	var max_y := room_rect.end.y - half_size.y
-	var clamped := target
-	clamped.x = room_rect.get_center().x if min_x > max_x else clampf(target.x, min_x, max_x)
-	clamped.y = room_rect.get_center().y if min_y > max_y else clampf(target.y, min_y, max_y)
-	return clamped
+	map_runtime.update_camera(encounter_index, player_character, force)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
@@ -1130,20 +932,10 @@ func _actor_attack_damage(actor: Node) -> float:
 	return 10.0
 
 func _play_audio_profile_for_encounter(next_encounter_index: int) -> void:
-	if Music == null:
-		return
-	if next_encounter_index <= 4:
-		Music.play_profile(&"town_battle")
-	elif next_encounter_index == 5:
-		Music.play_profile(&"palace_explore")
-	elif next_encounter_index == 6:
-		Music.play_profile(&"gate_guard")
-	else:
-		Music.play_profile(&"emperor")
+	AudioRoute.play_for_encounter(Music, next_encounter_index)
 
 func _play_intermission_audio() -> void:
-	if Music != null:
-		Music.play_profile(&"church_intermission")
+	AudioRoute.play_intermission(Music)
 
 func _cancel_scheduled_title_music() -> void:
 	music_request_serial += 1
