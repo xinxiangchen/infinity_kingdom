@@ -9,6 +9,7 @@ signal inspiration_changed(current_inspiration: float, max_inspiration_value: fl
 signal took_damage(amount: float, remaining_hp: float)
 signal shield_changed(current_shield: float)
 signal defense_changed(current_defense: float, max_defense_value: float)
+signal upgrades_changed
 signal control_status_changed(summary: String)
 signal died
 
@@ -62,16 +63,23 @@ signal died
 @export var skill3_heal_upgrade: bool = false
 @export var skill3_restore_defense_upgrade: bool = false
 
+@export_group("Dodge")
+@export var dodge_cost: float = 5.0
+@export var dodge_cooldown: float = 3.0
+@export var dodge_duration: float = 0.26
+@export var dodge_speed: float = 860.0
+
 @export_group("Hit / Combat")
 @export var hit_stun_duration: float = 0.25
 @export var hit_threshold: float = 1.0
-@export var attack_range: float = 90.0
+@export var attack_range: float = 108.0
+@export var attack_arc_degrees: float = 128.0
 @export var shockwave_radius: float = 120.0
 @export var sanctuary_radius: float = 140.0
 
 @onready var state_machine: Node = $StateMachine
 @onready var animation_player: AnimationPlayer = $AnimationPlayer
-@onready var sprite: Node2D = $Sprite2D
+@onready var sprite: Sprite2D = $Sprite2D
 @onready var hurtbox: Area2D = $Hurtbox
 @onready var health_component: Node = $HealthComponent
 @onready var slash_arc: Polygon2D = $SlashArc
@@ -80,6 +88,11 @@ signal died
 @onready var effects_layer: Node2D = $EffectsLayer
 
 const DAMAGE_NUMBER_SCENE := preload("res://effects/damage_number.tscn")
+const MELEE_UTILS := preload("res://combat/melee_utils.gd")
+const TEXTURE_LOADER := preload("res://combat/runtime_texture_loader.gd")
+const KNIGHT_WEAPON_TEXTURE_PATH := "res://art/final_materials/weapons/player_knight_sword_lv3.png"
+const KNIGHT_DEATH_TEXTURE_PATH := "res://art/final_materials/deaths/player_knight_dead.png"
+const BASE_SPRITE_SCALE := Vector2(0.85, 0.85)
 
 var hp: float = 0.0
 var inspiration: float = 0.0
@@ -90,7 +103,8 @@ var cooldowns := {
 	"attack": 0.0,
 	"skill1": 0.0,
 	"skill2": 0.0,
-	"skill3": 0.0
+	"skill3": 0.0,
+	"dodge": 0.0
 }
 var active_damage_multiplier: float = 1.0
 var active_damage_reduction: float = 0.0
@@ -105,12 +119,18 @@ var dash_hit_targets: Array[Node] = []
 var current_attack_targets: Array[Node] = []
 var current_attack_name: StringName = &""
 var manual_movement_performed: bool = false
+var dodge_direction: Vector2 = Vector2.RIGHT
+var dodge_elapsed: float = 0.0
+var dodge_active: bool = false
+var dodge_invincible: bool = false
+var weapon: Node2D = null
+var weapon_sprite: Sprite2D = null
+var weapon_swing_rotation: float = 0.0
+var weapon_swing_tween: Tween = null
 var silenced_time_remaining: float = 0.0
 var root_time_remaining: float = 0.0
 var slow_time_remaining: float = 0.0
 var slow_factor: float = 1.0
-var control_ring: Line2D = null
-var last_control_summary: String = ""
 
 func _ready() -> void:
 	health_component.setup(max_hp, max_defense)
@@ -124,24 +144,21 @@ func _ready() -> void:
 	inspiration = 0.0
 	add_to_group("player")
 	hurtbox.area_entered.connect(_on_hurtbox_area_entered)
+	_setup_weapon_visual()
 	_setup_visual_shapes()
 	_build_animations()
 	slash_arc.visible = false
 	shockwave_ring.visible = false
 	sanctuary_ring.visible = false
-	_setup_control_ring()
 	emit_stat_signals()
-	_emit_control_status_changed()
 	state_machine.initialize(self)
 
 func _physics_process(delta: float) -> void:
 	manual_movement_performed = false
-	_update_control_status(delta)
-	move_input = Input.get_vector("move_left", "move_right", "move_up", "move_down")
-	if is_rooted():
-		move_input = Vector2.ZERO
-	if move_input != Vector2.ZERO:
-		facing = move_input.normalized()
+	var requested_move_input := Input.get_vector("move_left", "move_right", "move_up", "move_down")
+	if requested_move_input != Vector2.ZERO:
+		facing = requested_move_input.normalized()
+	move_input = Vector2.ZERO if root_time_remaining > 0.0 else requested_move_input
 	update_cooldowns(delta)
 	process_instant_skills()
 	state_machine.physics_update(delta)
@@ -150,9 +167,9 @@ func _physics_process(delta: float) -> void:
 	sync_visuals()
 
 func _process(delta: float) -> void:
+	_update_control_effects(delta)
 	_update_guard(delta)
 	_update_sanctuary(delta)
-	_update_control_visual(delta)
 
 func emit_stat_signals() -> void:
 	hp_changed.emit(hp, max_hp)
@@ -162,26 +179,116 @@ func emit_stat_signals() -> void:
 func get_character_name() -> String:
 	return "Knight"
 
+func get_upgrade_sections() -> Array:
+	return [
+		{
+			"title": "Skill 1: 冲锋斩",
+			"upgrades": [
+				{
+					"id": "skill1_fast_charge",
+					"label": "疾突",
+					"description": "取消蓄力时间。",
+					"fields": ["skill1_instant_dash_upgrade"]
+				},
+				{
+					"id": "skill1_armor_break",
+					"label": "裂甲冲锋",
+					"description": "命中后 5 秒内受到伤害增加 25%。",
+					"fields": ["skill1_armor_break_upgrade"]
+				}
+			]
+		},
+		{
+			"title": "Skill 2: 震地反击",
+			"upgrades": [
+				{
+					"id": "skill2_shield",
+					"label": "铁壁",
+					"description": "生成 10 秒临时护盾。",
+					"fields": ["skill2_shield_upgrade"]
+				},
+				{
+					"id": "skill2_knock_up",
+					"label": "反震",
+					"description": "技能后额外击飞敌人。",
+					"fields": ["skill2_knock_up_upgrade"]
+				}
+			]
+		},
+		{
+			"title": "Skill 3: 圣佑领域",
+			"upgrades": [
+				{
+					"id": "skill3_heal",
+					"label": "祝圣",
+					"description": "回复 10% 已损失生命值。",
+					"fields": ["skill3_heal_upgrade"]
+				},
+				{
+					"id": "skill3_restore_defense",
+					"label": "庇护",
+					"description": "恢复全部防御值。",
+					"fields": ["skill3_restore_defense_upgrade"]
+				}
+			]
+		}
+	]
+
+func is_upgrade_enabled(upgrade_id: String) -> bool:
+	var upgrade := _find_upgrade_definition(upgrade_id)
+	if upgrade.is_empty():
+		return false
+	for field_name_variant in upgrade.get("fields", []):
+		if not bool(get(String(field_name_variant))):
+			return false
+	return true
+
+func set_upgrade_enabled(upgrade_id: String, enabled: bool) -> void:
+	var upgrade := _find_upgrade_definition(upgrade_id)
+	if upgrade.is_empty():
+		return
+	for field_name_variant in upgrade.get("fields", []):
+		set(String(field_name_variant), enabled)
+	upgrades_changed.emit()
+
+func clear_all_upgrades() -> void:
+	for section in get_upgrade_sections():
+		for upgrade_variant in section.get("upgrades", []):
+			var upgrade: Dictionary = upgrade_variant
+			for field_name_variant in upgrade.get("fields", []):
+				set(String(field_name_variant), false)
+	upgrades_changed.emit()
+
+func _find_upgrade_definition(upgrade_id: String) -> Dictionary:
+	for section_variant in get_upgrade_sections():
+		var section: Dictionary = section_variant
+		for upgrade_variant in section.get("upgrades", []):
+			var upgrade: Dictionary = upgrade_variant
+			if String(upgrade.get("id", "")) == upgrade_id:
+				return upgrade
+	return {}
+
 func on_attack_landed(attack_name: StringName, target: Node) -> void:
 	gain_inspiration(inspiration_gain_on_attack_hit)
 	AccessoryManager.apply_on_hit_effects(self, attack_name, target)
 
 func sync_visuals() -> void:
 	if absf(facing.x) > 0.01:
-		if sprite is Sprite2D:
-			(sprite as Sprite2D).flip_h = facing.x < 0.0
-		else:
-			sprite.scale.x = -absf(sprite.scale.x) if facing.x < 0.0 else absf(sprite.scale.x)
+		sprite.flip_h = facing.x < 0.0
+	_sync_weapon_visual()
+	var side_sign := _get_weapon_side_sign()
+	var vertical_bias := clampf(facing.y, -1.0, 1.0)
+	slash_arc.position = Vector2(12.0 * side_sign, -6.0 + vertical_bias * 6.0)
+	if slash_arc.visible:
+		slash_arc.rotation = facing.angle()
 	if hp <= 0.0:
 		modulate = Color(0.35, 0.35, 0.35, 1.0)
+	elif dodge_invincible:
+		modulate = Color(0.8, 0.88, 1.0, 0.9)
 	elif state_machine.get_state_name() == &"Hit":
 		modulate = Color(1.0, 0.65, 0.65, 1.0)
-	elif is_rooted():
-		modulate = Color(0.72, 0.86, 1.0, 1.0)
-	elif is_silenced():
-		modulate = Color(0.82, 0.72, 1.0, 1.0)
-	elif is_slowed():
-		modulate = Color(0.78, 0.94, 1.0, 1.0)
+	elif silenced_time_remaining > 0.0:
+		modulate = Color(0.84, 0.76, 1.0, 1.0)
 	elif guard_active:
 		modulate = Color(0.65, 0.95, 1.0, 1.0)
 	elif buff_active:
@@ -214,8 +321,11 @@ func update_cooldown(cd: float, delta: float) -> float:
 func can_attack() -> bool:
 	return float(cooldowns["attack"]) <= 0.0
 
+func can_dodge() -> bool:
+	return can_use_skill(dodge_cost) and float(cooldowns["dodge"]) <= 0.0
+
 func can_cast_skill(skill_name: StringName) -> bool:
-	if is_silenced():
+	if silenced_time_remaining > 0.0:
 		return false
 	match skill_name:
 		&"skill1":
@@ -230,6 +340,8 @@ func can_cast_skill(skill_name: StringName) -> bool:
 func get_state_request() -> StringName:
 	if hp <= 0.0:
 		return &"Dead"
+	if Input.is_action_just_pressed("dodge") and can_dodge():
+		return &"Dodge"
 	if Input.is_action_just_pressed("attack") and can_attack():
 		return &"Attack"
 	if Input.is_action_just_pressed("skill_1") and can_cast_skill(&"skill1"):
@@ -273,6 +385,7 @@ func start_attack() -> void:
 	slash_arc.visible = true
 	slash_arc.rotation = facing.angle()
 	play_animation(&"attack")
+	_animate_weapon_swing(-30.0, 122.0, 0.12, 0.18)
 
 func finish_attack() -> void:
 	if current_attack_name != &"":
@@ -312,6 +425,7 @@ func start_dash_from_skill() -> void:
 		dash_direction = facing if facing != Vector2.ZERO else Vector2.RIGHT
 	dash_direction = dash_direction.normalized()
 	play_animation(&"dash")
+	_animate_weapon_swing(-36.0, 92.0, 0.08, 0.12)
 
 func process_dash(delta: float) -> bool:
 	manual_movement_performed = true
@@ -376,7 +490,37 @@ func _distance_to_segment(point: Vector2, start_position: Vector2, end_position:
 	return point.distance_to(closest_point)
 
 func trigger_normal_attack_hit() -> void:
-	apply_damage_to_overlapping_targets(attack_damage, attack_range, &"attack")
+	apply_damage_to_targets_in_arc(attack_damage, attack_range, attack_arc_degrees, &"attack")
+	_show_melee_slash_effect(attack_range, attack_arc_degrees)
+	_flash_melee_impact()
+
+func start_dodge() -> void:
+	consume_inspiration(dodge_cost)
+	cooldowns["dodge"] = dodge_cooldown
+	dodge_active = true
+	dodge_invincible = true
+	dodge_elapsed = 0.0
+	dodge_direction = move_input if move_input != Vector2.ZERO else facing
+	if dodge_direction == Vector2.ZERO:
+		dodge_direction = Vector2.RIGHT
+	dodge_direction = dodge_direction.normalized()
+	play_animation(&"dodge")
+	_animate_weapon_swing(-18.0, 44.0, 0.08, 0.1)
+
+func process_dodge(delta: float) -> bool:
+	dodge_elapsed += delta
+	manual_movement_performed = true
+	velocity = dodge_direction * dodge_speed
+	global_position += velocity * delta
+	return dodge_elapsed >= dodge_duration
+
+func is_dodge_complete() -> bool:
+	return dodge_active and dodge_elapsed >= dodge_duration
+
+func finish_dodge() -> void:
+	velocity = Vector2.ZERO
+	dodge_active = false
+	dodge_invincible = false
 
 func trigger_shockwave() -> void:
 	var shockwave_targets: Array[Node] = []
@@ -395,7 +539,6 @@ func cast_skill2() -> void:
 	trigger_shockwave()
 
 func activate_guard() -> void:
-	clear_control_effects(false, true, true)
 	guard_active = true
 	guard_time_remaining = guard_duration
 	health_component.set_shield(guard_shield_value)
@@ -412,7 +555,6 @@ func end_guard() -> void:
 	shield_changed.emit(shield)
 
 func apply_sanctuary() -> void:
-	clear_control_effects(true, true, true)
 	if skill3_heal_upgrade:
 		heal((max_hp - hp) * 0.1)
 	if skill3_restore_defense_upgrade:
@@ -450,58 +592,23 @@ func cast_skill3() -> void:
 func heal(amount: float) -> void:
 	health_component.heal(amount)
 
-func apply_control_effects(payload: Dictionary) -> void:
-	var changed := false
-	var popup_text := ""
-	var popup_color := Color.WHITE
-	if payload.has("silence_duration"):
-		var duration := float(payload["silence_duration"])
-		if duration > silenced_time_remaining + 0.05:
-			changed = true
-			popup_text = "Silenced"
-			popup_color = Color(0.84, 0.70, 1.0, 1.0)
-		silenced_time_remaining = maxf(silenced_time_remaining, duration)
-	if payload.has("root_duration"):
-		var duration := float(payload["root_duration"])
-		if duration > root_time_remaining + 0.05:
-			changed = true
-			popup_text = "Rooted"
-			popup_color = Color(0.72, 0.86, 1.0, 1.0)
-		root_time_remaining = maxf(root_time_remaining, duration)
-	if payload.has("slow_duration"):
-		var duration := float(payload["slow_duration"])
-		var multiplier := clampf(float(payload.get("slow_multiplier", 1.0)), 0.25, 1.0)
-		if duration > slow_time_remaining + 0.05 or multiplier < slow_factor - 0.01:
-			changed = true
-			if popup_text.is_empty():
-				popup_text = "Slowed"
-				popup_color = Color(0.66, 0.94, 1.0, 1.0)
-		slow_time_remaining = maxf(slow_time_remaining, duration)
-		slow_factor = minf(slow_factor, multiplier)
-	if changed:
-		_emit_control_status_changed()
-		if not popup_text.is_empty():
-			_spawn_control_text(popup_text, popup_color)
-
-func clear_control_effects(clear_silence: bool = false, clear_root: bool = true, clear_slow: bool = true) -> void:
-	var previous_summary := get_control_status_text()
-	if clear_silence:
-		silenced_time_remaining = 0.0
-	if clear_root:
-		root_time_remaining = 0.0
-	if clear_slow:
-		slow_time_remaining = 0.0
-		slow_factor = 1.0
-	if previous_summary == get_control_status_text():
-		return
-	_emit_control_status_changed()
-	_spawn_control_text("Steady", Color(0.98, 0.90, 0.68, 1.0))
-
 func get_scaled_damage(base_damage: float) -> float:
 	return base_damage * active_damage_multiplier
 
-func get_effective_move_speed() -> float:
+func get_current_move_speed() -> float:
 	return move_speed * slow_factor
+
+func get_effective_move_speed() -> float:
+	return get_current_move_speed()
+
+func is_silenced() -> bool:
+	return silenced_time_remaining > 0.0
+
+func is_rooted() -> bool:
+	return root_time_remaining > 0.0
+
+func is_slowed() -> bool:
+	return slow_time_remaining > 0.0 and slow_factor < 0.999
 
 func get_control_status_text() -> String:
 	var effects: Array[String] = []
@@ -513,17 +620,63 @@ func get_control_status_text() -> String:
 		effects.append("Slowed")
 	return ", ".join(effects)
 
-func is_silenced() -> bool:
-	return silenced_time_remaining > 0.0
+func clear_control_effects(clear_silence: bool = false, clear_root: bool = true, clear_slow: bool = true) -> void:
+	if clear_silence:
+		silenced_time_remaining = 0.0
+	if clear_root:
+		root_time_remaining = 0.0
+	if clear_slow:
+		slow_time_remaining = 0.0
+		slow_factor = 1.0
+	control_status_changed.emit(get_control_status_text())
 
-func is_rooted() -> bool:
-	return root_time_remaining > 0.0
+func apply_control_effects(payload: Dictionary) -> void:
+	if payload.has("silence_duration"):
+		silenced_time_remaining = maxf(silenced_time_remaining, float(payload["silence_duration"]))
+	if payload.has("root_duration"):
+		root_time_remaining = maxf(root_time_remaining, float(payload["root_duration"]))
+	if payload.has("slow_duration"):
+		slow_time_remaining = maxf(slow_time_remaining, float(payload["slow_duration"]))
+		slow_factor = minf(slow_factor, float(payload.get("slow_multiplier", 1.0)))
+	control_status_changed.emit(get_control_status_text())
 
-func is_slowed() -> bool:
-	return slow_time_remaining > 0.0 and slow_factor < 0.999
+func _update_control_effects(delta: float) -> void:
+	silenced_time_remaining = maxf(silenced_time_remaining - delta, 0.0)
+	root_time_remaining = maxf(root_time_remaining - delta, 0.0)
+	if slow_time_remaining > 0.0:
+		slow_time_remaining = maxf(slow_time_remaining - delta, 0.0)
+	else:
+		slow_factor = 1.0
 
 func apply_damage_to_overlapping_targets(base_damage: float, radius: float, attack_name: StringName, extra_payload: Dictionary = {}) -> void:
 	apply_damage_to_targets(base_damage, radius, attack_name, current_attack_targets, extra_payload)
+
+func apply_damage_to_targets_in_arc(base_damage: float, radius: float, arc_degrees: float, attack_name: StringName, extra_payload: Dictionary = {}) -> void:
+	var facing_direction := facing.normalized() if facing != Vector2.ZERO else Vector2.RIGHT
+	var attack_origin := global_position + facing_direction * 16.0
+	for target in get_tree().get_nodes_in_group("damageable"):
+		if target == self:
+			continue
+		if not (target is Node2D):
+			continue
+		if current_attack_targets.has(target):
+			continue
+		var node_2d: Node2D = target
+		if not MELEE_UTILS.is_point_in_arc(attack_origin, facing_direction, node_2d.global_position, radius, arc_degrees):
+			continue
+		if not target.has_method("receive_hit"):
+			continue
+		current_attack_targets.append(target)
+		var payload := AccessoryManager.build_hit_payload(
+			self,
+			attack_name,
+			get_scaled_damage(base_damage),
+			crit_rate,
+			extra_payload
+		)
+		target.receive_hit(payload)
+		on_attack_landed(attack_name, target)
+		attack_hit.emit(attack_name, target)
 
 func apply_damage_to_targets(base_damage: float, radius: float, attack_name: StringName, hit_targets: Array[Node], extra_payload: Dictionary = {}) -> void:
 	for target in get_tree().get_nodes_in_group("damageable"):
@@ -551,13 +704,14 @@ func apply_damage_to_targets(base_damage: float, radius: float, attack_name: Str
 		attack_hit.emit(attack_name, target)
 
 func receive_hit(payload: Dictionary) -> void:
+	if dodge_invincible:
+		return
 	var result: Dictionary = health_component.receive_hit(payload)
 	var final_damage := float(result.get("damage", 0.0))
 	var is_critical := bool(result.get("is_critical", false))
-	var displayed_damage := float(result.get("total_damage", final_damage))
 	if final_damage > 0.0:
 		spawn_damage_number(final_damage, is_critical, global_position)
-	if displayed_damage > 0.0:
+	if final_damage > 0.0:
 		apply_control_effects(payload)
 	if hp <= 0.0:
 		return
@@ -595,8 +749,108 @@ func _on_health_component_defense_changed(current_defense: float, max_defense_va
 func _on_health_component_died() -> void:
 	hp = 0.0
 	hp_changed.emit(hp, max_hp)
+	sprite.texture = TEXTURE_LOADER.load_texture(KNIGHT_DEATH_TEXTURE_PATH)
+	if weapon != null:
+		weapon.visible = false
 	state_machine.force_change(&"Dead")
 	died.emit()
+
+func _setup_weapon_visual() -> void:
+	weapon = Node2D.new()
+	weapon.name = "Weapon"
+	weapon.z_index = 4
+	add_child(weapon)
+	weapon_sprite = Sprite2D.new()
+	weapon_sprite.texture = TEXTURE_LOADER.load_texture(KNIGHT_WEAPON_TEXTURE_PATH)
+	weapon_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	weapon_sprite.centered = true
+	weapon_sprite.scale = Vector2.ONE * 0.68
+	weapon.add_child(weapon_sprite)
+
+func _sync_weapon_visual() -> void:
+	if weapon == null:
+		return
+	var side_sign := _get_weapon_side_sign()
+	var vertical_bias := clampf(facing.y, -1.0, 1.0)
+	var base_right_angle := deg_to_rad(-56.0)
+	var base_angle := base_right_angle if side_sign > 0.0 else PI - base_right_angle
+	weapon.visible = hp > 0.0
+	weapon.position = Vector2(24.0 * side_sign, -18.0 + vertical_bias * 6.0)
+	weapon.rotation = base_angle + deg_to_rad(vertical_bias * 8.0) + weapon_swing_rotation * side_sign
+
+func _animate_weapon_swing(windup_degrees: float, strike_degrees: float, windup_duration: float, recover_duration: float = 0.12) -> void:
+	if weapon_swing_tween != null:
+		weapon_swing_tween.kill()
+	weapon_swing_rotation = deg_to_rad(windup_degrees)
+	weapon_swing_tween = create_tween()
+	weapon_swing_tween.set_parallel(false)
+	weapon_swing_tween.tween_property(self, "weapon_swing_rotation", deg_to_rad(strike_degrees), maxf(windup_duration, 0.01)).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	weapon_swing_tween.tween_property(self, "weapon_swing_rotation", 0.0, maxf(recover_duration, 0.01)).set_trans(Tween.TRANS_QUINT).set_ease(Tween.EASE_OUT)
+
+func _get_weapon_side_sign() -> float:
+	if absf(facing.x) > 0.08:
+		return 1.0 if facing.x >= 0.0 else -1.0
+	return -1.0 if sprite.flip_h else 1.0
+
+func _flash_melee_impact() -> void:
+	sprite.modulate = Color(1.0, 0.96, 0.82, 1.0)
+	var timer := get_tree().create_timer(0.08)
+	timer.timeout.connect(func() -> void:
+		if is_instance_valid(self) and hp > 0.0:
+			sprite.modulate = Color.WHITE
+	)
+
+func _show_melee_slash_effect(radius: float, arc_degrees: float) -> void:
+	var arc := Line2D.new()
+	arc.width = 18.0
+	arc.antialiased = true
+	arc.default_color = Color(1.0, 0.9, 0.62, 0.96)
+	arc.position = facing * 14.0
+	arc.rotation = facing.angle()
+	arc.points = _build_sweep_points(radius, arc_degrees, 9)
+	effects_layer.add_child(arc)
+
+	var burst := Polygon2D.new()
+	burst.color = Color(1.0, 0.82, 0.54, 0.9)
+	burst.position = facing * (radius * 0.82)
+	burst.rotation = facing.angle()
+	burst.polygon = PackedVector2Array([
+		Vector2(-18.0, -6.0),
+		Vector2(6.0, -14.0),
+		Vector2(28.0, 0.0),
+		Vector2(6.0, 14.0),
+		Vector2(-18.0, 6.0),
+		Vector2(-2.0, 0.0)
+	])
+	effects_layer.add_child(burst)
+
+	var shock := Line2D.new()
+	shock.width = 5.0
+	shock.antialiased = true
+	shock.default_color = Color(1.0, 0.98, 0.86, 0.75)
+	shock.position = facing * (radius * 0.55)
+	shock.rotation = facing.angle()
+	shock.points = PackedVector2Array([
+		Vector2(-14.0, 0.0),
+		Vector2(0.0, 0.0),
+		Vector2(36.0, 0.0)
+	])
+	effects_layer.add_child(shock)
+
+	var arc_tween := arc.create_tween()
+	arc_tween.tween_property(arc, "scale", Vector2(1.14, 1.22), 0.14)
+	arc_tween.parallel().tween_property(arc, "modulate:a", 0.0, 0.14)
+	arc_tween.finished.connect(arc.queue_free)
+
+	var burst_tween := burst.create_tween()
+	burst_tween.tween_property(burst, "scale", Vector2.ONE * 1.24, 0.12)
+	burst_tween.parallel().tween_property(burst, "modulate:a", 0.0, 0.12)
+	burst_tween.finished.connect(burst.queue_free)
+
+	var shock_tween := shock.create_tween()
+	shock_tween.tween_property(shock, "scale", Vector2(1.2, 1.0), 0.1)
+	shock_tween.parallel().tween_property(shock, "modulate:a", 0.0, 0.1)
+	shock_tween.finished.connect(shock.queue_free)
 
 func _show_shockwave() -> void:
 	shockwave_ring.visible = true
@@ -639,58 +893,6 @@ func _update_sanctuary(delta: float) -> void:
 func _spawn_sanctuary_visual(delta: float) -> void:
 	sanctuary_ring.rotation += delta * 2.5
 
-func _setup_control_ring() -> void:
-	control_ring = Line2D.new()
-	control_ring.width = 3.0
-	control_ring.closed = true
-	control_ring.visible = false
-	control_ring.default_color = Color(0.74, 0.86, 1.0, 0.9)
-	control_ring.points = _build_ring_points(34.0, 18)
-	effects_layer.add_child(control_ring)
-
-func _update_control_status(delta: float) -> void:
-	var previous_summary := get_control_status_text()
-	silenced_time_remaining = maxf(silenced_time_remaining - delta, 0.0)
-	root_time_remaining = maxf(root_time_remaining - delta, 0.0)
-	if slow_time_remaining > 0.0:
-		slow_time_remaining = maxf(slow_time_remaining - delta, 0.0)
-	else:
-		slow_factor = 1.0
-	if slow_time_remaining <= 0.0:
-		slow_factor = 1.0
-	if previous_summary != get_control_status_text():
-		_emit_control_status_changed()
-
-func _update_control_visual(delta: float) -> void:
-	if control_ring == null:
-		return
-	var pulse := 0.78 + 0.22 * sin(Time.get_ticks_msec() * 0.01)
-	control_ring.visible = not get_control_status_text().is_empty() and hp > 0.0
-	if not control_ring.visible:
-		return
-	control_ring.rotation += delta * 1.8
-	control_ring.scale = Vector2.ONE * pulse
-	if is_rooted():
-		control_ring.default_color = Color(0.72, 0.86, 1.0, 0.92)
-	elif is_silenced():
-		control_ring.default_color = Color(0.84, 0.70, 1.0, 0.92)
-	else:
-		control_ring.default_color = Color(0.66, 0.94, 1.0, 0.88)
-
-func _emit_control_status_changed() -> void:
-	var summary := get_control_status_text()
-	if summary == last_control_summary:
-		return
-	last_control_summary = summary
-	control_status_changed.emit(summary)
-
-func _spawn_control_text(label_text: String, color_value: Color) -> void:
-	var popup := DAMAGE_NUMBER_SCENE.instantiate()
-	popup.position = Vector2(-34.0, -54.0)
-	if popup.has_method("setup_text"):
-		popup.setup_text(label_text, color_value, 0.72)
-	effects_layer.add_child(popup)
-
 func spawn_damage_number(amount: float, is_critical: bool, world_position: Vector2) -> void:
 	var damage_number := DAMAGE_NUMBER_SCENE.instantiate()
 	damage_number.position = to_local(world_position) + Vector2(0.0, -32.0)
@@ -698,7 +900,9 @@ func spawn_damage_number(amount: float, is_critical: bool, world_position: Vecto
 	effects_layer.add_child(damage_number)
 
 func _setup_visual_shapes() -> void:
-	slash_arc.position = facing * attack_range * 0.35
+	slash_arc.position = Vector2(14.0, -4.0)
+	slash_arc.polygon = _build_slash_arc_polygon(attack_range, attack_arc_degrees, 12)
+	slash_arc.color = Color(1.0, 0.88, 0.54, 0.72)
 	shockwave_ring.points = _build_ring_points(shockwave_radius)
 	sanctuary_ring.points = _build_ring_points(sanctuary_radius)
 
@@ -708,6 +912,28 @@ func _build_ring_points(radius: float, steps: int = 16) -> PackedVector2Array:
 		var angle := TAU * float(index) / float(steps)
 		points.append(Vector2.RIGHT.rotated(angle) * radius)
 	return points
+
+func _build_slash_arc_polygon(radius: float, arc_degrees: float, steps: int = 12) -> PackedVector2Array:
+	var points := PackedVector2Array()
+	var half_arc := deg_to_rad(arc_degrees) * 0.5
+	points.append(Vector2.ZERO)
+	for index in range(steps + 1):
+		var weight := float(index) / float(steps)
+		var angle := lerpf(-half_arc, half_arc, weight)
+		points.append(Vector2.RIGHT.rotated(angle) * radius)
+	return points
+
+func _build_sweep_points(radius: float, arc_degrees: float, steps: int = 8) -> PackedVector2Array:
+	var points := PackedVector2Array()
+	var half_arc := deg_to_rad(arc_degrees) * 0.5
+	for index in range(steps + 1):
+		var weight := float(index) / float(steps)
+		var angle := lerpf(-half_arc, half_arc, weight)
+		points.append(Vector2.RIGHT.rotated(angle) * radius)
+	return points
+
+func _sprite_scale(x_scale: float = 1.0, y_scale: float = 1.0) -> Vector2:
+	return Vector2(BASE_SPRITE_SCALE.x * x_scale, BASE_SPRITE_SCALE.y * y_scale)
 
 func _build_animations() -> void:
 	animation_player.root_node = NodePath("..")
@@ -720,6 +946,7 @@ func _build_animations() -> void:
 	_add_attack_animation(library)
 	_add_charge_animation(library)
 	_add_dash_animation(library)
+	_add_dodge_animation(library)
 	_add_skill2_animation(library)
 	_add_skill3_animation(library)
 	_add_guard_animation(library)
@@ -742,7 +969,7 @@ func _add_idle_animation(library: AnimationLibrary) -> void:
 	var animation := Animation.new()
 	animation.length = 0.8
 	animation.loop_mode = Animation.LOOP_LINEAR
-	_add_value_track(animation, "Sprite2D:scale", [[0.0, Vector2(0.25, 0.25)], [0.4, Vector2(0.255, 0.245)], [0.8, Vector2(0.25, 0.25)]])
+	_add_value_track(animation, "Sprite2D:scale", [[0.0, _sprite_scale()], [0.4, _sprite_scale(1.02, 0.98)], [0.8, _sprite_scale()]])
 	_add_value_track(animation, "Sprite2D:position", [[0.0, Vector2.ZERO], [0.4, Vector2(0.0, -2.0)], [0.8, Vector2.ZERO]])
 	_store_animation(library, &"idle", animation)
 
@@ -757,36 +984,45 @@ func _add_move_animation(library: AnimationLibrary) -> void:
 func _add_attack_animation(library: AnimationLibrary) -> void:
 	var animation := Animation.new()
 	animation.length = attack_windup + attack_hit_frame + attack_recovery
-	_add_value_track(animation, "Sprite2D:rotation", [[0.0, -0.15], [attack_windup, 0.1], [animation.length, 0.0]])
-	_add_value_track(animation, "Sprite2D:scale", [[0.0, Vector2(0.25, 0.25)], [attack_windup, Vector2(0.3, 0.23)], [animation.length, Vector2(0.25, 0.25)]])
-	_add_value_track(animation, "SlashArc:scale", [[0.0, Vector2(0.2, 0.2)], [attack_windup, Vector2(1.1, 1.0)], [animation.length, Vector2(0.6, 0.6)]])
+	_add_value_track(animation, "Sprite2D:rotation", [[0.0, -0.22], [attack_windup * 0.75, -0.12], [attack_windup + attack_hit_frame * 0.6, 0.22], [animation.length, 0.0]])
+	_add_value_track(animation, "Sprite2D:scale", [[0.0, _sprite_scale(0.92, 1.08)], [attack_windup * 0.85, _sprite_scale(1.28, 0.86)], [animation.length, _sprite_scale()]])
+	_add_value_track(animation, "Sprite2D:position", [[0.0, Vector2(-4.0, 0.0)], [attack_windup, Vector2(6.0, -4.0)], [animation.length, Vector2.ZERO]])
+	_add_value_track(animation, "SlashArc:scale", [[0.0, Vector2(0.12, 0.12)], [attack_windup, Vector2(1.18, 1.08)], [animation.length, Vector2(0.42, 0.42)]])
+	_add_value_track(animation, "SlashArc:modulate", [[0.0, Color(1.0, 0.96, 0.8, 0.0)], [attack_windup * 0.65, Color(1.0, 0.92, 0.66, 0.84)], [animation.length, Color(1.0, 0.92, 0.66, 0.0)]])
 	_store_animation(library, &"attack", animation)
 
 func _add_charge_animation(library: AnimationLibrary) -> void:
 	var animation := Animation.new()
 	animation.length = charge_duration
-	_add_value_track(animation, "Sprite2D:scale", [[0.0, Vector2(0.25, 0.25)], [charge_duration, Vector2(0.34, 0.22)]])
+	_add_value_track(animation, "Sprite2D:scale", [[0.0, _sprite_scale()], [charge_duration, _sprite_scale(1.36, 0.88)]])
 	_add_value_track(animation, "Sprite2D:modulate", [[0.0, Color(0.75, 0.85, 1.0, 1.0)], [charge_duration, Color(1.0, 0.85, 0.35, 1.0)]])
 	_store_animation(library, &"charge", animation)
 
 func _add_dash_animation(library: AnimationLibrary) -> void:
 	var animation := Animation.new()
 	animation.length = dash_duration
-	_add_value_track(animation, "Sprite2D:scale", [[0.0, Vector2(0.35, 0.18)], [dash_duration, Vector2(0.25, 0.25)]])
+	_add_value_track(animation, "Sprite2D:scale", [[0.0, _sprite_scale(1.4, 0.72)], [dash_duration, _sprite_scale()]])
 	_add_value_track(animation, "Sprite2D:modulate", [[0.0, Color(1.0, 1.0, 1.0, 0.7)], [dash_duration, Color.WHITE]])
 	_store_animation(library, &"dash", animation)
+
+func _add_dodge_animation(library: AnimationLibrary) -> void:
+	var animation := Animation.new()
+	animation.length = dodge_duration
+	_add_value_track(animation, "Sprite2D:scale", [[0.0, _sprite_scale(1.22, 0.82)], [dodge_duration, _sprite_scale()]])
+	_add_value_track(animation, "Sprite2D:modulate", [[0.0, Color(0.88, 0.94, 1.0, 0.72)], [dodge_duration, Color.WHITE]])
+	_store_animation(library, &"dodge", animation)
 
 func _add_skill2_animation(library: AnimationLibrary) -> void:
 	var animation := Animation.new()
 	animation.length = skill2_duration
-	_add_value_track(animation, "Sprite2D:scale", [[0.0, Vector2(0.25, 0.25)], [skill2_duration * 0.5, Vector2(0.22, 0.32)], [skill2_duration, Vector2(0.25, 0.25)]])
+	_add_value_track(animation, "Sprite2D:scale", [[0.0, _sprite_scale()], [skill2_duration * 0.5, _sprite_scale(0.88, 1.28)], [skill2_duration, _sprite_scale()]])
 	_add_value_track(animation, "Sprite2D:rotation", [[0.0, -0.05], [skill2_duration, 0.05]])
 	_store_animation(library, &"skill2", animation)
 
 func _add_skill3_animation(library: AnimationLibrary) -> void:
 	var animation := Animation.new()
 	animation.length = skill3_duration
-	_add_value_track(animation, "Sprite2D:scale", [[0.0, Vector2(0.22, 0.22)], [skill3_duration * 0.5, Vector2(0.32, 0.32)], [skill3_duration, Vector2(0.25, 0.25)]])
+	_add_value_track(animation, "Sprite2D:scale", [[0.0, _sprite_scale(0.88, 0.88)], [skill3_duration * 0.5, _sprite_scale(1.28, 1.28)], [skill3_duration, _sprite_scale()]])
 	_add_value_track(animation, "SanctuaryRing:modulate", [[0.0, Color(1.0, 0.92, 0.55, 0.1)], [skill3_duration, Color(1.0, 0.92, 0.55, 0.95)]])
 	_store_animation(library, &"skill3", animation)
 
@@ -794,7 +1030,7 @@ func _add_guard_animation(library: AnimationLibrary) -> void:
 	var animation := Animation.new()
 	animation.length = 0.5
 	animation.loop_mode = Animation.LOOP_LINEAR
-	_add_value_track(animation, "Sprite2D:scale", [[0.0, Vector2(0.24, 0.26)], [0.25, Vector2(0.27, 0.24)], [0.5, Vector2(0.24, 0.26)]])
+	_add_value_track(animation, "Sprite2D:scale", [[0.0, _sprite_scale(0.96, 1.04)], [0.25, _sprite_scale(1.08, 0.96)], [0.5, _sprite_scale(0.96, 1.04)]])
 	_store_animation(library, &"guard", animation)
 
 func _add_buff_animation(library: AnimationLibrary) -> void:

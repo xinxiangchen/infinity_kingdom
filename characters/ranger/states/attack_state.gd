@@ -20,20 +20,25 @@ func enter() -> void:
 
 func physics_update(delta: float) -> void:
 	elapsed += delta
+	var move_speed: float = float(actor.get_current_move_speed()) if actor.has_method("get_current_move_speed") else float(actor.move_speed)
 	if actor.move_input != Vector2.ZERO:
-		actor.velocity = actor.move_input.normalized() * actor.get_effective_move_speed()
+		actor.velocity = actor.move_input.normalized() * move_speed
 	else:
-		actor.velocity = actor.velocity.move_toward(Vector2.ZERO, actor.get_effective_move_speed() * delta * 10.0)
-	if not hit_triggered and elapsed >= actor.attack_windup:
+		actor.velocity = actor.velocity.move_toward(Vector2.ZERO, move_speed * delta * 10.0)
+	var attack_windup: float = float(actor.get_attack_windup_duration()) if actor.has_method("get_attack_windup_duration") else float(actor.attack_windup)
+	if not hit_triggered and elapsed >= attack_windup:
 		hit_triggered = true
 		actor.trigger_normal_attack_hit()
 
 func evaluate_transitions() -> void:
 	var requested_state: StringName = actor.get_state_request()
-	if requested_state == &"Dash" or requested_state == &"Skill":
+	if requested_state == &"Dodge" or requested_state == &"Dash" or requested_state == &"Skill":
 		state_machine.transition_to(requested_state)
 		return
-	var total_duration: float = actor.attack_windup + actor.attack_hit_frame + actor.attack_recovery
+	var attack_windup: float = float(actor.get_attack_windup_duration()) if actor.has_method("get_attack_windup_duration") else float(actor.attack_windup)
+	var attack_hit_frame: float = float(actor.get_attack_hit_frame_duration()) if actor.has_method("get_attack_hit_frame_duration") else float(actor.attack_hit_frame)
+	var attack_recovery: float = float(actor.get_attack_recovery_duration()) if actor.has_method("get_attack_recovery_duration") else float(actor.attack_recovery)
+	var total_duration: float = attack_windup + attack_hit_frame + attack_recovery
 	if elapsed >= total_duration:
 		state_machine.transition_to(requested_state)
 

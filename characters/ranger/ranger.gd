@@ -9,11 +9,17 @@ signal inspiration_changed(current_inspiration: float, max_inspiration_value: fl
 signal took_damage(amount: float, remaining_hp: float)
 signal shield_changed(current_shield: float)
 signal defense_changed(current_defense: float, max_defense_value: float)
+signal upgrades_changed
 signal control_status_changed(summary: String)
 signal died
 
 const DAMAGE_NUMBER_SCENE := preload("res://effects/damage_number.tscn")
 const ARROW_SCENE := preload("res://effects/projectiles/piercing_arrow.tscn")
+const MELEE_UTILS := preload("res://combat/melee_utils.gd")
+const TEXTURE_LOADER := preload("res://combat/runtime_texture_loader.gd")
+const RANGER_WEAPON_TEXTURE_PATH := "res://art/final_materials/weapons/player_ranger_knife_lv3.png"
+const RANGER_DEATH_TEXTURE_PATH := "res://art/final_materials/deaths/player_ranger_dead.png"
+const BODY_BASE_SCALE := Vector2(0.78, 0.78)
 
 @export_group("Core Stats")
 @export var max_hp: float = 85.0
@@ -39,14 +45,23 @@ const ARROW_SCENE := preload("res://effects/projectiles/piercing_arrow.tscn")
 @export var skill1_split_shot_upgrade: bool = false
 @export var skill1_double_shot_upgrade: bool = false
 
-@export_group("Skill 2: Shadow Roll")
-@export var skill2_cost: float = 5.0
-@export var skill2_cooldown: float = 1.0
-@export var dash_duration: float = 0.18
-@export var dash_speed: float = 900.0
-@export var skill2_invincible_upgrade: bool = false
-@export var skill2_critical_boost_upgrade: bool = false
-@export var force_critical_duration: float = 3.0
+@export_group("Skill 2: Shadow Step")
+@export var skill2_cost: float = 10.0
+@export var skill2_cooldown: float = 10.0
+@export var shadow_step_duration: float = 5.0
+@export var shadow_step_mark_radius: float = 150.0
+@export var skill2_residual_mark_upgrade: bool = false
+@export var skill2_wind_boost_upgrade: bool = false
+@export var shadow_step_speed_multiplier: float = 1.5
+@export var shadow_step_speed_decay_per_second: float = 0.1
+@export var shadow_step_heal_per_mark: float = 5.0
+@export var shadow_step_attack_speed_bonus_per_mark: float = 0.1
+
+@export_group("Dodge")
+@export var dodge_cost: float = 5.0
+@export var dodge_cooldown: float = 3.0
+@export var dodge_duration: float = 0.26
+@export var dodge_speed: float = 920.0
 
 @export_group("Skill 3: Assassination Strike")
 @export var skill3_cost: float = 20.0
@@ -66,10 +81,11 @@ const ARROW_SCENE := preload("res://effects/projectiles/piercing_arrow.tscn")
 @export var hit_stun_duration: float = 0.22
 @export var hit_threshold: float = 1.0
 @export var attack_range: float = 88.0
+@export var attack_arc_degrees: float = 108.0
 
 @onready var state_machine: Node = $StateMachine
 @onready var animation_player: AnimationPlayer = $AnimationPlayer
-@onready var sprite: Polygon2D = $Body
+@onready var sprite: Sprite2D = $Body
 @onready var hurtbox: Area2D = $Hurtbox
 @onready var health_component: Node = $HealthComponent
 @onready var slash_arc: Polygon2D = $SlashArc
@@ -88,7 +104,8 @@ var cooldowns := {
 	"attack": 0.0,
 	"skill1": 0.0,
 	"skill2": 0.0,
-	"skill3": 0.0
+	"skill3": 0.0,
+	"dodge": 0.0
 }
 var queued_skill: StringName = &""
 var queued_skill_payload: Dictionary = {}
@@ -103,12 +120,20 @@ var skill3_strike_started: bool = false
 var skill3_damage_applied: bool = false
 var skill3_strike_elapsed: float = 0.0
 var roll_afterimage_timer: float = 0.0
+var dodge_direction: Vector2 = Vector2.RIGHT
+var dodge_elapsed: float = 0.0
+var shadow_step_elapsed: float = 0.0
+var shadow_step_active: bool = false
+var shadow_step_speed_bonus: float = 0.0
+var shadow_step_attack_speed_bonus: float = 0.0
+var shadow_step_marked_targets: Dictionary = {}
+var weapon: Node2D = null
+var weapon_sprite: Sprite2D = null
+var weapon_angle_offset: float = deg_to_rad(38.0)
 var silenced_time_remaining: float = 0.0
 var root_time_remaining: float = 0.0
 var slow_time_remaining: float = 0.0
 var slow_factor: float = 1.0
-var control_ring: Line2D = null
-var last_control_summary: String = ""
 
 func _ready() -> void:
 	health_component.setup(max_hp, max_defense)
@@ -122,32 +147,30 @@ func _ready() -> void:
 	inspiration = 0.0
 	add_to_group("player")
 	hurtbox.area_entered.connect(_on_hurtbox_area_entered)
+	_setup_weapon_visual()
 	_build_animations()
 	slash_arc.visible = false
 	aim_ring.visible = false
 	assassination_mark.visible = false
-	_setup_control_ring()
 	emit_stat_signals()
-	_emit_control_status_changed()
 	state_machine.initialize(self)
 
 func _physics_process(delta: float) -> void:
 	manual_movement_performed = false
-	_update_control_status(delta)
-	move_input = Input.get_vector("move_left", "move_right", "move_up", "move_down")
-	if is_rooted():
-		move_input = Vector2.ZERO
-	if move_input != Vector2.ZERO:
-		facing = move_input.normalized()
+	var requested_move_input := Input.get_vector("move_left", "move_right", "move_up", "move_down")
+	if requested_move_input != Vector2.ZERO:
+		facing = requested_move_input.normalized()
+	move_input = Vector2.ZERO if root_time_remaining > 0.0 else requested_move_input
 	update_cooldowns(delta)
+	_update_shadow_step_bonuses(delta)
 	state_machine.physics_update(delta)
 	if not manual_movement_performed:
 		move_and_slide()
 	sync_visuals()
 
 func _process(delta: float) -> void:
+	_update_control_effects(delta)
 	_update_targeting_visuals(delta)
-	_update_control_visual(delta)
 
 func emit_stat_signals() -> void:
 	hp_changed.emit(hp, max_hp)
@@ -156,6 +179,98 @@ func emit_stat_signals() -> void:
 
 func get_character_name() -> String:
 	return "Ranger"
+
+func get_upgrade_sections() -> Array:
+	return [
+		{
+			"title": "Skill 1: 穿风箭",
+			"upgrades": [
+				{
+					"id": "skill1_split",
+					"label": "裂羽",
+					"description": "主箭变为三发散射。",
+					"fields": ["skill1_split_shot_upgrade"]
+				},
+				{
+					"id": "skill1_double",
+					"label": "连矢",
+					"description": "主箭连续射出两次。",
+					"fields": ["skill1_double_shot_upgrade"]
+				}
+			]
+		},
+		{
+			"title": "Skill 2: 影步",
+			"upgrades": [
+				{
+					"id": "skill2_mark",
+					"label": "残影",
+					"description": "结束时按标记敌人数回血并提高攻速。",
+					"fields": ["skill2_residual_mark_upgrade"]
+				},
+				{
+					"id": "skill2_wind",
+					"label": "追风",
+					"description": "灵体期间提高移速，结束后逐秒衰减。",
+					"fields": ["skill2_wind_boost_upgrade"]
+				}
+			]
+		},
+		{
+			"title": "Skill 3: 猎杀突袭",
+			"upgrades": [
+				{
+					"id": "skill3_bleed",
+					"label": "放血",
+					"description": "命中后施加流血。",
+					"fields": ["skill3_bleed_upgrade"]
+				},
+				{
+					"id": "skill3_execute",
+					"label": "处决",
+					"description": "对低血量敌人直接处决。",
+					"fields": ["skill3_execute_upgrade"]
+				}
+			]
+		}
+	]
+
+func is_upgrade_enabled(upgrade_id: String) -> bool:
+	var upgrade := _find_upgrade_definition(upgrade_id)
+	if upgrade.is_empty():
+		return false
+	for field_name_variant in upgrade.get("fields", []):
+		if not bool(get(String(field_name_variant))):
+			return false
+	return true
+
+func set_upgrade_enabled(upgrade_id: String, enabled: bool) -> void:
+	var upgrade := _find_upgrade_definition(upgrade_id)
+	if upgrade.is_empty():
+		return
+	for field_name_variant in upgrade.get("fields", []):
+		set(String(field_name_variant), enabled)
+	upgrades_changed.emit()
+
+func clear_all_upgrades() -> void:
+	for section in get_upgrade_sections():
+		for upgrade_variant in section.get("upgrades", []):
+			var upgrade: Dictionary = upgrade_variant
+			for field_name_variant in upgrade.get("fields", []):
+				set(String(field_name_variant), false)
+	upgrades_changed.emit()
+
+func _find_upgrade_definition(upgrade_id: String) -> Dictionary:
+	for section_variant in get_upgrade_sections():
+		var section: Dictionary = section_variant
+		for upgrade_variant in section.get("upgrades", []):
+			var upgrade: Dictionary = upgrade_variant
+			if String(upgrade.get("id", "")) == upgrade_id:
+				return upgrade
+	return {}
+
+func is_detectable() -> bool:
+	return not shadow_step_active
 
 func gain_inspiration(amount: float) -> void:
 	if amount <= 0.0 or hp <= 0.0:
@@ -171,33 +286,25 @@ func on_attack_landed(attack_name: StringName, target: Node) -> void:
 
 func sync_visuals() -> void:
 	if absf(facing.x) > 0.01:
-		sprite.scale.x = -1.0 if facing.x < 0.0 else 1.0
+		sprite.flip_h = facing.x < 0.0
 	projectile_spawner.position.x = 28.0 if facing.x >= 0.0 else -28.0
 	slash_arc.position.x = 24.0 if facing.x >= 0.0 else -24.0
-	var body_color := Color(0.36, 0.86, 0.62, 1.0)
+	_sync_weapon_visual()
 	if hp <= 0.0:
 		modulate = Color(0.35, 0.35, 0.35, 1.0)
-	elif is_rooted():
-		modulate = Color(0.72, 0.86, 1.0, 1.0)
-		body_color = Color(0.70, 0.88, 1.0, 1.0)
-	elif is_silenced():
-		modulate = Color(0.88, 0.76, 1.0, 1.0)
-		body_color = Color(0.80, 0.90, 1.0, 1.0)
-	elif is_slowed():
-		modulate = Color(0.82, 0.96, 1.0, 1.0)
-		body_color = Color(0.72, 0.96, 0.92, 1.0)
+	elif shadow_step_active:
+		modulate = Color(0.72, 0.88, 1.0, 0.34)
 	elif active_dash_invincible:
 		modulate = Color(0.75, 0.82, 1.0, 0.88)
-		body_color = Color(0.72, 0.98, 1.0, 1.0)
+	elif silenced_time_remaining > 0.0:
+		modulate = Color(0.84, 0.76, 1.0, 1.0)
 	elif force_critical:
 		modulate = Color(1.0, 0.85, 0.65, 1.0)
-		body_color = Color(0.5, 1.0, 0.72, 1.0)
 	elif state_machine.get_state_name() == &"Hit":
 		modulate = Color(1.0, 0.6, 0.6, 1.0)
-		body_color = Color(0.95, 0.58, 0.58, 1.0)
 	else:
 		modulate = Color.WHITE
-	sprite.color = body_color
+	sprite.modulate = Color.WHITE
 
 func update_cooldowns(delta: float) -> void:
 	for key in cooldowns.keys():
@@ -213,8 +320,11 @@ func consume_inspiration(cost: float) -> void:
 func can_attack() -> bool:
 	return float(cooldowns["attack"]) <= 0.0
 
+func can_dodge() -> bool:
+	return can_use_skill(dodge_cost) and float(cooldowns["dodge"]) <= 0.0
+
 func can_cast_skill(skill_name: StringName) -> bool:
-	if is_silenced():
+	if silenced_time_remaining > 0.0:
 		return false
 	match skill_name:
 		&"skill1":
@@ -229,9 +339,11 @@ func can_cast_skill(skill_name: StringName) -> bool:
 func get_state_request() -> StringName:
 	if hp <= 0.0:
 		return &"Dead"
+	if Input.is_action_just_pressed("dodge") and can_dodge():
+		return &"Dodge"
 	if Input.is_action_just_pressed("skill_2") and can_cast_skill(&"skill2"):
 		prepare_skill_request(&"skill2")
-		return &"Dash"
+		return &"Skill"
 	if Input.is_action_just_pressed("skill_3") and can_cast_skill(&"skill3"):
 		prepare_skill_request(&"skill3")
 		return &"Skill"
@@ -250,9 +362,6 @@ func prepare_skill_request(skill_name: StringName) -> void:
 	match skill_name:
 		&"skill1":
 			queued_skill_payload["direction"] = facing
-		&"skill2":
-			var roll_direction := move_input if move_input != Vector2.ZERO else facing
-			queued_skill_payload["direction"] = roll_direction.normalized() if roll_direction != Vector2.ZERO else Vector2.RIGHT
 		&"skill3":
 			var target := find_assassination_target()
 			if target != null:
@@ -267,13 +376,16 @@ func consume_queued_skill() -> StringName:
 	return skill_name
 
 func start_attack() -> void:
-	cooldowns["attack"] = attack_interval
+	var attack_speed := get_attack_speed_multiplier()
+	cooldowns["attack"] = attack_interval / attack_speed
 	current_attack_targets.clear()
 	current_attack_name = &"attack"
 	attack_started.emit(current_attack_name)
 	slash_arc.visible = true
 	slash_arc.rotation = facing.angle()
+	animation_player.speed_scale = attack_speed
 	play_animation(&"attack")
+	_animate_weapon_swing(-94.0, 42.0, get_attack_windup_duration() + get_attack_hit_frame_duration())
 	_flash_body(Color(0.82, 1.0, 0.78, 1.0), 0.08)
 
 func finish_attack() -> void:
@@ -282,6 +394,7 @@ func finish_attack() -> void:
 	current_attack_name = &""
 	current_attack_targets.clear()
 	slash_arc.visible = false
+	animation_player.speed_scale = 1.0
 
 func start_skill(skill_name: StringName) -> void:
 	match skill_name:
@@ -297,7 +410,7 @@ func start_skill(skill_name: StringName) -> void:
 	skill_used.emit(skill_name)
 
 func trigger_normal_attack_hit() -> void:
-	apply_damage_to_overlapping_targets(attack_damage, attack_range, &"attack")
+	apply_damage_to_targets_in_arc(attack_damage, attack_range, attack_arc_degrees, &"attack")
 
 func fire_piercing_arrow() -> void:
 	attack_started.emit(&"skill1")
@@ -314,38 +427,88 @@ func fire_piercing_arrow() -> void:
 		)
 	attack_finished.emit(&"skill1")
 
-func start_roll() -> void:
-	start_skill(&"skill2")
-	current_attack_name = &"skill2"
-	dash_direction = queued_skill_payload.get("direction", facing)
-	if dash_direction == Vector2.ZERO:
-		dash_direction = facing if facing != Vector2.ZERO else Vector2.RIGHT
-	dash_direction = dash_direction.normalized()
-	active_dash_invincible = skill2_invincible_upgrade
-	clear_control_effects(skill2_invincible_upgrade, true, true)
+func start_dodge() -> void:
+	consume_inspiration(dodge_cost)
+	cooldowns["dodge"] = dodge_cooldown
+	dodge_direction = move_input if move_input != Vector2.ZERO else facing
+	if dodge_direction == Vector2.ZERO:
+		dodge_direction = Vector2.RIGHT
+	dodge_direction = dodge_direction.normalized()
+	dodge_elapsed = 0.0
+	active_dash_invincible = true
 	roll_afterimage_timer = 0.0
-	_spawn_afterimage(0.32)
-	play_animation(&"dash")
+	play_animation(&"dodge")
+	_animate_weapon_swing(-70.0, 48.0, dodge_duration)
 
-func process_roll(delta: float) -> bool:
+func process_dodge(delta: float) -> bool:
+	dodge_elapsed += delta
 	manual_movement_performed = true
-	velocity = dash_direction * dash_speed
+	velocity = dodge_direction * dodge_speed
 	global_position += velocity * delta
 	roll_afterimage_timer -= delta
 	if roll_afterimage_timer <= 0.0:
-		roll_afterimage_timer = 0.03
-		_spawn_afterimage(0.18)
-	return false
+		roll_afterimage_timer = 0.04
+		_spawn_afterimage(0.2)
+	return dodge_elapsed >= dodge_duration
 
-func finish_roll() -> void:
+func is_dodge_complete() -> bool:
+	return active_dash_invincible and dodge_elapsed >= dodge_duration
+
+func finish_dodge() -> void:
 	velocity = Vector2.ZERO
 	active_dash_invincible = false
 	_show_roll_finish_burst()
-	if skill2_critical_boost_upgrade:
-		apply_force_crit(force_critical_duration)
+
+func start_shadow_step() -> void:
+	start_skill(&"skill2")
+	current_attack_name = &"skill2"
+	shadow_step_active = true
+	shadow_step_elapsed = 0.0
+	shadow_step_marked_targets.clear()
+	roll_afterimage_timer = 0.0
+	attack_started.emit(&"skill2")
+	play_animation(&"skill2")
+	if weapon != null:
+		weapon.visible = false
+
+func process_shadow_step(delta: float) -> bool:
+	shadow_step_elapsed += delta
+	manual_movement_performed = true
+	var direction := move_input if move_input != Vector2.ZERO else facing
+	if direction != Vector2.ZERO:
+		facing = direction.normalized()
+	velocity = Vector2.ZERO if direction == Vector2.ZERO else direction.normalized() * move_speed * (shadow_step_speed_multiplier if skill2_wind_boost_upgrade else 1.0)
+	global_position += velocity * delta
+	roll_afterimage_timer -= delta
+	if roll_afterimage_timer <= 0.0:
+		roll_afterimage_timer = 0.06
+		_spawn_afterimage(0.14)
+	if skill2_residual_mark_upgrade:
+		_mark_shadow_step_targets()
+	return shadow_step_elapsed >= shadow_step_duration
+
+func is_shadow_step_complete() -> bool:
+	return shadow_step_active and shadow_step_elapsed >= shadow_step_duration
+
+func finish_shadow_step() -> void:
+	velocity = Vector2.ZERO
+	shadow_step_active = false
+	if skill2_residual_mark_upgrade:
+		var marked_enemy_count := shadow_step_marked_targets.size()
+		if marked_enemy_count > 0:
+			health_component.heal(marked_enemy_count * shadow_step_heal_per_mark)
+			shadow_step_attack_speed_bonus = clampf(
+				shadow_step_attack_speed_bonus + marked_enemy_count * shadow_step_attack_speed_bonus_per_mark,
+				0.0,
+				1.0
+			)
+	if skill2_wind_boost_upgrade:
+		shadow_step_speed_bonus = maxf(shadow_step_speed_bonus, shadow_step_speed_multiplier - 1.0)
 	if current_attack_name != &"":
 		attack_finished.emit(current_attack_name)
 	current_attack_name = &""
+	if weapon != null:
+		weapon.visible = true
 
 func start_assassination_dash() -> void:
 	start_skill(&"skill3")
@@ -356,6 +519,7 @@ func start_assassination_dash() -> void:
 	active_skill_target = queued_skill_payload.get("target", null)
 	_show_assassination_mark()
 	play_animation(&"skill3_dash")
+	_animate_weapon_swing(-106.0, 18.0, 0.18)
 
 func process_assassination_dash(delta: float) -> bool:
 	if active_skill_target == null or not is_instance_valid(active_skill_target):
@@ -423,11 +587,12 @@ func apply_bleed(target: Node) -> void:
 		var timer := get_tree().create_timer(float(index + 1))
 		timer.timeout.connect(func() -> void:
 			if is_instance_valid(self) and is_instance_valid(target) and target.has_method("receive_hit"):
-				target.receive_hit({
-					"source": self,
-					"damage": bleed_damage_per_second,
-					"crit_rate": 0.0
-				})
+				target.receive_hit(AccessoryManager.build_hit_payload(
+					self,
+					&"bleed",
+					bleed_damage_per_second,
+					0.0
+				))
 		)
 
 func apply_force_crit(duration: float) -> void:
@@ -455,15 +620,14 @@ func find_assassination_target() -> Node2D:
 	return nearest_target
 
 func receive_hit(payload: Dictionary) -> void:
-	if active_dash_invincible:
+	if active_dash_invincible or shadow_step_active:
 		return
 	var result: Dictionary = health_component.receive_hit(payload)
 	var final_damage := float(result.get("damage", 0.0))
 	var is_critical := bool(result.get("is_critical", false))
-	var displayed_damage := float(result.get("total_damage", final_damage))
 	if final_damage > 0.0:
 		spawn_damage_number(final_damage, is_critical, global_position)
-	if displayed_damage > 0.0:
+	if final_damage > 0.0:
 		apply_control_effects(payload)
 	if hp <= 0.0:
 		return
@@ -477,55 +641,32 @@ func play_animation(animation_name: StringName) -> void:
 func get_scaled_damage(base_damage: float) -> float:
 	return base_damage
 
-func apply_control_effects(payload: Dictionary) -> void:
-	var changed := false
-	var popup_text := ""
-	var popup_color := Color.WHITE
-	if payload.has("silence_duration"):
-		var duration := float(payload["silence_duration"])
-		if duration > silenced_time_remaining + 0.05:
-			changed = true
-			popup_text = "Silenced"
-			popup_color = Color(0.84, 0.70, 1.0, 1.0)
-		silenced_time_remaining = maxf(silenced_time_remaining, duration)
-	if payload.has("root_duration"):
-		var duration := float(payload["root_duration"])
-		if duration > root_time_remaining + 0.05:
-			changed = true
-			popup_text = "Rooted"
-			popup_color = Color(0.72, 0.86, 1.0, 1.0)
-		root_time_remaining = maxf(root_time_remaining, duration)
-	if payload.has("slow_duration"):
-		var duration := float(payload["slow_duration"])
-		var multiplier := clampf(float(payload.get("slow_multiplier", 1.0)), 0.25, 1.0)
-		if duration > slow_time_remaining + 0.05 or multiplier < slow_factor - 0.01:
-			changed = true
-			if popup_text.is_empty():
-				popup_text = "Slowed"
-				popup_color = Color(0.66, 0.94, 1.0, 1.0)
-		slow_time_remaining = maxf(slow_time_remaining, duration)
-		slow_factor = minf(slow_factor, multiplier)
-	if changed:
-		_emit_control_status_changed()
-		if not popup_text.is_empty():
-			_spawn_control_text(popup_text, popup_color)
+func get_attack_speed_multiplier() -> float:
+	return 1.0 + shadow_step_attack_speed_bonus
 
-func clear_control_effects(clear_silence: bool = false, clear_root: bool = true, clear_slow: bool = true) -> void:
-	var previous_summary := get_control_status_text()
-	if clear_silence:
-		silenced_time_remaining = 0.0
-	if clear_root:
-		root_time_remaining = 0.0
-	if clear_slow:
-		slow_time_remaining = 0.0
-		slow_factor = 1.0
-	if previous_summary == get_control_status_text():
-		return
-	_emit_control_status_changed()
-	_spawn_control_text("Steady", Color(0.98, 0.90, 0.68, 1.0))
+func get_attack_windup_duration() -> float:
+	return attack_windup / get_attack_speed_multiplier()
+
+func get_attack_hit_frame_duration() -> float:
+	return attack_hit_frame / get_attack_speed_multiplier()
+
+func get_attack_recovery_duration() -> float:
+	return attack_recovery / get_attack_speed_multiplier()
+
+func get_current_move_speed() -> float:
+	return move_speed * (1.0 + shadow_step_speed_bonus) * slow_factor
 
 func get_effective_move_speed() -> float:
-	return move_speed * slow_factor
+	return get_current_move_speed()
+
+func is_silenced() -> bool:
+	return silenced_time_remaining > 0.0
+
+func is_rooted() -> bool:
+	return root_time_remaining > 0.0
+
+func is_slowed() -> bool:
+	return slow_time_remaining > 0.0 and slow_factor < 0.999
 
 func get_control_status_text() -> String:
 	var effects: Array[String] = []
@@ -537,14 +678,33 @@ func get_control_status_text() -> String:
 		effects.append("Slowed")
 	return ", ".join(effects)
 
-func is_silenced() -> bool:
-	return silenced_time_remaining > 0.0
+func clear_control_effects(clear_silence: bool = false, clear_root: bool = true, clear_slow: bool = true) -> void:
+	if clear_silence:
+		silenced_time_remaining = 0.0
+	if clear_root:
+		root_time_remaining = 0.0
+	if clear_slow:
+		slow_time_remaining = 0.0
+		slow_factor = 1.0
+	control_status_changed.emit(get_control_status_text())
 
-func is_rooted() -> bool:
-	return root_time_remaining > 0.0
+func apply_control_effects(payload: Dictionary) -> void:
+	if payload.has("silence_duration"):
+		silenced_time_remaining = maxf(silenced_time_remaining, float(payload["silence_duration"]))
+	if payload.has("root_duration"):
+		root_time_remaining = maxf(root_time_remaining, float(payload["root_duration"]))
+	if payload.has("slow_duration"):
+		slow_time_remaining = maxf(slow_time_remaining, float(payload["slow_duration"]))
+		slow_factor = minf(slow_factor, float(payload.get("slow_multiplier", 1.0)))
+	control_status_changed.emit(get_control_status_text())
 
-func is_slowed() -> bool:
-	return slow_time_remaining > 0.0 and slow_factor < 0.999
+func _update_control_effects(delta: float) -> void:
+	silenced_time_remaining = maxf(silenced_time_remaining - delta, 0.0)
+	root_time_remaining = maxf(root_time_remaining - delta, 0.0)
+	if slow_time_remaining > 0.0:
+		slow_time_remaining = maxf(slow_time_remaining - delta, 0.0)
+	else:
+		slow_factor = 1.0
 
 func apply_damage_to_overlapping_targets(base_damage: float, radius: float, attack_name: StringName, extra_payload: Dictionary = {}) -> void:
 	for target in get_tree().get_nodes_in_group("damageable"):
@@ -556,6 +716,31 @@ func apply_damage_to_overlapping_targets(base_damage: float, radius: float, atta
 			continue
 		var node_2d: Node2D = target
 		if global_position.distance_to(node_2d.global_position) > radius:
+			continue
+		if not target.has_method("receive_hit"):
+			continue
+		current_attack_targets.append(target)
+		var payload := AccessoryManager.build_hit_payload(
+			self,
+			attack_name,
+			get_scaled_damage(base_damage),
+			_get_current_crit_rate(),
+			extra_payload
+		)
+		target.receive_hit(payload)
+		on_attack_landed(attack_name, target)
+		attack_hit.emit(attack_name, target)
+
+func apply_damage_to_targets_in_arc(base_damage: float, radius: float, arc_degrees: float, attack_name: StringName, extra_payload: Dictionary = {}) -> void:
+	for target in get_tree().get_nodes_in_group("damageable"):
+		if target == self:
+			continue
+		if not (target is Node2D):
+			continue
+		if current_attack_targets.has(target):
+			continue
+		var node_2d: Node2D = target
+		if not MELEE_UTILS.is_point_in_arc(global_position, facing, node_2d.global_position, radius, arc_degrees):
 			continue
 		if not target.has_method("receive_hit"):
 			continue
@@ -622,8 +807,49 @@ func _on_health_component_defense_changed(current_defense: float, max_defense_va
 func _on_health_component_died() -> void:
 	hp = 0.0
 	hp_changed.emit(hp, max_hp)
+	sprite.texture = TEXTURE_LOADER.load_texture(RANGER_DEATH_TEXTURE_PATH)
+	if weapon != null:
+		weapon.visible = false
 	state_machine.force_change(&"Dead")
 	died.emit()
+
+func _update_shadow_step_bonuses(delta: float) -> void:
+	if shadow_step_speed_bonus > 0.0:
+		shadow_step_speed_bonus = maxf(shadow_step_speed_bonus - shadow_step_speed_decay_per_second * delta, 0.0)
+
+func _mark_shadow_step_targets() -> void:
+	for target in get_tree().get_nodes_in_group("damageable"):
+		if target == self or not (target is Node2D):
+			continue
+		var node_2d: Node2D = target
+		if global_position.distance_to(node_2d.global_position) > shadow_step_mark_radius:
+			continue
+		shadow_step_marked_targets[target.get_instance_id()] = true
+
+func _setup_weapon_visual() -> void:
+	weapon = Node2D.new()
+	weapon.name = "Weapon"
+	weapon.z_index = 4
+	add_child(weapon)
+	weapon_sprite = Sprite2D.new()
+	weapon_sprite.texture = TEXTURE_LOADER.load_texture(RANGER_WEAPON_TEXTURE_PATH)
+	weapon_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	weapon_sprite.centered = true
+	weapon_sprite.scale = Vector2.ONE * 0.56
+	weapon.add_child(weapon_sprite)
+
+func _sync_weapon_visual() -> void:
+	if weapon == null:
+		return
+	var facing_direction := facing if facing != Vector2.ZERO else Vector2.RIGHT
+	weapon.visible = hp > 0.0 and not shadow_step_active
+	weapon.position = facing_direction * 14.0 + Vector2(0.0, -7.0)
+	weapon.rotation = facing_direction.angle() + weapon_angle_offset
+
+func _animate_weapon_swing(start_degrees: float, end_degrees: float, duration: float) -> void:
+	weapon_angle_offset = deg_to_rad(start_degrees)
+	var tween := create_tween()
+	tween.tween_property(self, "weapon_angle_offset", deg_to_rad(end_degrees), maxf(duration, 0.01))
 
 func _update_targeting_visuals(delta: float) -> void:
 	var pulse := 0.7 + 0.3 * sin(Time.get_ticks_msec() * 0.008)
@@ -718,13 +944,19 @@ func _show_assassination_impact() -> void:
 	tween.finished.connect(impact.queue_free)
 
 func _spawn_afterimage(alpha: float) -> void:
-	var ghost := Polygon2D.new()
-	ghost.polygon = sprite.polygon
-	ghost.color = Color(0.55, 1.0, 0.86, alpha)
-	ghost.global_position = global_position
-	ghost.rotation = sprite.rotation
-	ghost.scale = sprite.scale
+	var ghost := Sprite2D.new()
+	ghost.texture = sprite.texture
+	ghost.texture_filter = sprite.texture_filter
+	ghost.centered = sprite.centered
+	ghost.offset = sprite.offset
+	ghost.flip_h = sprite.flip_h
+	ghost.modulate = Color(0.55, 1.0, 0.86, alpha)
 	afterimage_layer.add_child(ghost)
+	# Keep old afterimages in world space so they do not move with the ranger.
+	ghost.set_as_top_level(true)
+	ghost.z_as_relative = false
+	ghost.z_index = max(z_index - 1, 0)
+	ghost.global_transform = sprite.global_transform
 	var tween := create_tween()
 	tween.tween_property(ghost, "modulate:a", 0.0, 0.18)
 	tween.parallel().tween_property(ghost, "scale", ghost.scale * 0.92, 0.18)
@@ -733,73 +965,15 @@ func _spawn_afterimage(alpha: float) -> void:
 func _flash_body(color: Color, duration: float) -> void:
 	if not is_instance_valid(sprite):
 		return
-	sprite.color = color
+	sprite.modulate = color
 	var timer := get_tree().create_timer(duration)
 	timer.timeout.connect(func() -> void:
 		if is_instance_valid(self) and is_instance_valid(sprite) and hp > 0.0:
 			sync_visuals()
 	)
 
-func _setup_control_ring() -> void:
-	control_ring = Line2D.new()
-	control_ring.width = 2.5
-	control_ring.closed = true
-	control_ring.visible = false
-	control_ring.default_color = Color(0.74, 0.86, 1.0, 0.9)
-	control_ring.points = PackedVector2Array([
-		Vector2(24, 0),
-		Vector2(17, 17),
-		Vector2(0, 24),
-		Vector2(-17, 17),
-		Vector2(-24, 0),
-		Vector2(-17, -17),
-		Vector2(0, -24),
-		Vector2(17, -17)
-	])
-	effects_layer.add_child(control_ring)
-
-func _update_control_status(delta: float) -> void:
-	var previous_summary := get_control_status_text()
-	silenced_time_remaining = maxf(silenced_time_remaining - delta, 0.0)
-	root_time_remaining = maxf(root_time_remaining - delta, 0.0)
-	if slow_time_remaining > 0.0:
-		slow_time_remaining = maxf(slow_time_remaining - delta, 0.0)
-	else:
-		slow_factor = 1.0
-	if slow_time_remaining <= 0.0:
-		slow_factor = 1.0
-	if previous_summary != get_control_status_text():
-		_emit_control_status_changed()
-
-func _update_control_visual(delta: float) -> void:
-	if control_ring == null:
-		return
-	var pulse := 0.8 + 0.2 * sin(Time.get_ticks_msec() * 0.011)
-	control_ring.visible = not get_control_status_text().is_empty() and hp > 0.0
-	if not control_ring.visible:
-		return
-	control_ring.rotation -= delta * 2.0
-	control_ring.scale = Vector2.ONE * pulse
-	if is_rooted():
-		control_ring.default_color = Color(0.72, 0.86, 1.0, 0.92)
-	elif is_silenced():
-		control_ring.default_color = Color(0.84, 0.70, 1.0, 0.92)
-	else:
-		control_ring.default_color = Color(0.66, 0.94, 1.0, 0.88)
-
-func _emit_control_status_changed() -> void:
-	var summary := get_control_status_text()
-	if summary == last_control_summary:
-		return
-	last_control_summary = summary
-	control_status_changed.emit(summary)
-
-func _spawn_control_text(label_text: String, color_value: Color) -> void:
-	var popup := DAMAGE_NUMBER_SCENE.instantiate()
-	popup.position = Vector2(-32.0, -52.0)
-	if popup.has_method("setup_text"):
-		popup.setup_text(label_text, color_value, 0.72)
-	effects_layer.add_child(popup)
+func _body_scale(x_scale: float = 1.0, y_scale: float = 1.0) -> Vector2:
+	return Vector2(BODY_BASE_SCALE.x * x_scale, BODY_BASE_SCALE.y * y_scale)
 
 func _build_animations() -> void:
 	animation_player.root_node = NodePath("..")
@@ -810,8 +984,9 @@ func _build_animations() -> void:
 	_add_idle_animation(library)
 	_add_move_animation(library)
 	_add_attack_animation(library)
-	_add_dash_animation(library)
+	_add_dodge_animation(library)
 	_add_skill1_animation(library)
+	_add_skill2_animation(library)
 	_add_skill3_dash_animation(library)
 	_add_skill3_strike_animation(library)
 	_add_hit_animation(library)
@@ -832,7 +1007,7 @@ func _add_idle_animation(library: AnimationLibrary) -> void:
 	var animation := Animation.new()
 	animation.length = 0.75
 	animation.loop_mode = Animation.LOOP_LINEAR
-	_add_value_track(animation, "Body:scale", [[0.0, Vector2.ONE], [0.375, Vector2(1.03, 0.97)], [0.75, Vector2.ONE]])
+	_add_value_track(animation, "Body:scale", [[0.0, _body_scale()], [0.375, _body_scale(1.03, 0.97)], [0.75, _body_scale()]])
 	_store_animation(library, &"idle", animation)
 
 func _add_move_animation(library: AnimationLibrary) -> void:
@@ -849,11 +1024,12 @@ func _add_attack_animation(library: AnimationLibrary) -> void:
 	_add_value_track(animation, "SlashArc:scale", [[0.0, Vector2(0.15, 0.15)], [attack_windup, Vector2(1.0, 1.0)], [animation.length, Vector2(0.4, 0.4)]])
 	_store_animation(library, &"attack", animation)
 
-func _add_dash_animation(library: AnimationLibrary) -> void:
+func _add_dodge_animation(library: AnimationLibrary) -> void:
 	var animation := Animation.new()
-	animation.length = dash_duration
-	_add_value_track(animation, "Body:scale", [[0.0, Vector2(1.2, 0.8)], [dash_duration, Vector2.ONE]])
-	_store_animation(library, &"dash", animation)
+	animation.length = dodge_duration
+	_add_value_track(animation, "Body:scale", [[0.0, _body_scale(1.2, 0.8)], [dodge_duration, _body_scale()]])
+	_add_value_track(animation, "Body:modulate", [[0.0, Color(0.84, 0.92, 1.0, 0.72)], [dodge_duration, Color.WHITE]])
+	_store_animation(library, &"dodge", animation)
 
 func _add_skill1_animation(library: AnimationLibrary) -> void:
 	var animation := Animation.new()
@@ -861,10 +1037,17 @@ func _add_skill1_animation(library: AnimationLibrary) -> void:
 	_add_value_track(animation, "Body:rotation", [[0.0, -0.14], [skill1_cast_duration, 0.18]])
 	_store_animation(library, &"skill1", animation)
 
+func _add_skill2_animation(library: AnimationLibrary) -> void:
+	var animation := Animation.new()
+	animation.length = shadow_step_duration
+	animation.loop_mode = Animation.LOOP_LINEAR
+	_add_value_track(animation, "Body:scale", [[0.0, _body_scale(0.92, 1.08)], [shadow_step_duration * 0.5, _body_scale(0.84, 1.14)], [shadow_step_duration, _body_scale(0.92, 1.08)]])
+	_store_animation(library, &"skill2", animation)
+
 func _add_skill3_dash_animation(library: AnimationLibrary) -> void:
 	var animation := Animation.new()
 	animation.length = 0.18
-	_add_value_track(animation, "Body:scale", [[0.0, Vector2(1.18, 0.82)], [0.18, Vector2.ONE]])
+	_add_value_track(animation, "Body:scale", [[0.0, _body_scale(1.18, 0.82)], [0.18, _body_scale()]])
 	_store_animation(library, &"skill3_dash", animation)
 
 func _add_skill3_strike_animation(library: AnimationLibrary) -> void:

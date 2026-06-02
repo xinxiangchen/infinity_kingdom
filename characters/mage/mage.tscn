@@ -1,4 +1,4 @@
-[gd_scene load_steps=12 format=3]
+[gd_scene load_steps=14 format=3]
 
 [ext_resource type="Script" path="res://characters/mage/mage.gd" id="1"]
 [ext_resource type="Script" path="res://characters/mage/state_machine.gd" id="2"]
@@ -9,6 +9,8 @@
 [ext_resource type="Script" path="res://characters/mage/states/skill_state.gd" id="7"]
 [ext_resource type="Script" path="res://characters/mage/states/hit_state.gd" id="8"]
 [ext_resource type="Script" path="res://characters/mage/states/dead_state.gd" id="9"]
+[ext_resource type="Texture2D" path="res://characters/mage/mage.png" id="10"]
+[ext_resource type="Script" path="res://combat/dodge_state.gd" id="11"]
 
 [sub_resource type="CircleShape2D" id="1"]
 radius = 20.0
@@ -33,6 +35,9 @@ script = ExtResource("5")
 [node name="Attack" type="Node" parent="StateMachine"]
 script = ExtResource("6")
 
+[node name="Dodge" type="Node" parent="StateMachine"]
+script = ExtResource("11")
+
 [node name="Skill" type="Node" parent="StateMachine"]
 script = ExtResource("7")
 
@@ -44,9 +49,11 @@ script = ExtResource("9")
 
 [node name="AnimationPlayer" type="AnimationPlayer" parent="."]
 
-[node name="Body" type="Polygon2D" parent="."]
-color = Color(0.6, 0.78, 1, 1)
-polygon = PackedVector2Array(-14, 22, 14, 22, 20, 0, 12, -18, 0, -26, -12, -18, -20, 0)
+[node name="Body" type="Sprite2D" parent="."]
+texture = ExtResource("10")
+position = Vector2(0, -6)
+scale = Vector2(0.85, 0.85)
+texture_filter = 1
 
 [node name="FocusRing" type="Line2D" parent="."]
 visible = false

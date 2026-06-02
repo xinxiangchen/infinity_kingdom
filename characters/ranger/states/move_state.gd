@@ -15,10 +15,11 @@ func enter() -> void:
 	actor.play_animation(&"move")
 
 func physics_update(delta: float) -> void:
+	var move_speed: float = float(actor.get_current_move_speed()) if actor.has_method("get_current_move_speed") else float(actor.move_speed)
 	if actor.move_input == Vector2.ZERO:
-		actor.velocity = actor.velocity.move_toward(Vector2.ZERO, actor.get_effective_move_speed() * delta * 10.0)
+		actor.velocity = actor.velocity.move_toward(Vector2.ZERO, move_speed * delta * 10.0)
 		return
-	actor.velocity = actor.move_input.normalized() * actor.get_effective_move_speed()
+	actor.velocity = actor.move_input.normalized() * move_speed
 
 func evaluate_transitions() -> void:
 	state_machine.transition_to(actor.get_state_request())

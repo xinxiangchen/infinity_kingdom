@@ -1,4 +1,4 @@
-[gd_scene load_steps=12 format=3]
+[gd_scene load_steps=14 format=3]
 
 [ext_resource type="Script" path="res://characters/ranger/ranger.gd" id="1"]
 [ext_resource type="Script" path="res://characters/ranger/state_machine.gd" id="2"]
@@ -10,6 +10,8 @@
 [ext_resource type="Script" path="res://characters/ranger/states/skill_state.gd" id="8"]
 [ext_resource type="Script" path="res://characters/ranger/states/hit_state.gd" id="9"]
 [ext_resource type="Script" path="res://characters/ranger/states/dead_state.gd" id="10"]
+[ext_resource type="Texture2D" path="res://characters/ranger/ranger.png" id="11"]
+[ext_resource type="Script" path="res://combat/dodge_state.gd" id="12"]
 
 [sub_resource type="CircleShape2D" id="1"]
 radius = 20.0
@@ -37,6 +39,9 @@ script = ExtResource("6")
 [node name="Dash" type="Node" parent="StateMachine"]
 script = ExtResource("7")
 
+[node name="Dodge" type="Node" parent="StateMachine"]
+script = ExtResource("12")
+
 [node name="Skill" type="Node" parent="StateMachine"]
 script = ExtResource("8")
 
@@ -48,9 +53,11 @@ script = ExtResource("10")
 
 [node name="AnimationPlayer" type="AnimationPlayer" parent="."]
 
-[node name="Body" type="Polygon2D" parent="."]
-color = Color(0.36, 0.86, 0.62, 1)
-polygon = PackedVector2Array(-14, 22, 14, 22, 22, -2, 6, -24, -6, -24, -22, -2)
+[node name="Body" type="Sprite2D" parent="."]
+texture = ExtResource("11")
+position = Vector2(0, -5)
+scale = Vector2(0.78, 0.78)
+texture_filter = 1
 
 [node name="SlashArc" type="Polygon2D" parent="."]
 visible = false

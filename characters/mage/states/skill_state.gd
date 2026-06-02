@@ -30,7 +30,7 @@ func enter() -> void:
 
 func physics_update(delta: float) -> void:
 	elapsed += delta
-	actor.velocity = actor.velocity.move_toward(Vector2.ZERO, actor.get_effective_move_speed() * delta * 10.0)
+	actor.velocity = actor.velocity.move_toward(Vector2.ZERO, actor.move_speed * delta * 10.0)
 	if effect_triggered:
 		return
 	match active_skill:
@@ -61,3 +61,4 @@ func evaluate_transitions() -> void:
 
 func exit() -> void:
 	actor.finish_skill_cast(active_skill)
+
