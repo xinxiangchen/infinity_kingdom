@@ -5,7 +5,8 @@ const OUTPUT_PATH := "res://../map_prop_runtime_preview_sheet.png"
 const SHEET_COLUMNS := 2
 const CELL_PADDING := 18
 const TITLE_HEIGHT := 28
-const OUTLINE_COLOR := Color(0.0, 0.95, 1.0, 1.0)
+const PROP_OUTLINE_COLOR := Color(0.0, 0.95, 1.0, 1.0)
+const WALL_OUTLINE_COLOR := Color(1.0, 0.18, 0.12, 1.0)
 
 func _init() -> void:
 	var rooms := _build_room_previews()
@@ -53,9 +54,18 @@ func _build_room_previews() -> Array:
 			push_error("Missing room image: %s" % room_path)
 			continue
 		room_image.convert(Image.FORMAT_RGBA8)
+		_draw_room_walls(room_image, room_index)
 		_draw_room_props(room_image, room_index)
 		result.append({"image": room_image})
 	return result
+
+func _draw_room_walls(room_image: Image, room_index: int) -> void:
+	var room_rect := Rect2(Vector2.ZERO, Vector2(float(room_image.get_width()), float(room_image.get_height())))
+	for wall_rect in MapBrowserDemo.get_room_wall_rects(room_index, room_rect):
+		_draw_rect_outline(room_image, Rect2i(
+			Vector2i(roundi(wall_rect.position.x), roundi(wall_rect.position.y)),
+			Vector2i(roundi(wall_rect.size.x), roundi(wall_rect.size.y))
+		), WALL_OUTLINE_COLOR, 5)
 
 func _draw_room_props(room_image: Image, room_index: int) -> void:
 	if room_index >= MapBrowserDemo.ROOM_PROP_LAYER_PATHS.size():
@@ -66,6 +76,7 @@ func _draw_room_props(room_image: Image, room_index: int) -> void:
 		push_error("Missing prop layer image: %s" % prop_path)
 		return
 	prop_layer.convert(Image.FORMAT_RGBA8)
+	var prop_texture := load(String(MapBrowserDemo.ROOM_PROP_LAYER_PATHS[room_index])) as Texture2D
 
 	var room_size := Vector2(float(room_image.get_width()), float(room_image.get_height()))
 	var texture_to_room_scale := Vector2(room_size.x / float(prop_layer.get_width()), room_size.y / float(prop_layer.get_height()))
@@ -93,12 +104,12 @@ func _draw_room_props(room_image: Image, room_index: int) -> void:
 		var top_left := Vector2i(roundi(world_position.x - float(world_size.x) * 0.5), roundi(world_position.y - float(world_size.y) * 0.5))
 		room_image.blend_rect(prop_image, Rect2i(Vector2i.ZERO, prop_image.get_size()), top_left)
 
-		var collision_size := MapBrowserDemo.calculate_prop_collision_size(candidate, room_size, source_rect, texture_to_room_scale)
-		var collision_rect := Rect2i(
-			Vector2i(roundi(world_position.x - collision_size.x * 0.5), roundi(world_position.y - collision_size.y * 0.5)),
-			Vector2i(roundi(collision_size.x), roundi(collision_size.y))
+		var local_collision_rect := MapBrowserDemo.calculate_prop_collision_rect(prop_texture, source_rect, texture_to_room_scale)
+		var world_collision_rect := Rect2i(
+			Vector2i(roundi(world_position.x + local_collision_rect.position.x), roundi(world_position.y + local_collision_rect.position.y)),
+			Vector2i(roundi(local_collision_rect.size.x), roundi(local_collision_rect.size.y))
 		)
-		_draw_rect_outline(room_image, collision_rect, OUTLINE_COLOR, 4)
+		_draw_rect_outline(room_image, world_collision_rect, PROP_OUTLINE_COLOR, 4)
 
 func _draw_rect_outline(image: Image, rect: Rect2i, color: Color, width: int) -> void:
 	for offset in range(width):

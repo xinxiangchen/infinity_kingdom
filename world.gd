@@ -39,17 +39,16 @@ const MAP_ROOM_TITLES := [
 	"King Gate"
 ]
 const MAP_WALKABLE_AREAS := [
-	Rect2(0.0, 0.52, 1.0, 0.32),
-	Rect2(0.0, 0.50, 1.0, 0.34),
-	Rect2(0.0, 0.50, 1.0, 0.34),
-	Rect2(0.0, 0.47, 1.0, 0.37),
-	Rect2(0.0, 0.49, 1.0, 0.35),
-	Rect2(0.0, 0.50, 1.0, 0.34),
-	Rect2(0.0, 0.49, 1.0, 0.35),
-	Rect2(0.0, 0.51, 1.0, 0.33)
+	Rect2(0.02, 0.08, 0.96, 0.86),
+	Rect2(0.02, 0.12, 0.96, 0.78),
+	Rect2(0.02, 0.14, 0.96, 0.76),
+	Rect2(0.02, 0.08, 0.96, 0.84),
+	Rect2(0.02, 0.08, 0.96, 0.84),
+	Rect2(0.02, 0.10, 0.96, 0.80),
+	Rect2(0.02, 0.10, 0.96, 0.80),
+	Rect2(0.02, 0.10, 0.96, 0.80)
 ]
 const MAP_CAMERA_ZOOM := Vector2(1.7, 1.7)
-const MAP_BOUNDARY_THICKNESS := 72.0
 const RELIC_REROLL_COST := 20
 const HIT_FEEDBACK_COOLDOWN_MSEC := 55
 const LEVEL_UP_FLASH_COLOR := Color(1.0, 0.92, 0.62, 1.0)
@@ -206,11 +205,10 @@ func _map_walkable_rect(index: int, room_rect: Rect2) -> Rect2:
 		Vector2(room_rect.size.x * ratio.size.x, room_rect.size.y * ratio.size.y)
 	)
 
-func _add_runtime_room_walls(index: int, room_rect: Rect2, walk_rect: Rect2) -> void:
-	_add_runtime_wall("Room%02dTopWall" % [index + 1], Rect2(room_rect.position, Vector2(room_rect.size.x, walk_rect.position.y - room_rect.position.y)))
-	_add_runtime_wall("Room%02dBottomWall" % [index + 1], Rect2(Vector2(room_rect.position.x, walk_rect.end.y), Vector2(room_rect.size.x, room_rect.end.y - walk_rect.end.y)))
-	_add_runtime_wall("Room%02dLeftWall" % [index + 1], Rect2(Vector2(walk_rect.position.x - MAP_BOUNDARY_THICKNESS, walk_rect.position.y), Vector2(MAP_BOUNDARY_THICKNESS, walk_rect.size.y)))
-	_add_runtime_wall("Room%02dRightWall" % [index + 1], Rect2(Vector2(walk_rect.end.x, walk_rect.position.y), Vector2(MAP_BOUNDARY_THICKNESS, walk_rect.size.y)))
+func _add_runtime_room_walls(index: int, room_rect: Rect2, _walk_rect: Rect2) -> void:
+	var wall_rects := MapBrowserDemo.get_room_wall_rects(index, room_rect)
+	for wall_index in range(wall_rects.size()):
+		_add_runtime_wall("Room%02dWall%02d" % [index + 1, wall_index + 1], wall_rects[wall_index])
 
 func _add_runtime_wall(wall_name: String, rect: Rect2) -> void:
 	if map_root == null or rect.size.x <= 0.0 or rect.size.y <= 0.0:
@@ -277,7 +275,7 @@ func _add_runtime_cover_prop(candidate: Dictionary) -> void:
 	)
 	var texture_to_room_scale := Vector2(room_rect.size.x / float(texture.get_width()), room_rect.size.y / float(texture.get_height()))
 	var position_ratio: Vector2 = candidate["position"]
-	var collision_size := MapBrowserDemo.calculate_prop_collision_size(candidate, room_rect.size, source_rect, texture_to_room_scale)
+	var collision_rect := MapBrowserDemo.calculate_prop_collision_rect(texture, source_rect, texture_to_room_scale)
 	var body := StaticBody2D.new()
 	body.name = "%sCover" % String(candidate["name"])
 	body.collision_layer = 1
@@ -295,22 +293,23 @@ func _add_runtime_cover_prop(candidate: Dictionary) -> void:
 	sprite.z_index = 1
 	body.add_child(sprite)
 	var shape := CollisionShape2D.new()
+	shape.position = collision_rect.get_center()
 	var rectangle := RectangleShape2D.new()
-	rectangle.size = collision_size
+	rectangle.size = collision_rect.size
 	shape.shape = rectangle
 	body.add_child(shape)
-	_add_cover_collision_debug(body, collision_size)
+	_add_cover_collision_debug(body, collision_rect)
 
-func _add_cover_collision_debug(parent: Node, size: Vector2) -> void:
+func _add_cover_collision_debug(parent: Node, rect: Rect2) -> void:
 	var outline := Line2D.new()
 	outline.name = "CoverCollisionDebug"
 	outline.width = 2.5
 	outline.closed = true
 	outline.default_color = Color(0.25, 0.9, 1.0, 0.72)
-	outline.add_point(Vector2(-size.x * 0.5, -size.y * 0.5))
-	outline.add_point(Vector2(size.x * 0.5, -size.y * 0.5))
-	outline.add_point(Vector2(size.x * 0.5, size.y * 0.5))
-	outline.add_point(Vector2(-size.x * 0.5, size.y * 0.5))
+	outline.add_point(rect.position)
+	outline.add_point(Vector2(rect.end.x, rect.position.y))
+	outline.add_point(rect.end)
+	outline.add_point(Vector2(rect.position.x, rect.end.y))
 	parent.add_child(outline)
 
 func _player_spawn_for_room(room_index: int) -> Vector2:

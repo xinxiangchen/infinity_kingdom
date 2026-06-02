@@ -78,23 +78,73 @@ const PLAYER_RADIUS := 22.0
 const CAMERA_ZOOM := Vector2(1.7, 1.7)
 const ROOM_EXIT_MARGIN := 26.0
 const ENEMY_PREVIEW_SCALE := Vector2(0.82, 0.82)
-const COLLISION_WALL_THICKNESS := 80.0
 const COLLISION_DEBUG_VISIBLE := false
 const PROP_COLLISION_DEBUG_VISIBLE := true
-const PROP_COLLISION_SOURCE_PADDING := Vector2(1.12, 1.06)
-const PROP_COLLISION_MIN_RATIO := Vector2(0.12, 0.08)
+const PROP_ALPHA_COLLISION_PADDING := Vector2(8.0, 6.0)
+const PROP_ALPHA_THRESHOLD := 0.08
 const RANDOM_PROP_MIN_PER_ROOM := 2
 const RANDOM_PROP_MAX_PER_ROOM := 4
 
 const WALKABLE_AREAS := [
-	Rect2(0.0, 0.52, 1.0, 0.32),
-	Rect2(0.0, 0.50, 1.0, 0.34),
-	Rect2(0.0, 0.50, 1.0, 0.34),
-	Rect2(0.0, 0.47, 1.0, 0.37),
-	Rect2(0.0, 0.49, 1.0, 0.35),
-	Rect2(0.0, 0.50, 1.0, 0.34),
-	Rect2(0.0, 0.49, 1.0, 0.35),
-	Rect2(0.0, 0.51, 1.0, 0.33)
+	Rect2(0.02, 0.08, 0.96, 0.86),
+	Rect2(0.02, 0.12, 0.96, 0.78),
+	Rect2(0.02, 0.14, 0.96, 0.76),
+	Rect2(0.02, 0.08, 0.96, 0.84),
+	Rect2(0.02, 0.08, 0.96, 0.84),
+	Rect2(0.02, 0.10, 0.96, 0.80),
+	Rect2(0.02, 0.10, 0.96, 0.80),
+	Rect2(0.02, 0.10, 0.96, 0.80)
+]
+
+const ROOM_WALL_COLLISIONS := [
+	[
+		Rect2(0.84, 0.00, 0.16, 0.46),
+		Rect2(0.88, 0.32, 0.12, 0.68)
+	],
+	[
+		Rect2(0.00, 0.00, 1.00, 0.18),
+		Rect2(0.00, 0.76, 1.00, 0.24),
+		Rect2(0.00, 0.38, 0.04, 0.18),
+		Rect2(0.96, 0.38, 0.04, 0.18)
+	],
+	[
+		Rect2(0.00, 0.00, 1.00, 0.16),
+		Rect2(0.00, 0.78, 1.00, 0.22),
+		Rect2(0.00, 0.38, 0.04, 0.18),
+		Rect2(0.96, 0.38, 0.04, 0.18)
+	],
+	[
+		Rect2(0.00, 0.00, 0.08, 1.00),
+		Rect2(0.10, 0.00, 0.72, 0.16),
+		Rect2(0.10, 0.80, 0.72, 0.20),
+		Rect2(0.86, 0.00, 0.05, 0.30),
+		Rect2(0.86, 0.76, 0.05, 0.24)
+	],
+	[
+		Rect2(0.00, 0.00, 1.00, 0.11),
+		Rect2(0.00, 0.88, 1.00, 0.12),
+		Rect2(0.00, 0.00, 0.05, 1.00),
+		Rect2(0.95, 0.00, 0.05, 1.00)
+	],
+	[
+		Rect2(0.00, 0.00, 1.00, 0.17),
+		Rect2(0.00, 0.86, 1.00, 0.14),
+		Rect2(0.00, 0.00, 0.055, 1.00),
+		Rect2(0.945, 0.00, 0.055, 1.00)
+	],
+	[
+		Rect2(0.00, 0.00, 1.00, 0.17),
+		Rect2(0.00, 0.86, 1.00, 0.14),
+		Rect2(0.00, 0.00, 0.055, 1.00),
+		Rect2(0.945, 0.00, 0.055, 1.00)
+	],
+	[
+		Rect2(0.00, 0.00, 0.86, 0.17),
+		Rect2(0.00, 0.86, 0.86, 0.14),
+		Rect2(0.00, 0.00, 0.055, 1.00),
+		Rect2(0.88, 0.00, 0.12, 0.38),
+		Rect2(0.88, 0.62, 0.12, 0.38)
+	]
 ]
 
 const PROP_CANDIDATES := [
@@ -411,33 +461,11 @@ func _add_collision_boxes(parent: Node) -> void:
 	collision_root.z_index = 35
 	parent.add_child(collision_root)
 
-	for index in range(walkable_rects.size()):
+	for index in range(room_rects.size()):
 		var room_rect := room_rects[index]
-		var walk_rect := walkable_rects[index]
-		_add_blocker(collision_root, "Room%02dTopWall" % [index + 1], Rect2(room_rect.position, Vector2(room_rect.size.x, walk_rect.position.y - room_rect.position.y)))
-		_add_blocker(collision_root, "Room%02dBottomWall" % [index + 1], Rect2(Vector2(room_rect.position.x, walk_rect.end.y), Vector2(room_rect.size.x, room_rect.end.y - walk_rect.end.y)))
-		if index == 0:
-			_add_blocker(collision_root, "RouteLeftWall", Rect2(Vector2(walk_rect.position.x - COLLISION_WALL_THICKNESS, walk_rect.position.y), Vector2(COLLISION_WALL_THICKNESS, walk_rect.size.y)))
-		if index == walkable_rects.size() - 1:
-			_add_blocker(collision_root, "RouteRightWall", Rect2(Vector2(walk_rect.end.x, walk_rect.position.y), Vector2(COLLISION_WALL_THICKNESS, walk_rect.size.y)))
-
-	for index in range(1, walkable_rects.size()):
-		_add_gap_collision(collision_root, index - 1, index)
-
-func _add_gap_collision(parent: Node, previous_index: int, current_index: int) -> void:
-	var previous_walkable := walkable_rects[previous_index]
-	var current_walkable := walkable_rects[current_index]
-	var gap_x := previous_walkable.end.x
-	var gap_width := current_walkable.position.x - previous_walkable.end.x
-	if gap_width <= 0.0:
-		return
-
-	var corridor_height: float = min(previous_walkable.size.y, current_walkable.size.y) * 0.58
-	var corridor_center_y: float = (previous_walkable.get_center().y + current_walkable.get_center().y) * 0.5
-	var corridor_top: float = corridor_center_y - corridor_height * 0.5
-	var corridor_bottom: float = corridor_center_y + corridor_height * 0.5
-	_add_blocker(parent, "Gap%02dTopWall" % current_index, Rect2(Vector2(gap_x, 0.0), Vector2(gap_width, corridor_top)))
-	_add_blocker(parent, "Gap%02dBottomWall" % current_index, Rect2(Vector2(gap_x, corridor_bottom), Vector2(gap_width, map_bounds.end.y - corridor_bottom)))
+		var wall_rects := get_room_wall_rects(index, room_rect)
+		for wall_index in range(wall_rects.size()):
+			_add_blocker(collision_root, "Room%02dWall%02d" % [index + 1, wall_index + 1], wall_rects[wall_index])
 
 func _add_blocker(parent: Node, blocker_name: String, rect: Rect2) -> void:
 	if rect.size.x <= 0.0 or rect.size.y <= 0.0:
@@ -510,7 +538,7 @@ func _add_cover_prop(parent: Node, candidate: Dictionary) -> void:
 	var texture_to_room_scale := Vector2(room_rect.size.x / float(texture.get_width()), room_rect.size.y / float(texture.get_height()))
 	var prop_position_ratio: Vector2 = candidate["position"]
 	var world_position := room_rect.position + Vector2(room_rect.size.x * prop_position_ratio.x, room_rect.size.y * prop_position_ratio.y)
-	var collision_size := calculate_prop_collision_size(candidate, room_rect.size, source_rect, texture_to_room_scale)
+	var collision_rect := calculate_prop_collision_rect(texture, source_rect, texture_to_room_scale)
 
 	var body := StaticBody2D.new()
 	body.name = "%sCover" % String(candidate["name"])
@@ -531,39 +559,85 @@ func _add_cover_prop(parent: Node, candidate: Dictionary) -> void:
 
 	var shape := CollisionShape2D.new()
 	shape.name = "CollisionShape2D"
+	shape.position = collision_rect.get_center()
 	var rectangle := RectangleShape2D.new()
-	rectangle.size = collision_size
+	rectangle.size = collision_rect.size
 	shape.shape = rectangle
 	body.add_child(shape)
 
 	if PROP_COLLISION_DEBUG_VISIBLE:
-		_add_collision_debug_outline(body, collision_size)
+		_add_collision_debug_outline(body, collision_rect)
 
-func _add_collision_debug_outline(parent: Node, size: Vector2) -> void:
+func _add_collision_debug_outline(parent: Node, rect: Rect2) -> void:
 	var outline := Line2D.new()
 	outline.name = "CollisionDebugOutline"
 	outline.width = 3.0
 	outline.closed = true
 	outline.default_color = Color(0.25, 0.9, 1.0, 0.82)
-	outline.add_point(Vector2(-size.x * 0.5, -size.y * 0.5))
-	outline.add_point(Vector2(size.x * 0.5, -size.y * 0.5))
-	outline.add_point(Vector2(size.x * 0.5, size.y * 0.5))
-	outline.add_point(Vector2(-size.x * 0.5, size.y * 0.5))
+	outline.add_point(rect.position)
+	outline.add_point(Vector2(rect.end.x, rect.position.y))
+	outline.add_point(rect.end)
+	outline.add_point(Vector2(rect.position.x, rect.end.y))
 	parent.add_child(outline)
 
-static func calculate_prop_collision_size(candidate: Dictionary, room_size: Vector2, source_rect: Rect2, texture_to_room_scale: Vector2) -> Vector2:
-	var source_world_size := source_rect.size * texture_to_room_scale
-	var manual_ratio: Vector2 = candidate.get("collision", Vector2.ZERO)
-	var manual_size := Vector2(room_size.x * manual_ratio.x, room_size.y * manual_ratio.y)
-	var minimum_size := Vector2(room_size.x * PROP_COLLISION_MIN_RATIO.x, room_size.y * PROP_COLLISION_MIN_RATIO.y)
-	var padded_source_size := Vector2(
-		source_world_size.x * PROP_COLLISION_SOURCE_PADDING.x,
-		source_world_size.y * PROP_COLLISION_SOURCE_PADDING.y
+static func get_room_wall_rects(room_index: int, room_rect: Rect2) -> Array[Rect2]:
+	var result: Array[Rect2] = []
+	if room_index < 0 or room_index >= ROOM_WALL_COLLISIONS.size():
+		return result
+	for ratio in ROOM_WALL_COLLISIONS[room_index]:
+		var rect_ratio: Rect2 = ratio
+		result.append(Rect2(
+			room_rect.position + Vector2(room_rect.size.x * rect_ratio.position.x, room_rect.size.y * rect_ratio.position.y),
+			Vector2(room_rect.size.x * rect_ratio.size.x, room_rect.size.y * rect_ratio.size.y)
+		))
+	return result
+
+static func calculate_prop_collision_rect(texture: Texture2D, source_rect: Rect2, texture_to_room_scale: Vector2) -> Rect2:
+	if texture == null:
+		return Rect2(-source_rect.size * texture_to_room_scale * 0.5, source_rect.size * texture_to_room_scale)
+	var image := texture.get_image()
+	if image == null:
+		return Rect2(-source_rect.size * texture_to_room_scale * 0.5, source_rect.size * texture_to_room_scale)
+	image.convert(Image.FORMAT_RGBA8)
+	var source_rect_i := Rect2i(
+		Vector2i(roundi(source_rect.position.x), roundi(source_rect.position.y)),
+		Vector2i(maxi(1, roundi(source_rect.size.x)), maxi(1, roundi(source_rect.size.y)))
 	)
-	return Vector2(
-		maxf(maxf(padded_source_size.x, manual_size.x), minimum_size.x),
-		maxf(maxf(padded_source_size.y, manual_size.y), minimum_size.y)
-	)
+	var alpha_rect := _find_alpha_bounds(image, source_rect_i)
+	if alpha_rect.size.x <= 0 or alpha_rect.size.y <= 0:
+		return Rect2(-source_rect.size * texture_to_room_scale * 0.5, source_rect.size * texture_to_room_scale)
+	var local_position := Vector2(
+		float(alpha_rect.position.x - source_rect_i.position.x) * texture_to_room_scale.x,
+		float(alpha_rect.position.y - source_rect_i.position.y) * texture_to_room_scale.y
+	) - source_rect.size * texture_to_room_scale * 0.5
+	var local_size := Vector2(float(alpha_rect.size.x) * texture_to_room_scale.x, float(alpha_rect.size.y) * texture_to_room_scale.y)
+	var padded := Rect2(local_position, local_size)
+	padded = padded.grow_side(SIDE_LEFT, PROP_ALPHA_COLLISION_PADDING.x)
+	padded = padded.grow_side(SIDE_RIGHT, PROP_ALPHA_COLLISION_PADDING.x)
+	padded = padded.grow_side(SIDE_TOP, PROP_ALPHA_COLLISION_PADDING.y)
+	padded = padded.grow_side(SIDE_BOTTOM, PROP_ALPHA_COLLISION_PADDING.y)
+	return padded
+
+static func _find_alpha_bounds(image: Image, source_rect: Rect2i) -> Rect2i:
+	var min_x := source_rect.end.x
+	var min_y := source_rect.end.y
+	var max_x := source_rect.position.x - 1
+	var max_y := source_rect.position.y - 1
+	var start_x := clampi(source_rect.position.x, 0, image.get_width() - 1)
+	var start_y := clampi(source_rect.position.y, 0, image.get_height() - 1)
+	var end_x := clampi(source_rect.end.x, 0, image.get_width())
+	var end_y := clampi(source_rect.end.y, 0, image.get_height())
+	for y in range(start_y, end_y):
+		for x in range(start_x, end_x):
+			if image.get_pixel(x, y).a <= PROP_ALPHA_THRESHOLD:
+				continue
+			min_x = mini(min_x, x)
+			min_y = mini(min_y, y)
+			max_x = maxi(max_x, x)
+			max_y = maxi(max_y, y)
+	if max_x < min_x or max_y < min_y:
+		return Rect2i()
+	return Rect2i(Vector2i(min_x, min_y), Vector2i(max_x - min_x + 1, max_y - min_y + 1))
 
 func _add_enemy_previews(parent: Node) -> void:
 	var enemy_root := Node2D.new()
