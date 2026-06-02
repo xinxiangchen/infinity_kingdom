@@ -38,3 +38,16 @@ Recommended final direction:
 - Add collisions/walk masks later, either by TileMap or by authored CollisionPolygon2D.
 
 For now, `res://tools/map_browser_demo.tscn` is only a browsing prototype. It stitches room PNGs into a long route and gives a placeholder player plus camera.
+
+The same demo also places six enemy material previews on top of the stitched route:
+
+```text
+res://actors/enemy/textures/swordsman.png
+res://actors/enemy/textures/shield.png
+res://actors/enemy/textures/hunter.png
+res://actors/enemy/textures/archer.png
+res://actors/enemy/textures/arcanist.png
+res://actors/enemy/textures/apprentice_mage.png
+```
+
+These are visual previews only. They do not run enemy AI, collision, or combat logic yet.

@@ -22,13 +22,54 @@ const ROOM_TITLES := [
 	"12 King Gate"
 ]
 
+const ENEMY_PREVIEWS := [
+	{
+		"name": "Swordsman",
+		"texture": "res://actors/enemy/textures/swordsman.png",
+		"room": 1,
+		"offset_ratio": Vector2(0.46, 0.70)
+	},
+	{
+		"name": "Shield",
+		"texture": "res://actors/enemy/textures/shield.png",
+		"room": 2,
+		"offset_ratio": Vector2(0.34, 0.68)
+	},
+	{
+		"name": "Hunter",
+		"texture": "res://actors/enemy/textures/hunter.png",
+		"room": 2,
+		"offset_ratio": Vector2(0.62, 0.66)
+	},
+	{
+		"name": "Archer",
+		"texture": "res://actors/enemy/textures/archer.png",
+		"room": 3,
+		"offset_ratio": Vector2(0.50, 0.70)
+	},
+	{
+		"name": "Arcanist",
+		"texture": "res://actors/enemy/textures/arcanist.png",
+		"room": 4,
+		"offset_ratio": Vector2(0.42, 0.66)
+	},
+	{
+		"name": "Apprentice Mage",
+		"texture": "res://actors/enemy/textures/apprentice_mage.png",
+		"room": 4,
+		"offset_ratio": Vector2(0.64, 0.66)
+	}
+]
+
 const ROOM_GAP := 96.0
 const PLAYER_SPEED := 520.0
 const PLAYER_RADIUS := 22.0
+const ENEMY_PREVIEW_SCALE := Vector2(0.82, 0.82)
 
 var player: Node2D
 var camera: Camera2D
 var map_bounds := Rect2(Vector2.ZERO, Vector2.ZERO)
+var room_rects: Array[Rect2] = []
 
 func _ready() -> void:
 	_build_map()
@@ -52,6 +93,7 @@ func _build_map() -> void:
 	map_root.name = "StitchedMap"
 	add_child(map_root)
 
+	room_rects.clear()
 	var x_cursor := 0.0
 	var max_height := 0.0
 	var previous_center := Vector2.ZERO
@@ -70,6 +112,8 @@ func _build_map() -> void:
 		map_root.add_child(room)
 
 		var size := Vector2(float(texture.get_width()), float(texture.get_height()))
+		var room_rect := Rect2(room.position, size)
+		room_rects.append(room_rect)
 		var center := room.position + size * 0.5
 		_add_room_label(map_root, ROOM_TITLES[index], room.position + Vector2(24.0, 24.0))
 		if index > 0:
@@ -81,6 +125,7 @@ func _build_map() -> void:
 
 	map_bounds = Rect2(Vector2.ZERO, Vector2(maxf(x_cursor - ROOM_GAP, 0.0), max_height))
 	_add_bounds_outline(map_root)
+	_add_enemy_previews(map_root)
 
 func _build_player() -> void:
 	player = Node2D.new()
@@ -164,6 +209,65 @@ func _add_bounds_outline(parent: Node) -> void:
 	outline.add_point(Vector2(map_bounds.position.x, map_bounds.end.y))
 	outline.z_index = 30
 	parent.add_child(outline)
+
+func _add_enemy_previews(parent: Node) -> void:
+	var enemy_root := Node2D.new()
+	enemy_root.name = "EnemyMaterialPreview"
+	enemy_root.z_index = 40
+	parent.add_child(enemy_root)
+
+	for preview in ENEMY_PREVIEWS:
+		var room_index := int(preview["room"])
+		if room_index < 0 or room_index >= room_rects.size():
+			push_warning("Enemy preview room index out of range: %s" % room_index)
+			continue
+
+		var texture := load(String(preview["texture"])) as Texture2D
+		if texture == null:
+			push_warning("Enemy preview texture missing: %s" % preview["texture"])
+			continue
+
+		var room_rect := room_rects[room_index]
+		var offset_ratio := preview["offset_ratio"] as Vector2
+		var position := room_rect.position + Vector2(room_rect.size.x * offset_ratio.x, room_rect.size.y * offset_ratio.y)
+		_add_enemy_preview(enemy_root, String(preview["name"]), texture, position)
+
+func _add_enemy_preview(parent: Node, display_name: String, texture: Texture2D, position: Vector2) -> void:
+	var preview := Node2D.new()
+	preview.name = "%sPreview" % display_name.replace(" ", "")
+	preview.position = position
+	parent.add_child(preview)
+
+	var ring := Line2D.new()
+	ring.name = "GroundRing"
+	ring.closed = true
+	ring.width = 3.0
+	ring.default_color = Color(1.0, 0.78, 0.34, 0.86)
+	for point_index in range(28):
+		var angle := TAU * float(point_index) / 28.0
+		ring.add_point(Vector2(cos(angle) * 52.0, sin(angle) * 24.0))
+	preview.add_child(ring)
+
+	var sprite := Sprite2D.new()
+	sprite.name = "Sprite"
+	sprite.texture = texture
+	sprite.position = Vector2(0.0, -58.0)
+	sprite.scale = ENEMY_PREVIEW_SCALE
+	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	preview.add_child(sprite)
+
+	var label := Label.new()
+	label.name = "NameLabel"
+	label.text = display_name
+	label.position = Vector2(-72.0, 32.0)
+	label.size = Vector2(144.0, 28.0)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.add_theme_color_override("font_color", Color(1.0, 0.95, 0.74, 1.0))
+	label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.88))
+	label.add_theme_constant_override("shadow_offset_x", 2)
+	label.add_theme_constant_override("shadow_offset_y", 2)
+	label.add_theme_font_size_override("font_size", 18)
+	preview.add_child(label)
 
 func _fallback_keyboard_vector() -> Vector2:
 	var vector := Vector2.ZERO
