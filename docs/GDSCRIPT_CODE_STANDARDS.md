@@ -1,4 +1,4 @@
-# GDScript 模块代码规范
+﻿# GDScript 模块代码规范
 
 本文先约束当前 GDScript 协作方式。C++/GDExtension 后续单独出规范；在 C++ 接入前，各板块都按这里写 facade、信号和数据结构。
 
