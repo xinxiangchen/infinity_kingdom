@@ -4,6 +4,48 @@ signal defeated
 
 const DAMAGE_NUMBER_SCENE := preload("res://effects/damage_number.tscn")
 const ENEMY_BOLT_SCENE := preload("res://effects/projectiles/enemy_bolt.tscn")
+const ENEMY_WEAPON_TEXTURE_PATHS := [
+	[
+		"res://art/final_materials/weapons/enemy_sword_guard_sword_normal.png",
+		"res://art/final_materials/weapons/enemy_sword_guard_sword_elite.png"
+	],
+	[
+		"res://art/final_materials/weapons/enemy_shield_guard_sword_normal.png",
+		"res://art/final_materials/weapons/enemy_shield_guard_sword_elite.png"
+	],
+	[
+		"res://art/final_materials/weapons/enemy_archer_bow_normal.png",
+		"res://art/final_materials/weapons/enemy_archer_bow_elite.png"
+	],
+	[
+		"res://art/final_materials/weapons/enemy_hunter_knife_normal.png",
+		"res://art/final_materials/weapons/enemy_hunter_knife_elite.png"
+	],
+	[
+		"res://art/final_materials/weapons/enemy_apprentice_staff_normal.png",
+		"res://art/final_materials/weapons/enemy_apprentice_staff_elite.png"
+	],
+	[
+		"res://art/final_materials/weapons/enemy_arcanist_staff_normal.png",
+		"res://art/final_materials/weapons/enemy_arcanist_staff_elite.png"
+	]
+]
+const ENEMY_WEAPON_OFFSETS := [
+	Vector2(24.0, 0.0),
+	Vector2(22.0, 0.0),
+	Vector2(20.0, 0.0),
+	Vector2(20.0, 0.0),
+	Vector2(22.0, 0.0),
+	Vector2(22.0, 0.0)
+]
+const ENEMY_WEAPON_SCALES := [
+	Vector2(0.46, 0.46),
+	Vector2(0.46, 0.46),
+	Vector2(0.46, 0.46),
+	Vector2(0.44, 0.44),
+	Vector2(0.46, 0.46),
+	Vector2(0.48, 0.48)
+]
 
 enum EnemyType {
 	SWORDSMAN,
@@ -28,6 +70,7 @@ enum EnemyType {
 
 @onready var body: CanvasItem = $Body
 @onready var weapon: Node2D = $Weapon
+@onready var weapon_sprite: Sprite2D = get_node_or_null("Weapon/WeaponSprite")
 @onready var telegraph_ring: Line2D = $TelegraphRing
 @onready var telegraph_line: Line2D = $TelegraphLine
 @onready var projectile_spawner: Node2D = $ProjectileSpawner
@@ -55,6 +98,7 @@ var orbit_direction: float = 1.0
 func _ready() -> void:
 	add_to_group("damageable")
 	_apply_elite_scaling()
+	_setup_weapon_visual()
 	health_component.setup(max_hp, defense_value)
 	health_component.damaged.connect(_on_damaged)
 	health_component.died.connect(_on_died)
@@ -615,9 +659,32 @@ func _update_visuals() -> void:
 	if telegraph_line.visible:
 		telegraph_line.width = 3.2 + 0.8 * pulse
 		telegraph_line.modulate = Color(1.0, 1.0, 1.0, 0.72 + 0.18 * pulse)
-	if weapon != null and target != null and is_instance_valid(target):
-		weapon.rotation = (target.global_position - global_position).angle()
-		projectile_spawner.position.x = 26.0 if target.global_position.x >= global_position.x else -26.0
+	if weapon != null:
+		weapon.visible = hp > 0.0
+		if target != null and is_instance_valid(target):
+			weapon.rotation = (target.global_position - global_position).angle()
+			if projectile_spawner != null:
+				projectile_spawner.position.x = 26.0 if target.global_position.x >= global_position.x else -26.0
+
+func _setup_weapon_visual() -> void:
+	if weapon == null:
+		return
+	weapon.visible = true
+	weapon.z_index = 3
+	if weapon is Polygon2D:
+		(weapon as Polygon2D).color = Color(1.0, 1.0, 1.0, 0.0)
+	if weapon_sprite == null:
+		weapon_sprite = Sprite2D.new()
+		weapon_sprite.name = "WeaponSprite"
+		weapon.add_child(weapon_sprite)
+	var type_index := clampi(int(enemy_type), 0, ENEMY_WEAPON_TEXTURE_PATHS.size() - 1)
+	var variant_index := 1 if elite else 0
+	weapon_sprite.texture = load(String(ENEMY_WEAPON_TEXTURE_PATHS[type_index][variant_index])) as Texture2D
+	weapon_sprite.position = ENEMY_WEAPON_OFFSETS[type_index]
+	weapon_sprite.scale = ENEMY_WEAPON_SCALES[type_index]
+	weapon_sprite.centered = true
+	weapon_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	weapon_sprite.z_index = 1
 
 func _spawn_damage_number(amount: float, is_critical: bool) -> void:
 	var damage_number := DAMAGE_NUMBER_SCENE.instantiate()
@@ -645,6 +712,8 @@ func _set_body_tint(color: Color) -> void:
 
 func _on_died() -> void:
 	hp = 0.0
+	if weapon != null:
+		weapon.visible = false
 	Sfx.play_event(&"enemy_generic_dead", global_position)
 	var timer := get_tree().create_timer(0.2)
 	timer.timeout.connect(func() -> void:

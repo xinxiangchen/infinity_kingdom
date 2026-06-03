@@ -1,0 +1,13 @@
+[configuration]
+
+entry_symbol = "coursework_library_init"
+compatibility_minimum = "4.3"
+
+[libraries]
+
+windows.debug.x86_64 = "res://demo/bin/coursework_extension.windows.template_debug.x86_64.dll"
+windows.release.x86_64 = "res://demo/bin/coursework_extension.windows.template_release.x86_64.dll"
+linux.debug.x86_64 = "res://demo/bin/coursework_extension.linux.template_debug.x86_64.so"
+linux.release.x86_64 = "res://demo/bin/coursework_extension.linux.template_release.x86_64.so"
+macos.debug = "res://demo/bin/coursework_extension.macos.template_debug.framework"
+macos.release = "res://demo/bin/coursework_extension.macos.template_release.framework"
