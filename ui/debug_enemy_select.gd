@@ -11,7 +11,9 @@ const ENEMY_OPTIONS := [
 	{"id": &"archer", "label": "弓手"},
 	{"id": &"hunter", "label": "猎手"},
 	{"id": &"apprentice", "label": "学徒法师"},
-	{"id": &"arcanist", "label": "秘术师"}
+	{"id": &"arcanist", "label": "秘术师"},
+	{"id": &"judicator_boss", "label": "Boss：审判官"},
+	{"id": &"twin_princes_boss", "label": "Boss：双子王子"}
 ]
 
 
@@ -34,8 +36,8 @@ func _build_ui() -> void:
 	panel.name = "Panel"
 	panel.offset_left = 24.0
 	panel.offset_top = 92.0
-	panel.offset_right = 320.0
-	panel.offset_bottom = 500.0
+	panel.offset_right = 340.0
+	panel.offset_bottom = 610.0
 	panel.add_theme_stylebox_override("panel", _panel_style())
 	add_child(panel)
 
@@ -57,19 +59,20 @@ func _build_ui() -> void:
 	content.add_child(title)
 
 	var hint := Label.new()
-	hint.text = "选择后会刷新右侧目标。"
+	hint.text = "选择后会刷新右侧目标。Boss 不受精英勾选影响。"
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hint.add_theme_font_size_override("font_size", 14)
 	hint.add_theme_color_override("font_color", Color(0.78, 0.82, 0.88))
 	content.add_child(hint)
 
 	elite_check = CheckBox.new()
-	elite_check.text = "精英版本"
+	elite_check.text = "小怪使用精英版本"
 	content.add_child(elite_check)
 
 	for option in ENEMY_OPTIONS:
 		var button := Button.new()
 		button.text = String(option["label"])
-		button.custom_minimum_size = Vector2(240.0, 38.0)
+		button.custom_minimum_size = Vector2(260.0, 36.0)
 		var enemy_id: StringName = option["id"]
 		button.pressed.connect(func() -> void:
 			enemy_selected.emit(enemy_id, elite_check.button_pressed)
