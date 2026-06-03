@@ -13,6 +13,7 @@ var attack_name: StringName = &"skill1"
 var hit_targets: Array[Node] = []
 var pulse_time: float = 0.0
 var expired: bool = false
+var trail_timer: float = 0.0
 
 func _ready() -> void:
 	body_entered.connect(_on_body_entered)
@@ -24,6 +25,7 @@ func setup(owner_actor: Node, travel_direction: Vector2, hit_damage: float, hit_
 	damage = hit_damage
 	crit_rate = hit_crit_rate
 	attack_name = attack_label
+	trail.polygon = _pixel_arrow_polygon()
 	rotation = direction.angle()
 	var timer := get_tree().create_timer(lifetime)
 	timer.timeout.connect(queue_free)
@@ -31,8 +33,12 @@ func setup(owner_actor: Node, travel_direction: Vector2, hit_damage: float, hit_
 func _physics_process(delta: float) -> void:
 	global_position += direction * speed * delta
 	pulse_time += delta
-	trail.scale = Vector2(1.0 + sin(pulse_time * 24.0) * 0.08, 1.0)
+	trail.scale = Vector2(1.08 if int(pulse_time * 20.0) % 2 == 0 else 0.98, 1.0)
 	trail.color = Color(1.0, 0.96, 0.72, 1.0)
+	trail_timer -= delta
+	if trail_timer <= 0.0:
+		trail_timer = 0.035
+		_spawn_pixel_trail()
 
 func _on_body_entered(body: Node) -> void:
 	_try_hit(body)
@@ -81,10 +87,12 @@ func _resolve_damage_target(target: Variant) -> Node:
 func _spawn_hit_flash() -> void:
 	var flash := Polygon2D.new()
 	flash.polygon = PackedVector2Array([
-		Vector2(-8, -3),
-		Vector2(8, 0),
-		Vector2(-8, 3),
-		Vector2(-2, 0)
+		Vector2(-10.0, -4.0),
+		Vector2(6.0, -4.0),
+		Vector2(14.0, 0.0),
+		Vector2(6.0, 4.0),
+		Vector2(-10.0, 4.0),
+		Vector2(-4.0, 0.0)
 	])
 	flash.color = Color(1.0, 1.0, 0.8, 0.9)
 	flash.global_position = global_position
@@ -94,3 +102,35 @@ func _spawn_hit_flash() -> void:
 	tween.tween_property(flash, "scale", Vector2.ONE * 2.2, 0.08)
 	tween.parallel().tween_property(flash, "modulate:a", 0.0, 0.08)
 	tween.finished.connect(flash.queue_free)
+
+func _pixel_arrow_polygon() -> PackedVector2Array:
+	return PackedVector2Array([
+		Vector2(-20.0, -3.0),
+		Vector2(4.0, -3.0),
+		Vector2(4.0, -7.0),
+		Vector2(20.0, 0.0),
+		Vector2(4.0, 7.0),
+		Vector2(4.0, 3.0),
+		Vector2(-20.0, 3.0),
+		Vector2(-12.0, 0.0)
+	])
+
+func _spawn_pixel_trail() -> void:
+	var scene_root := get_tree().current_scene
+	if scene_root == null:
+		return
+	var chip := Polygon2D.new()
+	chip.color = Color(1.0, 0.94, 0.64, 0.38)
+	chip.polygon = PackedVector2Array([
+		Vector2(-3.0, -2.0),
+		Vector2(3.0, -2.0),
+		Vector2(3.0, 2.0),
+		Vector2(-3.0, 2.0)
+	])
+	chip.global_position = global_position - direction * 16.0
+	chip.rotation = rotation
+	scene_root.add_child(chip)
+	var tween := chip.create_tween()
+	tween.tween_property(chip, "global_position", chip.global_position - direction * 12.0, 0.1)
+	tween.parallel().tween_property(chip, "modulate:a", 0.0, 0.1)
+	tween.finished.connect(chip.queue_free)

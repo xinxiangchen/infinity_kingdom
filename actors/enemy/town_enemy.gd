@@ -102,12 +102,23 @@ var movement_rng := RandomNumberGenerator.new()
 var movement_variation_timer: float = 0.0
 var movement_variation_direction: Vector2 = Vector2.ZERO
 var movement_variation_strength: float = 0.0
+var base_body_position: Vector2 = Vector2.ZERO
+var base_weapon_position: Vector2 = Vector2.ZERO
+var base_projectile_spawner_position: Vector2 = Vector2.ZERO
+var visual_bob_time: float = 0.0
+var death_sequence_started: bool = false
 
 func _ready() -> void:
 	movement_rng.randomize()
 	add_to_group("damageable")
 	_apply_elite_scaling()
 	_setup_weapon_visual()
+	if body is Node2D:
+		base_body_position = (body as Node2D).position
+	if weapon != null:
+		base_weapon_position = weapon.position
+	if projectile_spawner != null:
+		base_projectile_spawner_position = projectile_spawner.position
 	health_component.setup(max_hp, defense_value)
 	health_component.damaged.connect(_on_damaged)
 	health_component.died.connect(_on_died)
@@ -143,6 +154,7 @@ func apply_control_effects(payload: Dictionary) -> void:
 func _physics_process(delta: float) -> void:
 	if hp <= 0.0:
 		return
+	visual_bob_time += delta * lerpf(4.5, 9.0, clampf(velocity.length() / maxf(move_speed, 1.0), 0.0, 1.0))
 	_update_status_timers(delta)
 	attack_cooldown = maxf(attack_cooldown - delta, 0.0)
 	skill_cooldown = maxf(skill_cooldown - delta, 0.0)
@@ -547,20 +559,20 @@ func _spawn_melee_attack_effect(radius: float, color: Color, spread: float, forw
 	if effects_layer == null:
 		return
 	var slash := Line2D.new()
-	slash.antialiased = true
-	slash.width = 14.0 if heavy else 10.0
+	slash.antialiased = false
+	slash.width = 12.0 if heavy else 8.0
 	slash.default_color = color
 	slash.position = line_direction * forward_offset
 	slash.rotation = line_direction.angle()
 	var reach := maxf(radius * 0.72, 44.0)
 	slash.points = PackedVector2Array([
-		Vector2(-8.0, -spread * 0.58),
-		Vector2(reach * 0.18, -spread),
-		Vector2(reach * 0.56, -spread * 0.34),
+		Vector2(-6.0, -spread * 0.52),
+		Vector2(reach * 0.22, -spread),
+		Vector2(reach * 0.62, -spread * 0.28),
 		Vector2(reach, 0.0),
-		Vector2(reach * 0.56, spread * 0.34),
-		Vector2(reach * 0.18, spread),
-		Vector2(-8.0, spread * 0.58)
+		Vector2(reach * 0.62, spread * 0.28),
+		Vector2(reach * 0.22, spread),
+		Vector2(-6.0, spread * 0.52)
 	])
 	slash.scale = Vector2.ONE * 0.92
 	effects_layer.add_child(slash)
@@ -570,12 +582,13 @@ func _spawn_melee_attack_effect(radius: float, color: Color, spread: float, forw
 	spark.position = line_direction * (forward_offset + reach * 0.82)
 	spark.rotation = line_direction.angle()
 	spark.polygon = PackedVector2Array([
-		Vector2(-10.0, -4.0),
-		Vector2(2.0, -10.0),
+		Vector2(-8.0, -4.0),
+		Vector2(0.0, -10.0),
+		Vector2(14.0, -2.0),
 		Vector2(20.0, 0.0),
-		Vector2(2.0, 10.0),
-		Vector2(-10.0, 4.0),
-		Vector2(-2.0, 0.0)
+		Vector2(14.0, 2.0),
+		Vector2(0.0, 10.0),
+		Vector2(-8.0, 4.0)
 	])
 	spark.scale = Vector2.ONE * 0.72
 	effects_layer.add_child(spark)
@@ -696,6 +709,8 @@ func _fire_projectile(damage: float, color: Color, new_speed: float) -> void:
 	projectile.setup(self, (target.global_position - projectile_spawner.global_position).normalized(), damage, color, new_speed, payload)
 
 func _update_visuals() -> void:
+	if death_sequence_started:
+		return
 	var color := Color(0.82, 0.4, 0.24, 1.0)
 	match enemy_type:
 		EnemyType.SWORDSMAN:
@@ -724,12 +739,26 @@ func _update_visuals() -> void:
 	if telegraph_line.visible:
 		telegraph_line.width = 3.2 + 0.8 * pulse
 		telegraph_line.modulate = Color(1.0, 1.0, 1.0, 0.72 + 0.18 * pulse)
+	var motion_ratio := clampf(velocity.length() / maxf(move_speed, 1.0), 0.0, 1.0)
+	var bob_strength := 1.2 + motion_ratio * 3.2
+	if state != &"idle" and state != &"recover":
+		bob_strength += 0.9
+	var bob := sin(visual_bob_time) * bob_strength
+	var sway := sin(visual_bob_time * 0.56 + motion_ratio) * (0.015 + motion_ratio * 0.05)
+	if body is Node2D:
+		var body_node := body as Node2D
+		body_node.position = base_body_position + Vector2(0.0, bob)
+		body_node.rotation = sway
 	if weapon != null:
 		weapon.visible = hp > 0.0
 		if target != null and is_instance_valid(target):
-			weapon.rotation = (target.global_position - global_position).angle()
+			weapon.position = base_weapon_position + Vector2(0.0, bob * 0.35)
+			weapon.rotation = (target.global_position - global_position).angle() + sway * 0.65
 			if projectile_spawner != null:
-				projectile_spawner.position.x = 26.0 if target.global_position.x >= global_position.x else -26.0
+				projectile_spawner.position = Vector2(
+					26.0 if target.global_position.x >= global_position.x else -26.0,
+					base_projectile_spawner_position.y + bob * 0.16
+				)
 
 func _setup_weapon_visual() -> void:
 	if weapon == null:
@@ -748,8 +777,10 @@ func _setup_weapon_visual() -> void:
 	weapon_sprite.position = ENEMY_WEAPON_OFFSETS[type_index]
 	weapon_sprite.scale = ENEMY_WEAPON_SCALES[type_index]
 	weapon_sprite.centered = true
-	weapon_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	weapon_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	weapon_sprite.z_index = 1
+	if body is Sprite2D:
+		(body as Sprite2D).texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 
 func _spawn_damage_number(amount: float, is_critical: bool) -> void:
 	var damage_number := DAMAGE_NUMBER_SCENE.instantiate()
@@ -776,13 +807,63 @@ func _set_body_tint(color: Color) -> void:
 		body.modulate = color
 
 func _on_died() -> void:
+	if death_sequence_started:
+		return
 	hp = 0.0
+	death_sequence_started = true
+	velocity = Vector2.ZERO
+	collision_layer = 0
+	collision_mask = 0
+	set_physics_process(false)
+	telegraph_ring.visible = false
+	telegraph_line.visible = false
+	if has_node("CollisionShape2D"):
+		var collision_shape := $CollisionShape2D as CollisionShape2D
+		if collision_shape != null:
+			collision_shape.set_deferred("disabled", true)
 	if weapon != null:
-		weapon.visible = false
+		weapon.visible = true
 	Sfx.play_event(&"enemy_generic_dead", global_position)
-	var timer := get_tree().create_timer(0.2)
+	_spawn_death_burst()
+	var fall_sign := -1.0 if line_direction.x < 0.0 else 1.0
+	if body is Node2D:
+		var body_node := body as Node2D
+		var start_position := body_node.position
+		var start_scale := body_node.scale
+		var body_tween := create_tween()
+		body_tween.tween_property(body_node, "rotation", 0.34 * fall_sign, 0.18)
+		body_tween.parallel().tween_property(body_node, "position", start_position + Vector2(-10.0 * fall_sign, 12.0), 0.18)
+		body_tween.parallel().tween_property(body_node, "scale", start_scale * Vector2(1.06, 0.82), 0.18)
+		body_tween.tween_property(body_node, "modulate:a", 0.0, 0.24)
+	if weapon != null:
+		var weapon_tween := create_tween()
+		weapon_tween.tween_property(weapon, "rotation", weapon.rotation + 0.9 * fall_sign, 0.16)
+		weapon_tween.parallel().tween_property(weapon, "position", weapon.position + Vector2(-8.0 * fall_sign, 10.0), 0.16)
+		weapon_tween.parallel().tween_property(weapon, "modulate:a", 0.0, 0.22)
+	var timer := get_tree().create_timer(0.42)
 	timer.timeout.connect(func() -> void:
 		if is_instance_valid(self):
 			defeated.emit()
 			queue_free()
 	)
+
+func _spawn_death_burst() -> void:
+	if effects_layer == null:
+		return
+	for index in range(4):
+		var shard := Polygon2D.new()
+		shard.color = Color(1.0, 0.84, 0.64, 0.92)
+		shard.polygon = PackedVector2Array([
+			Vector2(-4.0, -4.0),
+			Vector2(4.0, -4.0),
+			Vector2(4.0, 4.0),
+			Vector2(-4.0, 4.0)
+		])
+		shard.position = Vector2.ZERO
+		effects_layer.add_child(shard)
+		var direction := Vector2.RIGHT.rotated(TAU * float(index) / 4.0 + 0.3)
+		var tween := shard.create_tween()
+		tween.tween_property(shard, "position", direction * 18.0, 0.18)
+		tween.parallel().tween_property(shard, "rotation", direction.angle(), 0.18)
+		tween.parallel().tween_property(shard, "modulate:a", 0.0, 0.18)
+		tween.finished.connect(shard.queue_free)

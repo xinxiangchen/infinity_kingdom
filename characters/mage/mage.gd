@@ -25,16 +25,16 @@ const BODY_BASE_SCALE := Vector2(0.85, 0.85)
 @export var max_inspiration: float = 80.0
 @export var defense: float = 60.0
 @export var max_defense: float = 60.0
-@export var move_speed: float = 220.0
+@export var move_speed: float = 232.0
 @export var attack_damage: float = 90.0
-@export var attack_interval: float = 1.1
+@export var attack_interval: float = 0.98
 @export_range(0.0, 1.0, 0.01) var crit_rate: float = 0.3
 @export var inspiration_gain_on_attack_hit: float = 8.0
 
 @export_group("Normal Attack Timing")
-@export var attack_windup: float = 0.32
+@export var attack_windup: float = 0.27
 @export var attack_hit_frame: float = 0.08
-@export var attack_recovery: float = 0.4
+@export var attack_recovery: float = 0.36
 @export var attack_targeting_range: float = 560.0
 
 @export_group("Skill 1: Arcane Blades")
@@ -755,6 +755,7 @@ func _on_health_component_died() -> void:
 	body.texture = TEXTURE_LOADER.load_texture(MAGE_DEATH_TEXTURE_PATH)
 	if weapon != null:
 		weapon.visible = false
+	_spawn_death_burst()
 	state_machine.force_change(&"Dead")
 	died.emit()
 
@@ -881,4 +882,28 @@ func _add_dead_animation(library: AnimationLibrary) -> void:
 	var animation := Animation.new()
 	animation.length = 0.7
 	_add_value_track(animation, "Body:rotation", [[0.0, 0.0], [0.7, PI * 0.5]])
+	_add_value_track(animation, "Body:position", [[0.0, Vector2.ZERO], [0.24, Vector2(-6.0, 8.0)], [0.7, Vector2(-10.0, 14.0)]])
+	_add_value_track(animation, "Body:scale", [[0.0, _body_scale()], [0.24, _body_scale(1.06, 0.82)], [0.7, _body_scale(1.0, 0.74)]])
+	_add_value_track(animation, "Body:modulate", [[0.0, Color.WHITE], [0.7, Color(0.46, 0.46, 0.46, 1.0)]])
 	_store_animation(library, &"dead", animation)
+
+func _spawn_death_burst() -> void:
+	if effects_layer == null:
+		return
+	for index in range(6):
+		var glyph := Polygon2D.new()
+		glyph.color = Color(0.78, 0.88, 1.0, 0.84)
+		glyph.polygon = PackedVector2Array([
+			Vector2(-4.0, -6.0),
+			Vector2(4.0, -6.0),
+			Vector2(6.0, 0.0),
+			Vector2(4.0, 6.0),
+			Vector2(-4.0, 6.0),
+			Vector2(-6.0, 0.0)
+		])
+		effects_layer.add_child(glyph)
+		var direction := Vector2.RIGHT.rotated(TAU * float(index) / 6.0)
+		var tween := glyph.create_tween()
+		tween.tween_property(glyph, "position", direction * 24.0 + Vector2(0.0, -8.0), 0.22)
+		tween.parallel().tween_property(glyph, "modulate:a", 0.0, 0.22)
+		tween.finished.connect(glyph.queue_free)

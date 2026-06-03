@@ -18,16 +18,16 @@ signal died
 @export var max_inspiration: float = 20.0
 @export var defense: float = 100.0
 @export var max_defense: float = 100.0
-@export var move_speed: float = 200.0
+@export var move_speed: float = 226.0
 @export var attack_damage: float = 100.0
-@export var attack_interval: float = 0.8
+@export var attack_interval: float = 0.68
 @export_range(0.0, 1.0, 0.01) var crit_rate: float = 0.2
 @export var inspiration_gain_on_attack_hit: float = 2.0
 
 @export_group("Normal Attack Timing")
-@export var attack_windup: float = 0.3
-@export var attack_hit_frame: float = 0.1
-@export var attack_recovery: float = 0.4
+@export var attack_windup: float = 0.24
+@export var attack_hit_frame: float = 0.08
+@export var attack_recovery: float = 0.32
 
 @export_group("Skill 1: Charge Slash")
 @export var skill1_cost: float = 10.0
@@ -73,8 +73,8 @@ signal died
 @export var hit_stun_duration: float = 0.25
 @export var hit_threshold: float = 1.0
 @export var hit_invulnerability_duration: float = 0.34
-@export var attack_range: float = 108.0
-@export var attack_arc_degrees: float = 128.0
+@export var attack_range: float = 98.0
+@export var attack_arc_degrees: float = 108.0
 @export var shockwave_radius: float = 120.0
 @export var sanctuary_radius: float = 140.0
 
@@ -280,11 +280,9 @@ func sync_visuals() -> void:
 	if absf(facing.x) > 0.01:
 		sprite.flip_h = facing.x < 0.0
 	_sync_weapon_visual()
-	var side_sign := _get_weapon_side_sign()
-	var vertical_bias := clampf(facing.y, -1.0, 1.0)
-	slash_arc.position = Vector2(12.0 * side_sign, -6.0 + vertical_bias * 6.0)
+	slash_arc.position = _attack_visual_offset()
 	if slash_arc.visible:
-		slash_arc.rotation = facing.angle()
+		slash_arc.rotation = _attack_facing().angle()
 	if hp <= 0.0:
 		modulate = Color(0.35, 0.35, 0.35, 1.0)
 	elif dodge_invincible:
@@ -394,7 +392,8 @@ func start_attack() -> void:
 	current_attack_name = &"attack"
 	attack_started.emit(current_attack_name)
 	slash_arc.visible = true
-	slash_arc.rotation = facing.angle()
+	slash_arc.position = _attack_visual_offset()
+	slash_arc.rotation = _attack_facing().angle()
 	play_animation(&"attack")
 	_animate_weapon_swing(-30.0, 122.0, 0.12, 0.18)
 
@@ -664,8 +663,8 @@ func apply_damage_to_overlapping_targets(base_damage: float, radius: float, atta
 	apply_damage_to_targets(base_damage, radius, attack_name, current_attack_targets, extra_payload)
 
 func apply_damage_to_targets_in_arc(base_damage: float, radius: float, arc_degrees: float, attack_name: StringName, extra_payload: Dictionary = {}) -> void:
-	var facing_direction := facing.normalized() if facing != Vector2.ZERO else Vector2.RIGHT
-	var attack_origin := global_position + facing_direction * 16.0
+	var facing_direction := _attack_facing()
+	var attack_origin := _attack_origin()
 	for target in get_tree().get_nodes_in_group("damageable"):
 		if target == self:
 			continue
@@ -765,6 +764,7 @@ func _on_health_component_died() -> void:
 	sprite.texture = TEXTURE_LOADER.load_texture(KNIGHT_DEATH_TEXTURE_PATH)
 	if weapon != null:
 		weapon.visible = false
+	_spawn_death_burst()
 	state_machine.force_change(&"Dead")
 	died.emit()
 
@@ -805,6 +805,15 @@ func _get_weapon_side_sign() -> float:
 		return 1.0 if facing.x >= 0.0 else -1.0
 	return -1.0 if sprite.flip_h else 1.0
 
+func _attack_facing() -> Vector2:
+	return facing.normalized() if facing.length_squared() > 0.0001 else Vector2.RIGHT
+
+func _attack_visual_offset() -> Vector2:
+	return _attack_facing() * 16.0 + Vector2(0.0, -4.0)
+
+func _attack_origin() -> Vector2:
+	return global_position + _attack_visual_offset()
+
 func set_auto_walk_direction(direction: Vector2) -> void:
 	auto_walk_direction = direction.normalized() if direction.length_squared() > 0.0001 else Vector2.ZERO
 
@@ -820,19 +829,20 @@ func _flash_melee_impact() -> void:
 	)
 
 func _show_melee_slash_effect(radius: float, arc_degrees: float) -> void:
+	var attack_direction := _attack_facing()
 	var arc := Line2D.new()
-	arc.width = 18.0
-	arc.antialiased = true
+	arc.width = 14.0
+	arc.antialiased = false
 	arc.default_color = Color(1.0, 0.9, 0.62, 0.96)
-	arc.position = facing * 14.0
-	arc.rotation = facing.angle()
+	arc.position = _attack_visual_offset()
+	arc.rotation = attack_direction.angle()
 	arc.points = _build_sweep_points(radius, arc_degrees, 9)
 	effects_layer.add_child(arc)
 
 	var burst := Polygon2D.new()
 	burst.color = Color(1.0, 0.82, 0.54, 0.9)
-	burst.position = facing * (radius * 0.82)
-	burst.rotation = facing.angle()
+	burst.position = attack_direction * (radius * 0.82)
+	burst.rotation = attack_direction.angle()
 	burst.polygon = PackedVector2Array([
 		Vector2(-18.0, -6.0),
 		Vector2(6.0, -14.0),
@@ -845,10 +855,10 @@ func _show_melee_slash_effect(radius: float, arc_degrees: float) -> void:
 
 	var shock := Line2D.new()
 	shock.width = 5.0
-	shock.antialiased = true
+	shock.antialiased = false
 	shock.default_color = Color(1.0, 0.98, 0.86, 0.75)
-	shock.position = facing * (radius * 0.55)
-	shock.rotation = facing.angle()
+	shock.position = attack_direction * (radius * 0.55)
+	shock.rotation = attack_direction.angle()
 	shock.points = PackedVector2Array([
 		Vector2(-14.0, 0.0),
 		Vector2(0.0, 0.0),
@@ -1070,5 +1080,26 @@ func _add_dead_animation(library: AnimationLibrary) -> void:
 	var animation := Animation.new()
 	animation.length = 0.7
 	_add_value_track(animation, "Sprite2D:rotation", [[0.0, 0.0], [0.7, PI * 0.5]])
+	_add_value_track(animation, "Sprite2D:position", [[0.0, Vector2.ZERO], [0.28, Vector2(-8.0, 8.0)], [0.7, Vector2(-12.0, 14.0)]])
+	_add_value_track(animation, "Sprite2D:scale", [[0.0, _sprite_scale()], [0.28, _sprite_scale(1.08, 0.82)], [0.7, _sprite_scale(1.02, 0.76)]])
 	_add_value_track(animation, "Sprite2D:modulate", [[0.0, Color.WHITE], [0.7, Color(0.45, 0.45, 0.45, 1.0)]])
 	_store_animation(library, &"dead", animation)
+
+func _spawn_death_burst() -> void:
+	if effects_layer == null:
+		return
+	for index in range(6):
+		var chip := Polygon2D.new()
+		chip.color = Color(1.0, 0.86, 0.62, 0.86)
+		chip.polygon = PackedVector2Array([
+			Vector2(-4.0, -4.0),
+			Vector2(4.0, -4.0),
+			Vector2(4.0, 4.0),
+			Vector2(-4.0, 4.0)
+		])
+		effects_layer.add_child(chip)
+		var direction := Vector2.RIGHT.rotated(TAU * float(index) / 6.0)
+		var tween := chip.create_tween()
+		tween.tween_property(chip, "position", direction * 24.0 + Vector2(0.0, -6.0), 0.2)
+		tween.parallel().tween_property(chip, "modulate:a", 0.0, 0.2)
+		tween.finished.connect(chip.queue_free)

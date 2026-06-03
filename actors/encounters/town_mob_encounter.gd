@@ -9,8 +9,8 @@ const HUNTER_SCENE := preload("res://actors/enemy/hunter_enemy.tscn")
 const APPRENTICE_SCENE := preload("res://actors/enemy/apprentice_mage_enemy.tscn")
 const ARCANIST_SCENE := preload("res://actors/enemy/arcanist_enemy.tscn")
 const TownEnemy := preload("res://actors/enemy/town_enemy.gd")
-const SAFE_SPAWN_DISTANCE := 210.0
-const SPAWN_CLUSTER_DISTANCE := 64.0
+const SAFE_SPAWN_DISTANCE := 260.0
+const SPAWN_CLUSTER_DISTANCE := 88.0
 
 @onready var enemy_layer: Node2D = $EnemyLayer
 @onready var spawn_layer: Node2D = $SpawnLayer
@@ -352,15 +352,56 @@ func _safe_spawn_position(marker_index: int) -> Vector2:
 	var marker := spawn_layer.get_child(clampi(marker_index, 0, max(spawn_layer.get_child_count() - 1, 0))) as Marker2D
 	if marker == null:
 		return global_position
-	var spawn_position := marker.global_position + Vector2(rng.randf_range(-14.0, 14.0), rng.randf_range(-10.0, 10.0))
+	var marker_position := marker.global_position
+	var spawn_position := marker_position + Vector2(rng.randf_range(-14.0, 14.0), rng.randf_range(-10.0, 10.0))
 	if target == null or not is_instance_valid(target):
 		return spawn_position
+	var best_position := spawn_position
+	var best_score := -INF
+	var samples := [
+		Vector2.ZERO,
+		Vector2(72.0, 0.0),
+		Vector2(-72.0, 0.0),
+		Vector2(0.0, 72.0),
+		Vector2(0.0, -72.0),
+		Vector2(128.0, 48.0),
+		Vector2(-128.0, 48.0),
+		Vector2(128.0, -48.0),
+		Vector2(-128.0, -48.0)
+	]
+	for offset in samples:
+		var offset_value := offset as Vector2
+		var candidate := marker_position + offset_value + Vector2(rng.randf_range(-10.0, 10.0), rng.randf_range(-8.0, 8.0))
+		var distance_to_player := candidate.distance_to(target.global_position)
+		var score := distance_to_player
+		if distance_to_player < SAFE_SPAWN_DISTANCE:
+			score -= 2000.0
+		if _spawn_point_is_blocked(candidate):
+			score -= 1400.0
+		if score > best_score:
+			best_score = score
+			best_position = candidate
+		if distance_to_player >= SAFE_SPAWN_DISTANCE and not _spawn_point_is_blocked(candidate):
+			return candidate
+	spawn_position = best_position
 	var away := spawn_position - target.global_position
-	if away.length() >= SAFE_SPAWN_DISTANCE:
+	if away.length() >= SAFE_SPAWN_DISTANCE and not _spawn_point_is_blocked(spawn_position):
 		return spawn_position
 	if away.length_squared() <= 0.001:
 		away = Vector2.RIGHT
-	return target.global_position + away.normalized() * SAFE_SPAWN_DISTANCE
+	var fallback := target.global_position + away.normalized() * SAFE_SPAWN_DISTANCE
+	return fallback if not _spawn_point_is_blocked(fallback) else best_position
+
+func _spawn_point_is_blocked(world_position: Vector2) -> bool:
+	var space_state := get_world_2d().direct_space_state
+	if space_state == null:
+		return false
+	var query := PhysicsPointQueryParameters2D.new()
+	query.position = world_position
+	query.collision_mask = 1
+	query.collide_with_areas = false
+	query.collide_with_bodies = true
+	return not space_state.intersect_point(query, 1).is_empty()
 
 func _build_active_waves() -> Array[Dictionary]:
 	var pool: Array[Dictionary] = []

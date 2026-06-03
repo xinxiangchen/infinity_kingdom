@@ -75,23 +75,38 @@ func _run() -> void:
 	var event_sequence: Array[String] = []
 	for _index in range(3):
 		event_sequence.append(run_director.next_event_kind())
-	if event_sequence.size() != 3 or event_sequence[0] != "shop":
-		push_error("RunDirector did not build a three-step event deck starting with shop")
+	if event_sequence.size() != 3:
+		push_error("RunDirector did not build a three-step regular event deck")
 		quit(1)
 		return
-	for event_index in range(1, event_sequence.size()):
-		if event_sequence[event_index] == "shop":
-			push_error("RunDirector repeated shop before the deck was exhausted")
+	for event_kind in event_sequence:
+		if not ["bounty", "pact", "attunement", "scout"].has(event_kind):
+			push_error("RunDirector emitted an unexpected early event kind")
 			quit(1)
 			return
 	run_director.reset_run()
+	for encounter_count in range(5):
+		run_director.reward_encounter(encounter_count)
+	if run_director.peek_next_event_kind() != "services":
+		push_error("Town services did not appear before the palace route")
+		quit(1)
+		return
+	if run_director.next_event_kind() != "services":
+		push_error("Town services were not consumed as the next event")
+		quit(1)
+		return
+	if run_director.peek_next_event_kind() == "services":
+		push_error("Town services incorrectly repeated after being consumed")
+		quit(1)
+		return
+	run_director.reset_run()
 	var route_preview: String = run_director.describe_event_route(4)
-	if route_preview.find("Black Market") == -1 or route_preview.find("Victory") == -1:
+	if route_preview.find("Victory") == -1:
 		push_error("RunDirector route preview did not describe the current event route")
 		quit(1)
 		return
-	run_director.record_event_choice("shop", "skip", "You move on.", "Skip")
-	if run_director.describe_event_history(1).find("Black Market") == -1:
+	run_director.record_event_choice("bounty", "bounty_cache", "Immediate coin claimed.", "Open Purse")
+	if run_director.describe_event_history(1).find("Bounty Board") == -1:
 		push_error("RunDirector event history did not record the last event choice")
 		quit(1)
 		return

@@ -9,6 +9,7 @@ const AudioRoute := preload("res://systems/run/audio_route.gd")
 const DAMAGE_NUMBER_SCENE := preload("res://effects/damage_number.tscn")
 const RUN_PICKUP_SCRIPT := preload("res://systems/pickups/run_pickup.gd")
 const WORLD_HEALTH_BAR_SCRIPT := preload("res://ui/world_health_bar.gd")
+const INVENTORY_PANEL_SCRIPT := preload("res://ui/inventory_panel.gd")
 const ENCOUNTER_SCENES := [
 	preload("res://actors/encounters/town_mob_encounter.tscn"),
 	preload("res://actors/encounters/town_mob_encounter.tscn"),
@@ -61,10 +62,15 @@ var map_runtime: Node = null
 var gate_walk_active: bool = false
 var gate_walk_target: Vector2 = Vector2.ZERO
 var gate_walk_callback: Callable = Callable()
+var door_transition_layer: CanvasLayer = null
+var door_transition_backdrop: ColorRect = null
+var inventory_panel: CanvasLayer = null
 
 func _ready() -> void:
 	reward_rng.randomize()
 	_prepare_map_runtime()
+	_build_door_transition_overlay()
+	_build_inventory_panel()
 	if get_tree() != null and not get_tree().node_added.is_connected(_on_tree_node_added):
 		get_tree().node_added.connect(_on_tree_node_added)
 	RunDirector.configure_event_count(maxi(ENCOUNTER_SCENES.size() - 1, 1))
@@ -144,9 +150,18 @@ func _walk_player_to_room_exit(callback: Callable) -> void:
 			callback.call()
 		return
 	var player_node := player_character as Node2D
-	gate_walk_target = _room_exit_target(encounter_index)
-	if player_node.global_position.distance_to(gate_walk_target) > 900.0:
-		gate_walk_target = player_node.global_position + Vector2(90.0, 0.0)
+	var exit_target := _room_exit_target(encounter_index)
+	if player_node.global_position.distance_to(exit_target) > 900.0:
+		exit_target = player_node.global_position + Vector2(90.0, 0.0)
+	_walk_player_to_target(exit_target, callback)
+
+func _walk_player_to_target(target_position: Vector2, callback: Callable) -> void:
+	if player_character == null or not is_instance_valid(player_character) or not (player_character is Node2D):
+		if callback.is_valid():
+			callback.call()
+		return
+	var player_node := player_character as Node2D
+	gate_walk_target = target_position
 	gate_walk_callback = callback
 	gate_walk_active = true
 	if player_character.has_method("clear_control_effects"):
@@ -167,6 +182,24 @@ func _prepare_map_runtime() -> void:
 	map_runtime.setup(self, spawn_marker, encounter_marker, reward_rng)
 	add_child(map_runtime)
 	map_runtime.build()
+
+func _build_door_transition_overlay() -> void:
+	door_transition_layer = CanvasLayer.new()
+	door_transition_layer.name = "DoorTransition"
+	door_transition_layer.layer = 25
+	door_transition_layer.visible = false
+	add_child(door_transition_layer)
+	door_transition_backdrop = ColorRect.new()
+	door_transition_backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
+	door_transition_backdrop.color = Color(0.01, 0.012, 0.018, 0.0)
+	door_transition_layer.add_child(door_transition_backdrop)
+
+func _build_inventory_panel() -> void:
+	inventory_panel = INVENTORY_PANEL_SCRIPT.new()
+	inventory_panel.name = "InventoryPanel"
+	add_child(inventory_panel)
+	if inventory_panel.has_method("reset_run"):
+		inventory_panel.reset_run()
 
 func _hide_legacy_arena() -> void:
 	for node_name in ["BackdropImage", "Backdrop", "CenterLane", "ThroneDais", "ThroneBanner"]:
@@ -202,6 +235,11 @@ func _room_exit_target(room_index: int) -> Vector2:
 		return map_runtime.room_exit_target(room_index)
 	return _encounter_spawn_for_room(room_index) + Vector2(260.0, 0.0)
 
+func _room_entrance_target(room_index: int) -> Vector2:
+	if map_runtime != null and map_runtime.has_method("room_entrance_target"):
+		return map_runtime.room_entrance_target(room_index)
+	return _player_spawn_for_room(room_index) - Vector2(48.0, 0.0)
+
 func _update_map_camera(force: bool = false) -> void:
 	if map_runtime == null:
 		return
@@ -225,6 +263,11 @@ func _unhandled_input(event: InputEvent) -> void:
 				get_viewport().set_input_as_handled()
 			return
 		if event.keycode == KEY_ESCAPE:
+			if inventory_panel != null and inventory_panel.visible:
+				inventory_panel.close()
+				_refresh_battle_status()
+				get_viewport().set_input_as_handled()
+				return
 			if audio_settings_panel != null and audio_settings_panel.has_method("is_open") and bool(audio_settings_panel.is_open()):
 				audio_settings_panel.hide_panel()
 				_sync_audio_hint_state()
@@ -250,6 +293,10 @@ func _unhandled_input(event: InputEvent) -> void:
 				_refresh_battle_status()
 				get_viewport().set_input_as_handled()
 				return
+		if event.keycode == KEY_B or event.keycode == KEY_TAB:
+			_toggle_inventory_panel()
+			get_viewport().set_input_as_handled()
+			return
 
 func _on_character_selected(character_id: StringName) -> void:
 	_cancel_scheduled_title_music()
@@ -265,6 +312,11 @@ func _on_character_selected(character_id: StringName) -> void:
 		_play_ui_feedback(true)
 	AccessoryManager.reset_run()
 	RunDirector.reset_run()
+	if inventory_panel != null:
+		if inventory_panel.has_method("close") and inventory_panel.visible:
+			inventory_panel.close()
+		if inventory_panel.has_method("reset_run"):
+			inventory_panel.reset_run()
 	active_encounter_prep.clear()
 	if player_character != null and is_instance_valid(player_character):
 		player_character.queue_free()
@@ -320,6 +372,12 @@ func _start_next_encounter() -> void:
 		active_encounter_prep.clear()
 		_complete_run_victory()
 		return
+	if encounter_index > 0:
+		_transition_through_room_door(encounter_index, Callable(self, "_begin_current_encounter"))
+		return
+	_begin_current_encounter()
+
+func _begin_current_encounter() -> void:
 	_activate_map_room(encounter_index)
 	_play_audio_profile_for_encounter(encounter_index)
 	current_encounter = ENCOUNTER_SCENES[encounter_index].instantiate()
@@ -333,6 +391,54 @@ func _start_next_encounter() -> void:
 		current_encounter.defeated.connect(_on_encounter_defeated)
 	_bind_encounter_actor_if_needed(current_encounter)
 	_bind_existing_encounter_actors(current_encounter)
+	_refresh_battle_status()
+
+func _transition_through_room_door(room_index: int, callback: Callable) -> void:
+	if player_character == null or not is_instance_valid(player_character) or not (player_character is Node2D):
+		if callback.is_valid():
+			callback.call()
+		return
+	if door_transition_layer == null or door_transition_backdrop == null:
+		if callback.is_valid():
+			callback.call()
+		return
+	door_transition_layer.visible = true
+	door_transition_backdrop.color = Color(0.01, 0.012, 0.018, 0.0)
+	var tween := create_tween()
+	tween.tween_property(door_transition_backdrop, "color:a", 0.86, 0.12)
+	tween.tween_callback(func() -> void:
+		if not is_instance_valid(self):
+			return
+		_activate_map_room(room_index)
+		if player_character is Node2D and is_instance_valid(player_character):
+			(player_character as Node2D).global_position = _room_entrance_target(room_index)
+		_update_map_camera(true)
+	)
+	tween.tween_property(door_transition_backdrop, "color:a", 0.0, 0.18)
+	tween.tween_callback(func() -> void:
+		if not is_instance_valid(self):
+			return
+		door_transition_layer.visible = false
+		_walk_player_to_target(_player_spawn_for_room(room_index), callback)
+	)
+
+func _toggle_inventory_panel() -> void:
+	if inventory_panel == null:
+		return
+	if player_character == null or not is_instance_valid(player_character):
+		return
+	if accessory_choice != null and accessory_choice.visible:
+		return
+	if run_event_panel != null and run_event_panel.visible:
+		return
+	if pause_menu != null and pause_menu.has_method("is_open") and bool(pause_menu.is_open()):
+		return
+	if audio_settings_panel != null and audio_settings_panel.has_method("is_open") and bool(audio_settings_panel.is_open()):
+		return
+	if settings_panel != null and settings_panel.visible:
+		return
+	if inventory_panel.has_method("toggle"):
+		inventory_panel.toggle(player_character)
 	_refresh_battle_status()
 
 func _on_encounter_defeated() -> void:
@@ -446,7 +552,10 @@ func _on_accessory_choice_made(_accessory_id: String, kept_current: bool) -> voi
 		RunEffects.refresh_persistent_modifiers(player_character)
 	if Sfx != null:
 		_play_ui_feedback(true)
-	var accessory_name := String(AccessoryManager.get_equipped_accessory().get("name", _ui_text("No Accessory", "无饰品", "無飾品")))
+	var equipped_accessory := AccessoryManager.get_equipped_accessory()
+	if inventory_panel != null and inventory_panel.has_method("record_relic_equipped"):
+		inventory_panel.record_relic_equipped(equipped_accessory)
+	var accessory_name := String(equipped_accessory.get("name", _ui_text("No Accessory", "无饰品", "無飾品")))
 	_refresh_battle_status(
 		_ui_text("Relic Kept", "保留饰品", "保留飾品") if kept_current else _ui_text("Relic Equipped", "装备饰品", "裝備飾品"),
 		accessory_name,
@@ -691,22 +800,22 @@ func _health_bar_options(actor: Node) -> Dictionary:
 	var max_hp_value := _actor_max_hp(actor)
 	var boss := script_path.contains("actors/bosses/")
 	var elite := boss or (_has_property(actor, "elite") and bool(actor.get("elite")))
-	var bar_width := 58.0
-	var y_offset := -48.0
+	var bar_width := 66.0
+	var y_offset := -50.0
 	if elite:
-		bar_width = 78.0
-		y_offset = -58.0
+		bar_width = 86.0
+		y_offset = -60.0
 	if boss:
-		bar_width = 108.0 if max_hp_value < 5000.0 else 124.0
+		bar_width = 116.0 if max_hp_value < 5000.0 else 132.0
 		y_offset = -76.0
 	return {
-		"always_visible": elite or boss,
+		"always_visible": true,
 		"elite": elite,
 		"boss": boss,
 		"bar_width": bar_width,
 		"y_offset": y_offset,
-		"hp_height": 9.0 if boss else (8.0 if elite else 7.0),
-		"defense_height": 4.0 if boss else 3.0
+		"hp_height": 9.0 if boss else (8.0 if elite else 8.0),
+		"defense_height": 4.0 if boss else 4.0
 	}
 
 func _on_encounter_actor_defeated(actor: Node) -> void:
@@ -824,6 +933,8 @@ func _spawn_reward_pickups(world_position: Vector2, drops: Array) -> void:
 func _on_run_pickup_collected(kind: String, amount: float, world_position: Vector2) -> void:
 	if player_character == null or not is_instance_valid(player_character):
 		return
+	if inventory_panel != null and inventory_panel.has_method("record_pickup"):
+		inventory_panel.record_pickup(kind, amount)
 	match kind:
 		"gold":
 			var gold_amount := int(round(amount))
@@ -1176,6 +1287,12 @@ func _relic_status_text() -> String:
 
 func _event_status_hint(kind: String) -> String:
 	match kind:
+		"services":
+			return _ui_text(
+				"This crossroads appears once after the town stretch. Church stabilizes, armory sharpens the build, and shop spends gold for a stronger route.",
+				"这个岔路只会在城镇段后出现一次。教堂偏恢复，军需库偏长期强化，商店则把金币换成更锋利的路线。",
+				"這個岔路只會在城鎮段後出現一次。教堂偏恢復，軍需庫偏長期強化，商店則把金幣換成更鋒利的路線。"
+			)
 		"shop":
 			return _ui_text("Spend gold only where it sharpens the next boss check or patches a real weakness.", "只在能改善下一场 Boss 检定，或能补真实短板的地方花金币。", "只在能改善下一場 Boss 檢定，或能補真實短板的地方花金幣。")
 		"bounty":

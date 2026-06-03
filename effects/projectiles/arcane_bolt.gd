@@ -14,6 +14,7 @@ var source: Node = null
 var attack_name: StringName = &"attack"
 var expired: bool = false
 var pulse_time: float = 0.0
+var trail_timer: float = 0.0
 
 func _ready() -> void:
 	add_to_group("arcane_bolt_test")
@@ -26,6 +27,7 @@ func setup(owner_actor: Node, travel_direction: Vector2, hit_damage: float, hit_
 	damage = hit_damage
 	crit_rate = hit_crit_rate
 	attack_name = attack_label
+	bolt.polygon = _pixel_bolt_polygon()
 	rotation = direction.angle()
 	var timer := get_tree().create_timer(lifetime)
 	timer.timeout.connect(queue_free)
@@ -33,7 +35,11 @@ func setup(owner_actor: Node, travel_direction: Vector2, hit_damage: float, hit_
 func _physics_process(delta: float) -> void:
 	global_position += direction * speed * delta
 	pulse_time += delta
-	bolt.scale = Vector2.ONE * (1.0 + sin(pulse_time * 18.0) * 0.05)
+	bolt.scale = Vector2.ONE * (1.06 if int(pulse_time * 16.0) % 2 == 0 else 0.94)
+	trail_timer -= delta
+	if trail_timer <= 0.0:
+		trail_timer = 0.045
+		_spawn_pixel_trail()
 	_try_hit_overlapping_targets()
 
 func _on_body_entered(body: Node) -> void:
@@ -106,14 +112,14 @@ func _consume_bolt() -> void:
 func _spawn_hit_flash() -> void:
 	var flash := Polygon2D.new()
 	flash.polygon = PackedVector2Array([
-		Vector2(-8, -4),
-		Vector2(0, -14),
-		Vector2(8, -4),
-		Vector2(16, 0),
-		Vector2(8, 4),
-		Vector2(0, 14),
-		Vector2(-8, 4),
-		Vector2(-16, 0)
+		Vector2(-14.0, -4.0),
+		Vector2(-4.0, -14.0),
+		Vector2(4.0, -14.0),
+		Vector2(14.0, -4.0),
+		Vector2(14.0, 4.0),
+		Vector2(4.0, 14.0),
+		Vector2(-4.0, 14.0),
+		Vector2(-14.0, 4.0)
 	])
 	flash.color = Color(0.82, 0.92, 1.0, 0.92)
 	flash.global_position = global_position
@@ -123,3 +129,38 @@ func _spawn_hit_flash() -> void:
 	tween.tween_property(flash, "scale", Vector2.ONE * 1.8, 0.1)
 	tween.parallel().tween_property(flash, "modulate:a", 0.0, 0.1)
 	tween.finished.connect(flash.queue_free)
+
+func _pixel_bolt_polygon() -> PackedVector2Array:
+	return PackedVector2Array([
+		Vector2(-16.0, -4.0),
+		Vector2(-6.0, -10.0),
+		Vector2(4.0, -10.0),
+		Vector2(12.0, -4.0),
+		Vector2(18.0, 0.0),
+		Vector2(12.0, 4.0),
+		Vector2(4.0, 10.0),
+		Vector2(-6.0, 10.0),
+		Vector2(-16.0, 4.0),
+		Vector2(-10.0, 0.0)
+	])
+
+func _spawn_pixel_trail() -> void:
+	var scene_root := get_tree().current_scene
+	if scene_root == null:
+		return
+	var rune := Polygon2D.new()
+	rune.color = Color(0.72, 0.88, 1.0, 0.34)
+	rune.polygon = PackedVector2Array([
+		Vector2(-3.0, -5.0),
+		Vector2(3.0, -5.0),
+		Vector2(5.0, 0.0),
+		Vector2(3.0, 5.0),
+		Vector2(-3.0, 5.0),
+		Vector2(-5.0, 0.0)
+	])
+	rune.global_position = global_position - direction * 10.0
+	scene_root.add_child(rune)
+	var tween := rune.create_tween()
+	tween.tween_property(rune, "scale", Vector2.ONE * 0.7, 0.12)
+	tween.parallel().tween_property(rune, "modulate:a", 0.0, 0.12)
+	tween.finished.connect(rune.queue_free)

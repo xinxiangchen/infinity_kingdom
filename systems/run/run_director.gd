@@ -4,19 +4,20 @@ signal state_changed(state: Dictionary)
 
 const EVENT_POOL := [
 	"bounty",
-	"rest",
-	"training",
-	"forge",
 	"pact",
 	"attunement",
 	"scout"
 ]
 
 const DEFAULT_EVENTS_PER_RUN := 3
+const SERVICES_TRIGGER_THRESHOLD := 5
 
 const EVENT_KIND_LABELS := {
 	"en": {
 		"shop": "Black Market",
+		"services": "Town Crossroads",
+		"church": "Church Refuge",
+		"armory": "Royal Armory",
 		"bounty": "Bounty Board",
 		"rest": "Church Refuge",
 		"training": "Training Drill",
@@ -31,14 +32,17 @@ const EVENT_KIND_LABELS := {
 		"history_empty": "No event choices yet."
 	},
 	"zh_Hans": {
-		"shop": "黑市",
-		"bounty": "悬赏榜",
-		"rest": "教堂避难所",
-		"training": "训练项目",
-		"forge": "余烬熔炉",
+		"shop": "商店",
+		"services": "城镇岔路",
+		"church": "教堂",
+		"armory": "军需库",
+		"bounty": "悬赏栏",
+		"rest": "教堂休整",
+		"training": "训练场",
+		"forge": "锻造台",
 		"pact": "禁忌契约",
 		"attunement": "饰品共鸣",
-		"scout": "侦查报告",
+		"scout": "侦查情报",
 		"victory": "胜利",
 		"unknown": "未知",
 		"event": "事件",
@@ -46,14 +50,17 @@ const EVENT_KIND_LABELS := {
 		"history_empty": "暂时还没有事件选择记录。"
 	},
 	"zh_Hant": {
-		"shop": "黑市",
-		"bounty": "懸賞榜",
-		"rest": "教堂避難所",
-		"training": "訓練項目",
-		"forge": "餘燼熔爐",
+		"shop": "商店",
+		"services": "城鎮岔路",
+		"church": "教堂",
+		"armory": "軍需庫",
+		"bounty": "懸賞欄",
+		"rest": "教堂休整",
+		"training": "訓練場",
+		"forge": "鍛造台",
 		"pact": "禁忌契約",
 		"attunement": "飾品共鳴",
-		"scout": "偵查報告",
+		"scout": "偵查情報",
 		"victory": "勝利",
 		"unknown": "未知",
 		"event": "事件",
@@ -78,6 +85,7 @@ var hero_level: int = 1
 var hero_xp: int = 0
 var hero_xp_to_next: int = 45
 var total_kills: int = 0
+var town_service_consumed: bool = false
 var rng := RandomNumberGenerator.new()
 
 func _ready() -> void:
@@ -99,6 +107,7 @@ func reset_run() -> void:
 	hero_xp = 0
 	hero_xp_to_next = _xp_needed_for_level(hero_level)
 	total_kills = 0
+	town_service_consumed = false
 	_emit_state()
 
 func reward_encounter(encounter_index: int, actor: Node = null) -> int:
@@ -163,6 +172,11 @@ func record_kill(amount: int = 1) -> void:
 	_emit_state()
 
 func next_event_kind() -> String:
+	if not town_service_consumed and cleared_encounters >= SERVICES_TRIGGER_THRESHOLD:
+		town_service_consumed = true
+		event_cursor += 1
+		_emit_state()
+		return "services"
 	if event_deck.is_empty():
 		event_deck = _build_event_deck()
 	var kind := str(event_deck.pop_front())
@@ -171,6 +185,8 @@ func next_event_kind() -> String:
 	return kind
 
 func peek_next_event_kind() -> String:
+	if not town_service_consumed and cleared_encounters >= SERVICES_TRIGGER_THRESHOLD:
+		return "services"
 	if event_deck.is_empty():
 		return ""
 	return str(event_deck[0])
@@ -185,7 +201,12 @@ func get_upcoming_events(limit: int = -1) -> Array[String]:
 
 func describe_event_route(limit: int = 4, include_victory: bool = true) -> String:
 	var parts: Array[String] = []
-	for event_kind in get_upcoming_events(limit):
+	var remaining_limit := limit
+	if not town_service_consumed and cleared_encounters >= SERVICES_TRIGGER_THRESHOLD and remaining_limit != 0:
+		parts.append(describe_event_kind("services"))
+		if remaining_limit > 0:
+			remaining_limit -= 1
+	for event_kind in get_upcoming_events(remaining_limit):
 		parts.append(describe_event_kind(event_kind))
 	if include_victory:
 		parts.append(_locale_text("victory"))
@@ -304,7 +325,8 @@ func get_state() -> Dictionary:
 		"hero_level": hero_level,
 		"hero_xp": hero_xp,
 		"hero_xp_to_next": hero_xp_to_next,
-		"total_kills": total_kills
+		"total_kills": total_kills,
+		"town_service_consumed": town_service_consumed
 	}
 
 func _emit_state() -> void:
@@ -346,7 +368,7 @@ func _performance_bonus(actor: Node) -> int:
 func _build_event_deck() -> Array[String]:
 	var pool: Array[String] = []
 	pool.append_array(EVENT_POOL)
-	var deck: Array[String] = ["shop"]
+	var deck: Array[String] = []
 	while deck.size() < events_per_run and not pool.is_empty():
 		var next_index := rng.randi_range(0, pool.size() - 1)
 		deck.append(pool[next_index])

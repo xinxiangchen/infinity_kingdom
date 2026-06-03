@@ -57,12 +57,13 @@ func _draw() -> void:
 	var hp_ratio := _ratio(_current_hp(), _max_hp())
 	var defense_ratio := _ratio(_current_defense(), _max_defense())
 	var shield_ratio := clampf(_current_shield() / maxf(_max_hp(), 1.0), 0.0, 0.45)
-	var alpha := 0.98 if (always_visible or hp_ratio < 0.995) else 0.74
+	var alpha := 0.98 if (hp_ratio < 0.995 or visibility_timer > 0.0) else (0.92 if (elite or boss) else 0.72)
 	var origin := Vector2(-bar_width * 0.5, 0.0)
 	var hp_rect := Rect2(origin, Vector2(bar_width, hp_height))
 	var defense_rect := Rect2(origin + Vector2(0.0, hp_height + 2.0), Vector2(bar_width, defense_height))
 	var border_color := Color(1.0, 0.86, 0.52, alpha) if (elite or boss) else Color(0.72, 0.82, 0.96, alpha)
 	var background_color := Color(0.04, 0.05, 0.07, 0.88 * alpha)
+	draw_rect(hp_rect.grow(3.0), Color(0.0, 0.0, 0.0, 0.22 * alpha), true)
 	draw_rect(hp_rect.grow(1.5), background_color, true)
 	draw_rect(defense_rect.grow(1.0), background_color, true)
 	draw_rect(hp_rect, Color(0.20, 0.08, 0.08, 0.88 * alpha), true)
@@ -77,8 +78,8 @@ func _draw() -> void:
 		draw_rect(Rect2(defense_rect.position, Vector2(bar_width * defense_ratio, defense_height)), Color(0.36, 0.76, 0.98, alpha), true)
 	if shield_ratio > 0.0:
 		draw_rect(Rect2(hp_rect.position + Vector2(0.0, -2.0), Vector2(bar_width * shield_ratio, 1.5)), Color(1.0, 0.88, 0.44, alpha), true)
-	draw_rect(hp_rect.grow(1.0), border_color, false, 1.2)
-	draw_rect(defense_rect.grow(1.0), Color(0.48, 0.66, 0.86, alpha), false, 1.0)
+	draw_rect(hp_rect.grow(1.2), border_color, false, 1.6)
+	draw_rect(defense_rect.grow(1.0), Color(0.48, 0.66, 0.86, alpha), false, 1.2)
 	if impact_timer > 0.0:
 		draw_rect(hp_rect.grow(3.0), Color(1.0, 1.0, 1.0, 0.18 + impact_timer * 1.8), false, 1.8)
 

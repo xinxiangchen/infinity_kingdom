@@ -3,6 +3,7 @@ extends Node2D
 signal defeated
 
 const DAMAGE_NUMBER_SCENE := preload("res://effects/damage_number.tscn")
+const ENEMY_BOLT_SCENE := preload("res://effects/projectiles/enemy_bolt.tscn")
 
 @export var max_hp: float = 1500.0
 @export var defense_value: float = 180.0
@@ -22,6 +23,12 @@ const DAMAGE_NUMBER_SCENE := preload("res://effects/damage_number.tscn")
 @export var skill2_recover_duration: float = 2.0
 @export var skill2_length: float = 310.0
 @export var skill2_width: float = 34.0
+@export var skill3_damage: float = 18.0
+@export var skill3_cooldown: float = 7.5
+@export var skill3_telegraph_duration: float = 0.74
+@export var skill3_wave_interval: float = 0.20
+@export var skill3_wave_count: int = 5
+@export var skill3_projectile_speed: float = 390.0
 @export_range(0.1, 0.9, 0.05) var enrage_threshold_ratio: float = 0.45
 @export var enrage_damage_multiplier: float = 1.12
 @export var enrage_speed_multiplier: float = 1.15
@@ -44,6 +51,7 @@ var state_time: float = 0.0
 var attack_cooldown: float = 0.0
 var skill1_cooldown_remaining: float = 0.0
 var skill2_cooldown_remaining: float = 0.0
+var skill3_cooldown_remaining: float = 0.0
 var recover_duration: float = 0.0
 var leap_start_position: Vector2 = Vector2.ZERO
 var leap_target_position: Vector2 = Vector2.ZERO
@@ -55,6 +63,8 @@ var slow_time_remaining: float = 0.0
 var slow_factor: float = 1.0
 var enraged: bool = false
 var slam_aftershock_committed: bool = false
+var barrage_wave_index: int = 0
+var barrage_next_wave_time: float = 0.0
 
 func _ready() -> void:
 	add_to_group("damageable")
@@ -122,6 +132,7 @@ func _physics_process(delta: float) -> void:
 	attack_cooldown = maxf(attack_cooldown - delta, 0.0)
 	skill1_cooldown_remaining = maxf(skill1_cooldown_remaining - delta, 0.0)
 	skill2_cooldown_remaining = maxf(skill2_cooldown_remaining - delta, 0.0)
+	skill3_cooldown_remaining = maxf(skill3_cooldown_remaining - delta, 0.0)
 	state_time += delta
 	if target == null or not is_instance_valid(target):
 		_find_target()
@@ -171,6 +182,10 @@ func _update_state(delta: float) -> void:
 			_process_skill1_slam()
 		&"skill_2_charge":
 			_process_skill2_charge()
+		&"skill_3_barrage_mark":
+			_process_skill3_barrage_mark()
+		&"skill_3_barrage":
+			_process_skill3_barrage()
 		&"recover":
 			_process_recover()
 		&"dead":
@@ -183,6 +198,9 @@ func _process_idle(delta: float) -> void:
 	if to_target != Vector2.ZERO:
 		line_direction = to_target.normalized()
 	var distance := to_target.length()
+	if _can_use_skills() and skill3_cooldown_remaining <= 0.0 and distance >= 130.0 and distance <= 430.0:
+		_start_skill3()
+		return
 	if _can_use_skills() and skill2_cooldown_remaining <= 0.0 and distance >= 120.0 and distance <= skill2_length:
 		_start_skill2()
 		return
@@ -218,6 +236,7 @@ func _start_skill1() -> void:
 	leap_start_position = global_position
 	leap_target_position = target.global_position if target != null else global_position
 	landing_ring.visible = true
+	landing_ring.points = _build_ring_points(skill1_radius, 16)
 	landing_ring.global_position = leap_target_position
 	_show_intent_text("Leap Slam", Color(1.0, 0.84, 0.62, 1.0), leap_target_position, 0.88)
 	Sfx.play_event(&"boss_judicator_skill1", global_position)
@@ -267,6 +286,45 @@ func _process_skill2_charge() -> void:
 		slash_line.visible = false
 		slash_line.default_color = Color(1.0, 0.52, 0.4, 0.8)
 		_enter_recover(skill2_recover_duration)
+
+func _start_skill3() -> void:
+	state = &"skill_3_barrage_mark"
+	state_time = 0.0
+	action_committed = false
+	barrage_wave_index = 0
+	barrage_next_wave_time = 0.0
+	skill3_cooldown_remaining = skill3_cooldown
+	if target != null and is_instance_valid(target):
+		var to_target := target.global_position - global_position
+		if to_target.length_squared() > 0.0001:
+			line_direction = to_target.normalized()
+	landing_ring.visible = true
+	landing_ring.global_position = global_position
+	landing_ring.points = _build_ring_points(126.0 if not enraged else 154.0, 16)
+	_show_intent_text("Bullet Edict", Color(1.0, 0.78, 0.48, 1.0), global_position, 0.88)
+	Sfx.play_event(&"boss_judicator_skill2", global_position, -2.0, 1.08)
+
+func _process_skill3_barrage_mark() -> void:
+	landing_ring.global_position = global_position
+	if target != null and is_instance_valid(target):
+		var to_target := target.global_position - global_position
+		if to_target.length_squared() > 0.0001:
+			line_direction = to_target.normalized()
+	if state_time >= skill3_telegraph_duration:
+		state = &"skill_3_barrage"
+		state_time = 0.0
+		barrage_wave_index = 0
+		barrage_next_wave_time = 0.0
+
+func _process_skill3_barrage() -> void:
+	landing_ring.global_position = global_position
+	if barrage_wave_index < skill3_wave_count and state_time >= barrage_next_wave_time:
+		_fire_barrage_wave(barrage_wave_index)
+		barrage_wave_index += 1
+		barrage_next_wave_time += skill3_wave_interval
+	if barrage_wave_index >= skill3_wave_count and state_time >= barrage_next_wave_time + 0.22:
+		landing_ring.visible = false
+		_enter_recover(1.05 if enraged else 1.25)
 
 func _enter_recover(duration: float) -> void:
 	state = &"recover"
@@ -336,6 +394,7 @@ func _update_enrage_state() -> void:
 	attack_interval *= enrage_cooldown_multiplier
 	skill1_cooldown *= enrage_cooldown_multiplier
 	skill2_cooldown *= enrage_cooldown_multiplier
+	skill3_cooldown *= enrage_cooldown_multiplier
 	landing_ring.default_color = Color(1.0, 0.74, 0.38, 0.9)
 	slash_line.default_color = Color(1.0, 0.62, 0.4, 0.85)
 	_show_intent_text("Enraged", Color(1.0, 0.70, 0.48, 1.0), global_position, 0.94)
@@ -343,8 +402,10 @@ func _update_enrage_state() -> void:
 
 func _update_visuals() -> void:
 	var body_color := Color(0.68, 0.7, 0.78, 1.0)
-	if state == &"skill_1_jump_start" or state == &"skill_2_charge":
+	if state == &"skill_1_jump_start" or state == &"skill_2_charge" or state == &"skill_3_barrage_mark":
 		body_color = Color(0.9, 0.74, 0.52, 1.0)
+	elif state == &"skill_3_barrage":
+		body_color = Color(0.98, 0.72, 0.42, 1.0)
 	elif silenced_time_remaining > 0.0:
 		body_color = Color(0.72, 0.64, 0.92, 1.0)
 	elif enraged:
@@ -374,6 +435,40 @@ func _spawn_aftershock() -> void:
 	tween.tween_property(ring, "scale", Vector2.ONE * 1.12, 0.14)
 	tween.parallel().tween_property(ring, "modulate:a", 0.0, 0.14)
 	tween.finished.connect(ring.queue_free)
+
+func _fire_barrage_wave(wave_index: int) -> void:
+	var scene_root := get_tree().current_scene
+	if scene_root == null:
+		return
+	var radial_count := 8 + (2 if enraged else 0)
+	var offset := float(wave_index) * (TAU / float(radial_count) * 0.5)
+	for index in range(radial_count):
+		var direction := Vector2.RIGHT.rotated(offset + TAU * float(index) / float(radial_count))
+		_spawn_barrage_bolt(direction, skill3_damage * (1.12 if enraged else 1.0), Color(1.0, 0.74, 0.45, 1.0))
+	if target != null and is_instance_valid(target):
+		var aim_direction := (target.global_position - global_position).normalized()
+		if aim_direction == Vector2.ZERO:
+			aim_direction = line_direction
+		for spread in [-10.0, 0.0, 10.0]:
+			_spawn_barrage_bolt(
+				aim_direction.rotated(deg_to_rad(spread + float(wave_index % 2) * 6.0)),
+				skill3_damage * 0.82,
+				Color(1.0, 0.88, 0.58, 1.0),
+				0.92
+			)
+
+func _spawn_barrage_bolt(direction: Vector2, damage: float, color_value: Color, speed_multiplier: float = 1.0) -> void:
+	var scene_root := get_tree().current_scene
+	if scene_root == null:
+		return
+	var bolt := ENEMY_BOLT_SCENE.instantiate()
+	bolt.global_position = global_position + direction.normalized() * 28.0
+	scene_root.add_child(bolt)
+	var payload := {
+		"slow_duration": 0.55 if not enraged else 0.8,
+		"slow_multiplier": 0.86 if not enraged else 0.80
+	}
+	bolt.setup(self, direction, damage, color_value, skill3_projectile_speed * speed_multiplier, payload)
 
 func _spawn_damage_number(amount: float, is_critical: bool) -> void:
 	var damage_number := DAMAGE_NUMBER_SCENE.instantiate()

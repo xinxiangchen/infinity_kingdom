@@ -88,6 +88,22 @@ func _run() -> void:
 	await process_frame
 	await _capture_world(world, Vector2i(1280, 720), "forge_event_zh_hans_1280x720.png")
 	await _capture_world(world, Vector2i(720, 540), "forge_event_zh_hans_720x540.png")
+	if world.run_event_panel != null and world.run_event_panel.has_method("close"):
+		world.run_event_panel.close()
+	if world.run_event_panel != null and world.run_event_panel.has_method("open"):
+		world.run_event_panel.open("services", 100)
+	await process_frame
+	await process_frame
+	await _capture_world(world, Vector2i(1280, 720), "services_event_zh_hans_1280x720.png")
+	await _capture_world(world, Vector2i(720, 540), "services_event_zh_hans_720x540.png")
+	if world.run_event_panel != null and world.run_event_panel.has_method("close"):
+		world.run_event_panel.close()
+	if world.inventory_panel != null and world.inventory_panel.has_method("open"):
+		world.inventory_panel.open(world.player_character)
+	await process_frame
+	await process_frame
+	await _capture_world(world, Vector2i(1280, 720), "inventory_panel_zh_hans_1280x720.png")
+	await _capture_world(world, Vector2i(720, 540), "inventory_panel_zh_hans_720x540.png")
 
 	world.queue_free()
 	await process_frame
@@ -108,6 +124,7 @@ func _capture_world(world: Node, viewport_size: Vector2i, filename: String) -> v
 	_set_layout_override(world.result_screen, viewport_size)
 	_set_layout_override(world.battle_status, viewport_size)
 	_set_layout_override(world.character_hud, viewport_size)
+	_set_layout_override(world.inventory_panel, viewport_size)
 	await process_frame
 	await process_frame
 	var image := root.get_texture().get_image()

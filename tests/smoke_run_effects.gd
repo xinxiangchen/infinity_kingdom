@@ -63,8 +63,9 @@ func _run() -> void:
 		return
 	accessory_manager.reset_run()
 	run_director.reset_run()
-	if run_director.peek_next_event_kind() != "shop":
-		push_error("Run event deck did not start with shop")
+	var first_event: String = String(run_director.peek_next_event_kind())
+	if not ["bounty", "pact", "attunement", "scout"].has(first_event):
+		push_error("Run event deck did not start with a regular route event")
 		quit(1)
 		return
 	var actor := TestActor.new()

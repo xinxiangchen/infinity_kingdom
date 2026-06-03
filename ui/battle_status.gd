@@ -14,6 +14,10 @@ var objective_value_label: Label
 var threat_value_label: Label
 var hero_value_label: Label
 var relic_value_label: Label
+var objective_panel_root: PanelContainer
+var threat_panel_root: PanelContainer
+var hero_panel_root: PanelContainer
+var relic_panel_root: PanelContainer
 var context_panel_map: Dictionary = {}
 var context_value_map: Dictionary = {}
 var context_accent_map: Dictionary = {}
@@ -119,20 +123,24 @@ func _build_ui() -> void:
 	content.add_child(info_grid)
 
 	var objective_card := _context_card(_locale_text("Objective", "目标", "目標"), Color(0.98, 0.90, 0.66))
+	objective_panel_root = objective_card["panel"] as PanelContainer
 	objective_value_label = objective_card["value"] as Label
-	info_grid.add_child(objective_card["panel"])
+	info_grid.add_child(objective_panel_root)
 
 	var threat_card := _context_card(_locale_text("Threat", "威胁", "威脅"), Color(1.0, 0.78, 0.66))
+	threat_panel_root = threat_card["panel"] as PanelContainer
 	threat_value_label = threat_card["value"] as Label
-	info_grid.add_child(threat_card["panel"])
+	info_grid.add_child(threat_panel_root)
 
 	var hero_card := _context_card(_locale_text("Hero", "角色", "角色"), Color(0.78, 0.88, 1.0))
+	hero_panel_root = hero_card["panel"] as PanelContainer
 	hero_value_label = hero_card["value"] as Label
-	info_grid.add_child(hero_card["panel"])
+	info_grid.add_child(hero_panel_root)
 
 	var relic_card := _context_card(_locale_text("Relic", "饰品", "飾品"), Color(0.82, 0.92, 0.76))
+	relic_panel_root = relic_card["panel"] as PanelContainer
 	relic_value_label = relic_card["value"] as Label
-	info_grid.add_child(relic_card["panel"])
+	info_grid.add_child(relic_panel_root)
 
 	var run_panel := PanelContainer.new()
 	run_panel.add_theme_stylebox_override("panel", UISkin.content_panel_style())
@@ -423,8 +431,8 @@ func _has_selected_hero() -> bool:
 		return false
 	return hero_text != _locale_text(
 		"No champion selected.",
-		"褰撳墠杩樻病鏈夐攣瀹氳鑹层€?",
-		"鐣跺墠閭勬矑鏈夐帠瀹氳鑹层€?"
+		"当前还没有锁定角色。",
+		"當前還沒有鎖定角色。"
 	)
 
 func _refresh_layout() -> void:
@@ -439,22 +447,31 @@ func _refresh_layout() -> void:
 	var very_compact: bool = viewport_size.x < 760.0 or viewport_size.y < 560.0
 	var hero_selected := _has_selected_hero()
 	var show_run_panel := not hero_selected and not very_compact
+	var show_secondary_context := not hero_selected
 	root_margin.offset_right = clampf(
-		viewport_size.x * (0.34 if hero_selected else (0.42 if very_compact else (0.35 if compact else 0.38))),
-		280.0 if hero_selected else (320.0 if very_compact else 360.0),
-		540.0 if hero_selected else 620.0
+		viewport_size.x * ((0.31 if compact else 0.27) if hero_selected else (0.42 if very_compact else (0.35 if compact else 0.38))),
+		244.0 if hero_selected else (320.0 if very_compact else 360.0),
+		420.0 if hero_selected else 620.0
 	)
 	root_margin.offset_bottom = clampf(
-		viewport_size.y * (0.28 if hero_selected else (0.46 if very_compact else (0.41 if compact else 0.44))),
-		188.0 if hero_selected else 256.0,
-		286.0 if hero_selected else 420.0
+		viewport_size.y * ((0.25 if very_compact else (0.22 if compact else 0.20)) if hero_selected else (0.46 if very_compact else (0.41 if compact else 0.44))),
+		140.0 if hero_selected else 256.0,
+		216.0 if hero_selected else 420.0
 	)
 	panel_margin.add_theme_constant_override("margin_left", 10 if very_compact else (12 if compact else 14))
 	panel_margin.add_theme_constant_override("margin_top", 10 if very_compact else (12 if compact else 14))
 	panel_margin.add_theme_constant_override("margin_right", 10 if very_compact else (12 if compact else 14))
 	panel_margin.add_theme_constant_override("margin_bottom", 10 if very_compact else (12 if compact else 14))
-	info_grid.columns = 1 if very_compact else 2
+	info_grid.columns = 1 if (very_compact or hero_selected) else 2
 	metric_grid.columns = 1 if very_compact else 2
+	if objective_panel_root != null:
+		objective_panel_root.visible = true
+	if threat_panel_root != null:
+		threat_panel_root.visible = true
+	if hero_panel_root != null:
+		hero_panel_root.visible = show_secondary_context
+	if relic_panel_root != null:
+		relic_panel_root.visible = show_secondary_context
 	if run_panel_root != null:
 		run_panel_root.visible = show_run_panel
 	UISkin.label(title_label, 18 if very_compact else (21 if compact else 24), Color(0.98, 0.90, 0.66))

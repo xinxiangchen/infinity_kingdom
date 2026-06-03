@@ -342,6 +342,23 @@ func _run() -> void:
 		quit(1)
 		return
 	world.run_event_panel.close()
+	world.run_event_panel.open("services", 100)
+	await process_frame
+	if not world.run_event_panel.visible:
+		push_error("Services panel did not open")
+		quit(1)
+		return
+	var services_choice_row := world.run_event_panel.get_node("Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/ChoiceScroll/ChoiceRow") as GridContainer
+	if services_choice_row == null or services_choice_row.get_child_count() != 3:
+		push_error("Services panel did not build exactly three location choices")
+		quit(1)
+		return
+	for child in services_choice_row.get_children():
+		if child is Button and String((child as Button).get_meta("choice_id", "")) == "skip":
+			push_error("Services panel incorrectly included a skip choice")
+			quit(1)
+			return
+	world.run_event_panel.close()
 
 	if world.accessory_choice == null or not world.accessory_choice.has_signal("reroll_requested"):
 		push_error("Accessory choice is missing reroll signal")
@@ -366,6 +383,7 @@ func _run() -> void:
 		_set_layout_override(world.result_screen, test_size)
 		_set_layout_override(world.battle_status, test_size)
 		_set_layout_override(world.character_hud, test_size)
+		_set_layout_override(world.inventory_panel, test_size)
 		await process_frame
 		await process_frame
 		var character_panel := world.character_select.get("panel") as PanelContainer
@@ -485,6 +503,32 @@ func _run() -> void:
 			quit(1)
 			return
 		world.run_event_panel.close()
+		world.run_event_panel.open("services", 100)
+		await process_frame
+		event_panel = world.run_event_panel.get_node("Backdrop/CenterContainer/PanelContainer") as PanelContainer
+		if not _assert_control_fits(event_panel, test_size, "Services event panel"):
+			quit(1)
+			return
+		world.run_event_panel.close()
+		if world.inventory_panel == null or not world.inventory_panel.has_method("open"):
+			push_error("Inventory panel missing")
+			quit(1)
+			return
+		var inventory_scene := load("res://characters/knight/knight.tscn") as PackedScene
+		var inventory_actor: Node = inventory_scene.instantiate()
+		world.inventory_panel.open(inventory_actor)
+		await process_frame
+		var inventory_panel := world.inventory_panel.get("panel") as PanelContainer
+		if not _assert_control_fits(inventory_panel, test_size, "Inventory panel"):
+			quit(1)
+			return
+		var inventory_grid := world.inventory_panel.get("catalog_grid") as GridContainer
+		if inventory_grid == null or inventory_grid.get_child_count() <= 0:
+			push_error("Inventory codex did not populate")
+			quit(1)
+			return
+		world.inventory_panel.close()
+		inventory_actor.queue_free()
 
 		var status_margin := world.battle_status.get("root_margin") as MarginContainer
 		if not _assert_virtual_rect_fits(status_margin, test_size, "Battle status panel"):
