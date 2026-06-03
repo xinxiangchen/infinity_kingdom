@@ -12,7 +12,7 @@
 2. 用 `godot-cpp` 方式绑定方法
 3. 在 `src/register_types.cpp` 里注册类
 4. 编译成动态库
-5. 由 Godot 通过 `demo/coursework_extension.gdextension` 加载
+5. 编译后把 `demo/coursework_extension.gdextension.example` 复制成 `demo/coursework_extension.gdextension`，再由 Godot 加载
 
 完成后，这些类就能在 Godot 编辑器和运行时中被使用。
 
@@ -77,6 +77,12 @@ GDREGISTER_CLASS(EnemyAI);
 如果不注册，Godot 就看不到这个类。
 
 ## 5. 每次改完都要重新编译
+
+第一次启用扩展前，先准备 Godot 的扩展清单：
+
+```powershell
+Copy-Item demo\coursework_extension.gdextension.example demo\coursework_extension.gdextension
+```
 
 修改 C++ 后，执行：
 

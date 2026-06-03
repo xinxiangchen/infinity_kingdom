@@ -18,11 +18,11 @@ Godot 4 action prototype with three playable families, a town boss rush, custom 
 ## Run
 
 1. Open `project.godot` with Godot 4.6 or newer.
-2. Run `world.tscn`.
+2. Launch the project and enter through the title menu in `app_entry.tscn`.
 3. Pick Knight, Ranger, or Mage.
 4. Choose an accessory at the start and after each cleared encounter.
 
-On Windows, double-click `start_game.bat` to launch the game with the bundled local Godot copy if present.
+On Windows, double-click `start_game.bat` to launch the game with the bundled local Godot copy if present. The script refreshes Godot imports first, so a freshly synced archive can start without opening the editor once by hand.
 
 Useful script options:
 
@@ -45,15 +45,23 @@ Useful script options:
 ## Test
 
 ```powershell
-godot --headless --path . --quit --verbose
-godot --headless --path . --script res://tests/smoke_accessory_flow.gd
-godot --headless --path . --script res://tests/smoke_accessory_catalog.gd
-godot --headless --path . --script res://tests/smoke_run_effects.gd
-godot --headless --path . --script res://tests/smoke_run_flow.gd
-godot --headless --path . --script res://tests/smoke_ui_screens.gd
+.\start_game.bat -Test
 ```
 
 GitHub Actions runs the same smoke checks on every push and pull request.
+
+## Optional C++ Extension Scaffold
+
+The `src/`, `SConstruct`, and `demo/coursework_extension.gdextension.example` files are a scaffold for the later Godot C++ coursework extension. Normal gameplay, UI work, and smoke tests do not require compiling it.
+
+If you want to work on the C++ side:
+
+```powershell
+git submodule update --init --recursive
+Copy-Item demo\coursework_extension.gdextension.example demo\coursework_extension.gdextension
+```
+
+Then build the library with SCons as described in `docs/cpp-workflow.md`.
 
 ## Export
 

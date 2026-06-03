@@ -22,10 +22,10 @@ jobs:
           echo "$PWD/godot" >> "$GITHUB_PATH"
 
       - name: Import project
-        run: Godot_v4.6.3-stable_linux.x86_64 --headless --editor --path . --quit
+        run: Godot_v4.6.3-stable_linux.x86_64 --headless --path . --import
 
       - name: Boot check
-        run: Godot_v4.6.3-stable_linux.x86_64 --headless --path . --quit --verbose
+        run: Godot_v4.6.3-stable_linux.x86_64 --headless --path . --quit
 
       - name: Accessory flow smoke test
         run: Godot_v4.6.3-stable_linux.x86_64 --headless --path . --script res://tests/smoke_accessory_flow.gd
@@ -35,6 +35,15 @@ jobs:
 
       - name: Run effects smoke test
         run: Godot_v4.6.3-stable_linux.x86_64 --headless --path . --script res://tests/smoke_run_effects.gd
+
+      - name: Player control smoke test
+        run: Godot_v4.6.3-stable_linux.x86_64 --headless --path . --script res://tests/smoke_player_control.gd
+
+      - name: Run flow smoke test
+        run: Godot_v4.6.3-stable_linux.x86_64 --headless --path . --script res://tests/smoke_run_flow.gd
+
+      - name: Simplified Chinese locale smoke test
+        run: Godot_v4.6.3-stable_linux.x86_64 --headless --path . --script res://tests/smoke_locale_zh_hans.gd
 
       - name: UI screens smoke test
         run: Godot_v4.6.3-stable_linux.x86_64 --headless --path . --script res://tests/smoke_ui_screens.gd

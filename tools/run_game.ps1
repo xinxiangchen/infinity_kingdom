@@ -32,34 +32,60 @@ if ($null -eq $Godot) {
     exit 1
 }
 
+function Invoke-Godot {
+    param(
+        [string[]]$Arguments
+    )
+
+    $HasNativeErrorPreference = $null -ne (Get-Variable PSNativeCommandUseErrorActionPreference -Scope Global -ErrorAction SilentlyContinue)
+    if ($HasNativeErrorPreference) {
+        $PreviousNativeErrorPreference = $global:PSNativeCommandUseErrorActionPreference
+        $global:PSNativeCommandUseErrorActionPreference = $false
+    }
+
+    $PreviousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+
+    try {
+        & $Godot @Arguments
+    }
+    finally {
+        $ErrorActionPreference = $PreviousErrorActionPreference
+
+        if ($HasNativeErrorPreference) {
+            $global:PSNativeCommandUseErrorActionPreference = $PreviousNativeErrorPreference
+        }
+    }
+
+    if ($LASTEXITCODE -ne 0) {
+        exit $LASTEXITCODE
+    }
+}
+
 Push-Location $ProjectRoot
 try {
+    # Keep imported resources current so freshly synced archives can launch and test immediately.
+    Invoke-Godot @("--headless", "--path", ".", "--import")
+
     if ($Test) {
-        & $Godot --headless --path . --quit --verbose
-        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        & $Godot --headless --path . --script res://tests/smoke_accessory_flow.gd
-        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        & $Godot --headless --path . --script res://tests/smoke_accessory_catalog.gd
-        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        & $Godot --headless --path . --script res://tests/smoke_run_effects.gd
-        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        & $Godot --headless --path . --script res://tests/smoke_player_control.gd
-        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        & $Godot --headless --path . --script res://tests/smoke_run_flow.gd
-        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        & $Godot --headless --path . --script res://tests/smoke_locale_zh_hans.gd
-        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        & $Godot --headless --path . --script res://tests/smoke_ui_screens.gd
-        exit $LASTEXITCODE
+        Invoke-Godot @("--headless", "--path", ".", "--quit")
+        Invoke-Godot @("--headless", "--path", ".", "--script", "res://tests/smoke_accessory_flow.gd")
+        Invoke-Godot @("--headless", "--path", ".", "--script", "res://tests/smoke_accessory_catalog.gd")
+        Invoke-Godot @("--headless", "--path", ".", "--script", "res://tests/smoke_run_effects.gd")
+        Invoke-Godot @("--headless", "--path", ".", "--script", "res://tests/smoke_player_control.gd")
+        Invoke-Godot @("--headless", "--path", ".", "--script", "res://tests/smoke_run_flow.gd")
+        Invoke-Godot @("--headless", "--path", ".", "--script", "res://tests/smoke_locale_zh_hans.gd")
+        Invoke-Godot @("--headless", "--path", ".", "--script", "res://tests/smoke_ui_screens.gd")
+        exit 0
     }
 
     if ($Editor) {
-        & $Godot --editor --path .
-        exit $LASTEXITCODE
+        Invoke-Godot @("--editor", "--path", ".")
+        exit 0
     }
 
-    & $Godot --path .
-    exit $LASTEXITCODE
+    Invoke-Godot @("--path", ".")
+    exit 0
 }
 finally {
     Pop-Location
