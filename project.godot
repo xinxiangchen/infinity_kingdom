@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="infinity kingdom"
-run/main_scene="res://world.tscn"
+run/main_scene="res://app_entry.tscn"
 config/features=PackedStringArray("4.6", "Mobile")
 config/icon="res://icon.svg"
 
@@ -19,6 +19,7 @@ config/icon="res://icon.svg"
 
 AccessoryManager="*res://systems/accessories/accessory_manager.gd"
 RunDirector="*res://systems/run/run_director.gd"
+StartupContext="*res://systems/run/startup_context.gd"
 Feedback="*res://systems/feedback/feedback_manager.gd"
 Music="*res://audio/music_manager.gd"
 Sfx="*res://audio/sfx_manager.gd"

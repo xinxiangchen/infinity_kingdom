@@ -1,7 +1,9 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=9 format=3]
 
 [ext_resource type="Script" path="res://tools/character_debug_world.gd" id="1"]
 [ext_resource type="PackedScene" path="res://ui/character_select.tscn" id="2"]
+[ext_resource type="PackedScene" path="res://ui/debug_enemy_select.tscn" id="3"]
+[ext_resource type="PackedScene" path="res://ui/character_debug_status.tscn" id="4"]
 
 [sub_resource type="RectangleShape2D" id="1"]
 size = Vector2(1360, 20)
@@ -77,6 +79,10 @@ enabled = true
 zoom = Vector2(1.1, 1.1)
 
 [node name="CharacterSelect" parent="." instance=ExtResource("2")]
+
+[node name="DebugEnemySelect" parent="." instance=ExtResource("3")]
+
+[node name="CharacterDebugStatus" parent="." instance=ExtResource("4")]
 
 [node name="DebugOverlay" type="CanvasLayer" parent="."]
 layer = 9

@@ -106,6 +106,7 @@ func _ready() -> void:
 		Music.play_profile(&"title", true)
 	if audio_shortcut_hint != null and audio_shortcut_hint.has_method("show_hint"):
 		audio_shortcut_hint.show_hint(true)
+	call_deferred("_consume_startup_context")
 
 func _process(_delta: float) -> void:
 	_sync_audio_hint_state()
@@ -238,6 +239,18 @@ func _on_character_selected(character_id: StringName) -> void:
 		player_character.died.connect(_on_player_died)
 	encounter_index = -1
 	_offer_accessory(_ui_text("First Relic", "初始饰品", "初始飾品"), "opening")
+
+func _consume_startup_context() -> void:
+	var startup := get_node_or_null("/root/StartupContext")
+	if startup == null or not startup.has_method("consume_pending_start"):
+		return
+	var pending: Dictionary = startup.consume_pending_start()
+	if StringName(pending.get("mode", &"")) != &"normal":
+		return
+	var character_id := StringName(pending.get("character_id", &""))
+	if character_id == &"":
+		return
+	_on_character_selected(character_id)
 
 func _start_next_encounter() -> void:
 	waiting_for_accessory_choice = false
