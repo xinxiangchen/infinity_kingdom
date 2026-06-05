@@ -212,7 +212,8 @@ func _run() -> void:
 		quit(1)
 		return
 
-	world.encounter_index = world.ENCOUNTER_SCENES.size() - 1
+	# The final chamber is an extra encounter slot backed by FINAL_BOSS_SCENES.
+	world.encounter_index = world._encounter_count() - 1
 	var stub_encounter := Node.new()
 	world.add_child(stub_encounter)
 	world.current_encounter = stub_encounter
