@@ -13,7 +13,10 @@ const ENEMY_OPTIONS := [
 	{"id": &"apprentice", "label": "学徒法师"},
 	{"id": &"arcanist", "label": "秘术师"},
 	{"id": &"judicator_boss", "label": "Boss：审判官"},
-	{"id": &"twin_princes_boss", "label": "Boss：双子王子"}
+	{"id": &"twin_princes_boss", "label": "Boss：双子王子"},
+	{"id": &"ranger_boss", "label": "Boss：影猎者"},
+	{"id": &"mage_boss", "label": "Boss：大奥术师"},
+	{"id": &"emperor_boss", "label": "Boss：皇帝"}
 ]
 
 
@@ -66,7 +69,7 @@ func _build_ui() -> void:
 	content.add_child(hint)
 
 	elite_check = CheckBox.new()
-	elite_check.text = "小怪使用精英版本"
+	elite_check.text = "小怪使用精英版"
 	content.add_child(elite_check)
 
 	for option in ENEMY_OPTIONS:

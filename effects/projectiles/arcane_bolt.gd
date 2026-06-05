@@ -12,6 +12,7 @@ var damage: float = 90.0
 var crit_rate: float = 0.0
 var source: Node = null
 var attack_name: StringName = &"attack"
+var extra_payload: Dictionary = {}
 var expired: bool = false
 var pulse_time: float = 0.0
 var trail_timer: float = 0.0
@@ -21,12 +22,13 @@ func _ready() -> void:
 	body_entered.connect(_on_body_entered)
 	area_entered.connect(_on_area_entered)
 
-func setup(owner_actor: Node, travel_direction: Vector2, hit_damage: float, hit_crit_rate: float, attack_label: StringName = &"attack") -> void:
+func setup(owner_actor: Node, travel_direction: Vector2, hit_damage: float, hit_crit_rate: float, attack_label: StringName = &"attack", hit_extra_payload: Dictionary = {}) -> void:
 	source = owner_actor
 	direction = travel_direction.normalized() if travel_direction != Vector2.ZERO else Vector2.RIGHT
 	damage = hit_damage
 	crit_rate = hit_crit_rate
 	attack_name = attack_label
+	extra_payload = hit_extra_payload.duplicate(true)
 	bolt.polygon = _pixel_bolt_polygon()
 	rotation = direction.angle()
 	var timer := get_tree().create_timer(lifetime)
@@ -62,7 +64,10 @@ func _try_hit(target: Variant) -> void:
 	if not target.has_method("receive_hit"):
 		return
 	expired = true
-	target.receive_hit(AccessoryManager.build_hit_payload(source, attack_name, damage, crit_rate))
+	var payload := AccessoryManager.build_hit_payload(source, attack_name, damage, crit_rate)
+	for key in extra_payload.keys():
+		payload[key] = extra_payload[key]
+	target.receive_hit(payload)
 	if source != null and source.has_method("on_attack_landed"):
 		source.on_attack_landed(attack_name, target)
 	_spawn_hit_flash()

@@ -4,6 +4,9 @@ signal defeated
 
 const DAMAGE_NUMBER_SCENE := preload("res://effects/damage_number.tscn")
 const ENEMY_BOLT_SCENE := preload("res://effects/projectiles/enemy_bolt.tscn")
+const TEXTURE_LOADER := preload("res://combat/runtime_texture_loader.gd")
+const JUDICATOR_BODY_TEXTURE_PATH := "res://actors/bosses/textures/judicator_boss.png"
+const JUDICATOR_WEAPON_TEXTURE_PATH := "res://art/final_materials/weapons/boss_weapon_judicator_sword.png"
 
 @export var max_hp: float = 1500.0
 @export var defense_value: float = 180.0
@@ -61,6 +64,9 @@ var silenced_time_remaining: float = 0.0
 var root_time_remaining: float = 0.0
 var slow_time_remaining: float = 0.0
 var slow_factor: float = 1.0
+var body_sprite: Sprite2D = null
+var sword_sprite: Sprite2D = null
+var sword_angle_offset: float = deg_to_rad(56.0)
 var enraged: bool = false
 var slam_aftershock_committed: bool = false
 var barrage_wave_index: int = 0
@@ -73,6 +79,8 @@ func _ready() -> void:
 	health_component.defense_changed.connect(_on_defense_changed)
 	health_component.died.connect(_on_died)
 	hp = max_hp
+	_setup_body_visual()
+	_setup_weapon_visual()
 	landing_ring.visible = false
 	slash_line.visible = false
 	_update_visuals()
@@ -400,6 +408,31 @@ func _update_enrage_state() -> void:
 	_show_intent_text("Enraged", Color(1.0, 0.70, 0.48, 1.0), global_position, 0.94)
 	Sfx.play_event(&"boss_judicator_skill2", global_position, 2.0)
 
+func _setup_body_visual() -> void:
+	body_sprite = Sprite2D.new()
+	body_sprite.texture = TEXTURE_LOADER.load_texture(JUDICATOR_BODY_TEXTURE_PATH)
+	body_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	body_sprite.centered = true
+	body_sprite.scale = Vector2.ONE * 0.40
+	body.add_child(body_sprite)
+	body.color = Color(1.0, 1.0, 1.0, 0.0)
+
+func _set_body_tint(color: Color) -> void:
+	if body_sprite != null:
+		body_sprite.self_modulate = color
+	else:
+		body.color = color
+
+func _setup_weapon_visual() -> void:
+	sword_sprite = Sprite2D.new()
+	sword_sprite.texture = TEXTURE_LOADER.load_texture(JUDICATOR_WEAPON_TEXTURE_PATH)
+	sword_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	sword_sprite.centered = true
+	sword_sprite.scale = Vector2.ONE * 0.44
+	sword_sprite.position = Vector2(-36.0, 4.0)
+	sword.add_child(sword_sprite)
+	sword.color = Color(1.0, 1.0, 1.0, 0.0)
+
 func _update_visuals() -> void:
 	var body_color := Color(0.68, 0.7, 0.78, 1.0)
 	if state == &"skill_1_jump_start" or state == &"skill_2_charge" or state == &"skill_3_barrage_mark":
@@ -410,10 +443,16 @@ func _update_visuals() -> void:
 		body_color = Color(0.72, 0.64, 0.92, 1.0)
 	elif enraged:
 		body_color = Color(0.92, 0.62, 0.42, 1.0)
-	body.color = body_color
-	sword.color = Color(0.92, 0.84, 0.72, 1.0)
+	_set_body_tint(body_color)
+	if sword_sprite == null:
+		sword.color = Color(0.92, 0.84, 0.72, 1.0)
+	var sword_direction := line_direction if line_direction != Vector2.ZERO else Vector2.RIGHT
 	if target != null and is_instance_valid(target):
-		sword.rotation = (target.global_position - global_position).angle()
+		var to_target := target.global_position - global_position
+		if to_target != Vector2.ZERO:
+			sword_direction = to_target.normalized()
+	sword.position = sword_direction * 18.0 + Vector2(0.0, 2.0)
+	sword.rotation = sword_direction.angle() + sword_angle_offset
 	var pulse := 0.82 + 0.18 * sin(Time.get_ticks_msec() * 0.01)
 	if landing_ring.visible:
 		landing_ring.scale = Vector2.ONE * (0.94 + 0.08 * pulse)
@@ -485,7 +524,7 @@ func _show_intent_text(label_text: String, color_value: Color, world_position: V
 
 func _on_damaged(_amount: float, remaining_hp: float, _source: Node) -> void:
 	hp = remaining_hp
-	body.color = Color(1.0, 0.58, 0.58, 1.0)
+	_set_body_tint(Color(1.0, 0.8, 0.8, 1.0))
 	var timer := get_tree().create_timer(0.14)
 	timer.timeout.connect(func() -> void:
 		if is_instance_valid(self) and hp > 0.0:

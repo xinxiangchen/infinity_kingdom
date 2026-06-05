@@ -10,6 +10,9 @@ const DAMAGE_NUMBER_SCENE := preload("res://effects/damage_number.tscn")
 const RUN_PICKUP_SCRIPT := preload("res://systems/pickups/run_pickup.gd")
 const WORLD_HEALTH_BAR_SCRIPT := preload("res://ui/world_health_bar.gd")
 const INVENTORY_PANEL_SCRIPT := preload("res://ui/inventory_panel.gd")
+const RANGER_BOSS_SCENE := preload("res://actors/bosses/town/ranger_boss.tscn")
+const MAGE_BOSS_SCENE := preload("res://actors/bosses/town/mage_boss.tscn")
+const EMPEROR_BOSS_SCENE := preload("res://actors/bosses/town/emperor_boss.tscn")
 const ENCOUNTER_SCENES := [
 	preload("res://actors/encounters/town_mob_encounter.tscn"),
 	preload("res://actors/encounters/town_mob_encounter.tscn"),
@@ -19,6 +22,11 @@ const ENCOUNTER_SCENES := [
 	preload("res://actors/bosses/town/judicator_boss.tscn"),
 	preload("res://actors/bosses/town/royal_guard_formation.tscn"),
 	preload("res://actors/bosses/town/twin_princes_boss.tscn")
+]
+const FINAL_BOSS_SCENES := [
+	EMPEROR_BOSS_SCENE,
+	RANGER_BOSS_SCENE,
+	MAGE_BOSS_SCENE
 ]
 const RELIC_REROLL_COST := 12
 const HIT_FEEDBACK_COOLDOWN_MSEC := 55
@@ -73,7 +81,7 @@ func _ready() -> void:
 	_build_inventory_panel()
 	if get_tree() != null and not get_tree().node_added.is_connected(_on_tree_node_added):
 		get_tree().node_added.connect(_on_tree_node_added)
-	RunDirector.configure_event_count(maxi(ENCOUNTER_SCENES.size() - 1, 1))
+	RunDirector.configure_event_count(maxi(_encounter_count() - 1, 1))
 	if character_select != null:
 		character_select.character_selected.connect(_on_character_selected)
 		if character_select.has_signal("audio_requested"):
@@ -301,7 +309,7 @@ func _unhandled_input(event: InputEvent) -> void:
 func _on_character_selected(character_id: StringName) -> void:
 	_cancel_scheduled_title_music()
 	_clear_player_auto_walk()
-	RunDirector.configure_event_count(maxi(ENCOUNTER_SCENES.size() - 1, 1))
+	RunDirector.configure_event_count(maxi(_encounter_count() - 1, 1))
 	if result_screen != null:
 		result_screen.visible = false
 	if audio_settings_panel != null and audio_settings_panel.has_method("hide_panel"):
@@ -368,7 +376,7 @@ func _start_next_encounter() -> void:
 	return_pause_after_settings_panel = false
 	active_encounter_prep = RunDirector.consume_pending_encounter_prep()
 	encounter_index += 1
-	if encounter_index >= ENCOUNTER_SCENES.size():
+	if encounter_index >= _encounter_count():
 		active_encounter_prep.clear()
 		_complete_run_victory()
 		return
@@ -380,7 +388,7 @@ func _start_next_encounter() -> void:
 func _begin_current_encounter() -> void:
 	_activate_map_room(encounter_index)
 	_play_audio_profile_for_encounter(encounter_index)
-	current_encounter = ENCOUNTER_SCENES[encounter_index].instantiate()
+	current_encounter = _encounter_scene_for_index(encounter_index).instantiate()
 	current_encounter.position = encounter_marker.position
 	encounter_root.add_child(current_encounter)
 	if not active_encounter_prep.is_empty():
@@ -452,7 +460,7 @@ func _on_encounter_defeated() -> void:
 		if bool(active_encounter_prep.get("clear_shield_on_end", false)):
 			RunEffects.clear_shield(player_character)
 	current_encounter = null
-	var defeated_final_encounter := encounter_index >= ENCOUNTER_SCENES.size() - 1
+	var defeated_final_encounter := encounter_index >= _encounter_count() - 1
 	active_encounter_prep.clear()
 	_refresh_battle_status(
 		_ui_text("Trial Complete", "试炼阶段完成", "試煉階段完成") if defeated_final_encounter else _ui_text("Encounter Cleared", "遭遇完成", "遭遇完成"),
@@ -1156,6 +1164,14 @@ func _localized_detail_text(extra: String) -> String:
 		return control_hint
 	return "%s\n%s" % [extra, control_hint]
 
+func _encounter_count() -> int:
+	return ENCOUNTER_SCENES.size() + (1 if not FINAL_BOSS_SCENES.is_empty() else 0)
+
+func _encounter_scene_for_index(index: int) -> PackedScene:
+	if index < ENCOUNTER_SCENES.size():
+		return ENCOUNTER_SCENES[index]
+	return FINAL_BOSS_SCENES[randi() % FINAL_BOSS_SCENES.size()]
+
 func _refresh_battle_status(override_title: String = "", override_subtitle: String = "", override_detail: String = "") -> void:
 	if battle_status == null or not battle_status.has_method("set_message"):
 		return
@@ -1166,7 +1182,7 @@ func _refresh_battle_status(override_title: String = "", override_subtitle: Stri
 			current_encounter.get_status_title(),
 			current_encounter.get_status_text(),
 			_localized_detail_text(_ui_text(
-				"Route: outer rooms use soldiers, Palace Hall uses the first boss, King Gate uses Twin Princes.",
+				"Route: outer rooms use soldiers, Palace Hall uses early bosses, King Gate uses Twin Princes, and the final chamber pulls one of three final bosses.",
 				"路线：宫外地图为小兵战，皇宫前厅放第一个 Boss，王门前放双子 Boss。",
 				"路線：宮外地圖為小兵戰，皇宮前廳放第一個 Boss，王門前放雙子 Boss。"
 			))
@@ -1200,7 +1216,7 @@ func _objective_status_text() -> String:
 	if character_select != null and character_select.visible and player_character == null:
 		return _ui_text("Select a champion to begin the town trial.", "选择角色，开始城镇试炼。", "選擇角色，開始城鎮試煉。")
 	if current_encounter != null and is_instance_valid(current_encounter):
-		var objective_text := _ui_text("Encounter %d / %d: clear the arena.", "第 %d / %d 场：清空战场。", "第 %d / %d 場：清空戰場。") % [encounter_index + 1, ENCOUNTER_SCENES.size()]
+		var objective_text := _ui_text("Encounter %d / %d: clear the arena.", "第 %d / %d 场：清空战场。", "第 %d / %d 場：清空戰場。") % [encounter_index + 1, _encounter_count()]
 		if not active_encounter_prep.is_empty():
 			objective_text += _ui_text(" Prep %s is active.", " 已生效准备：%s。", " 已生效準備：%s。") % _prep_title(active_encounter_prep)
 		return objective_text
@@ -1252,7 +1268,7 @@ func _threat_status_text() -> String:
 			return low_defense_text
 		if not pending_prep.is_empty():
 			return _ui_text("Queued prep: %s.", "已排队准备：%s。", "已排隊準備：%s。") % _prep_summary(pending_prep)
-	return _ui_text("The route ramps from mixed enemy waves into three boss checks.", "路线会从普通敌群逐步推进到三场 Boss 检定。", "路線會從普通敵群逐步推進到三場 Boss 檢定。")
+	return _ui_text("The route ramps from mixed enemy waves into four boss checks, ending with a random final boss.", "路线会从普通敌群逐步推进到四场 Boss 检定，并以随机终局 Boss 收尾。", "路線會從普通敵群逐步推進到四場 Boss 檢定，並以隨機終局 Boss 收尾。")
 
 func _hero_status_text() -> String:
 	if player_character == null or not is_instance_valid(player_character):

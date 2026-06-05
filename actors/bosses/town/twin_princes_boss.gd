@@ -4,6 +4,11 @@ signal defeated
 
 const DAMAGE_NUMBER_SCENE := preload("res://effects/damage_number.tscn")
 const ROYAL_BOLT_SCENE := preload("res://effects/projectiles/royal_bolt.tscn")
+const TEXTURE_LOADER := preload("res://combat/runtime_texture_loader.gd")
+const TWIN_PHASE1_BODY_TEXTURE_PATH := "res://actors/bosses/textures/twin_first_boss.png"
+const TWIN_PHASE2_BODY_TEXTURE_PATH := "res://actors/bosses/textures/twin_second_boss.png"
+const TWIN_PHASE1_WEAPON_TEXTURE_PATH := "res://art/final_materials/weapons/boss_weapon_twin_first_sword.png"
+const TWIN_PHASE2_WEAPON_TEXTURE_PATH := "res://art/final_materials/weapons/boss_weapon_twin_second_sword.png"
 
 @export var phase1_hp: float = 4000.0
 @export var phase2_hp: float = 4000.0
@@ -42,6 +47,9 @@ var root_time_remaining: float = 0.0
 var slow_time_remaining: float = 0.0
 var slow_factor: float = 1.0
 var desperation_active: bool = false
+var body_sprite: Sprite2D = null
+var spear_sprite: Sprite2D = null
+var spear_angle_offset: float = deg_to_rad(66.0)
 
 func _ready() -> void:
 	add_to_group("damageable")
@@ -50,6 +58,9 @@ func _ready() -> void:
 	health_component.setup(max_hp, defense_value)
 	health_component.damaged.connect(_on_damaged)
 	health_component.died.connect(_on_died)
+	_setup_body_visual()
+	_setup_weapon_visual()
+	_refresh_phase_visuals()
 	teleport_marker.visible = false
 	charge_line.visible = false
 	phase_ring.visible = false
@@ -360,16 +371,50 @@ func _update_desperation_state() -> void:
 	_show_intent_text("Desperate", Color(1.0, 0.66, 0.50, 1.0), global_position, 0.94)
 	Sfx.play_event(&"boss_twin_barrage", global_position, 2.0)
 
+func _setup_body_visual() -> void:
+	body_sprite = Sprite2D.new()
+	body_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	body_sprite.centered = true
+	body_sprite.scale = Vector2.ONE * 0.39
+	body.add_child(body_sprite)
+	body.color = Color(1.0, 1.0, 1.0, 0.0)
+
+func _set_body_tint(color: Color) -> void:
+	if body_sprite != null:
+		body_sprite.self_modulate = color
+	else:
+		body.color = color
+
+func _setup_weapon_visual() -> void:
+	spear_sprite = Sprite2D.new()
+	spear_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	spear_sprite.centered = true
+	spear_sprite.scale = Vector2.ONE * 0.46
+	spear_sprite.position = Vector2(-40.0, 2.0)
+	spear.add_child(spear_sprite)
+	spear.color = Color(1.0, 1.0, 1.0, 0.0)
+
+func _refresh_phase_visuals() -> void:
+	if body_sprite != null:
+		body_sprite.texture = TEXTURE_LOADER.load_texture(TWIN_PHASE1_BODY_TEXTURE_PATH if current_phase == 1 else TWIN_PHASE2_BODY_TEXTURE_PATH)
+	if spear_sprite != null:
+		spear_sprite.texture = TEXTURE_LOADER.load_texture(TWIN_PHASE1_WEAPON_TEXTURE_PATH if current_phase == 1 else TWIN_PHASE2_WEAPON_TEXTURE_PATH)
+
 func _update_visuals() -> void:
 	var base_color := Color(0.84, 0.82, 0.88, 1.0) if current_phase == 1 else Color(0.95, 0.76, 0.58, 1.0)
 	if silenced_time_remaining > 0.0:
 		base_color = Color(0.72, 0.64, 0.92, 1.0)
 	elif desperation_active:
 		base_color = Color(1.0, 0.62, 0.46, 1.0)
-	body.color = base_color
+	_set_body_tint(base_color)
 	phase_ring.default_color = Color(1.0, 0.64, 0.42, 0.9) if desperation_active else (Color(1.0, 0.82, 0.56, 0.85) if current_phase == 2 else Color(0.82, 0.86, 1.0, 0.8))
+	var aim_direction := charge_direction if charge_direction != Vector2.ZERO else Vector2.RIGHT
 	if target != null and is_instance_valid(target):
-		spear.rotation = (target.global_position - global_position).angle()
+		var to_target := target.global_position - global_position
+		if to_target != Vector2.ZERO:
+			aim_direction = to_target.normalized()
+	spear.position = aim_direction * 20.0 + Vector2(0.0, 4.0)
+	spear.rotation = aim_direction.angle() + spear_angle_offset
 	var pulse := 0.82 + 0.18 * sin(Time.get_ticks_msec() * 0.01)
 	if teleport_marker.visible:
 		teleport_marker.scale = Vector2.ONE * (0.92 + 0.08 * pulse)
@@ -398,7 +443,7 @@ func _show_intent_text(label_text: String, color_value: Color, world_position: V
 
 func _on_damaged(_amount: float, remaining_hp: float, _source: Node) -> void:
 	hp = remaining_hp
-	body.color = Color(1.0, 0.58, 0.58, 1.0)
+	_set_body_tint(Color(1.0, 0.8, 0.8, 1.0))
 	var timer := get_tree().create_timer(0.12)
 	timer.timeout.connect(func() -> void:
 		if is_instance_valid(self) and state != &"dead":
@@ -412,6 +457,7 @@ func _on_died() -> void:
 		desperation_active = false
 		max_hp = phase2_hp
 		hp = max_hp
+		_refresh_phase_visuals()
 		invulnerable = true
 		teleport_cooldown = 1.0
 		spear_cooldown = 2.4

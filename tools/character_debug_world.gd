@@ -12,6 +12,9 @@ const APPRENTICE_SCENE := preload("res://actors/enemy/apprentice_mage_enemy.tscn
 const ARCANIST_SCENE := preload("res://actors/enemy/arcanist_enemy.tscn")
 const JUDICATOR_BOSS_SCENE := preload("res://actors/bosses/town/judicator_boss.tscn")
 const TWIN_PRINCES_BOSS_SCENE := preload("res://actors/bosses/town/twin_princes_boss.tscn")
+const RANGER_BOSS_SCENE := preload("res://actors/bosses/town/ranger_boss.tscn")
+const MAGE_BOSS_SCENE := preload("res://actors/bosses/town/mage_boss.tscn")
+const EMPEROR_BOSS_SCENE := preload("res://actors/bosses/town/emperor_boss.tscn")
 
 const PLAYER_SCENES := {
 	&"knight": KNIGHT_SCENE,
@@ -27,7 +30,10 @@ const ENEMY_SCENES := {
 	&"apprentice": APPRENTICE_SCENE,
 	&"arcanist": ARCANIST_SCENE,
 	&"judicator_boss": JUDICATOR_BOSS_SCENE,
-	&"twin_princes_boss": TWIN_PRINCES_BOSS_SCENE
+	&"twin_princes_boss": TWIN_PRINCES_BOSS_SCENE,
+	&"ranger_boss": RANGER_BOSS_SCENE,
+	&"mage_boss": MAGE_BOSS_SCENE,
+	&"emperor_boss": EMPEROR_BOSS_SCENE
 }
 
 @onready var player_spawn: Marker2D = $PlayerSpawn

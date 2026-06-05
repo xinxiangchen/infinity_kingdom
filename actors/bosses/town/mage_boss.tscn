@@ -1,0 +1,61 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://actors/bosses/town/mage_boss.gd" id="1"]
+[ext_resource type="Script" path="res://combat/health_component.gd" id="2"]
+
+[node name="MageBoss" type="Node2D"]
+script = ExtResource("1")
+
+[node name="Body" type="Polygon2D" parent="."]
+color = Color(0.76, 0.86, 1, 1)
+polygon = PackedVector2Array(-24, 30, -18, -6, -8, -34, 8, -34, 18, -6, 24, 30, 0, 42)
+
+[node name="FocusRing" type="Line2D" parent="."]
+visible = false
+default_color = Color(0.74, 0.88, 1, 0.72)
+width = 3.0
+closed = true
+points = PackedVector2Array(64, 0, 46, 46, 0, 64, -46, 46, -64, 0, -46, -46, 0, -64, 46, -46)
+
+[node name="BurstRing" type="Line2D" parent="."]
+visible = false
+default_color = Color(0.78, 0.9, 1, 0.9)
+width = 3.0
+closed = true
+points = PackedVector2Array(72, 0, 52, 52, 0, 72, -52, 52, -72, 0, -52, -52, 0, -72, 52, -52)
+
+[node name="EnchantSigil" type="Line2D" parent="."]
+visible = false
+default_color = Color(1, 0.88, 0.68, 0.9)
+width = 3.0
+closed = true
+points = PackedVector2Array(34, 0, 24, 24, 0, 34, -24, 24, -34, 0, -24, -24, 0, -34, 24, -24)
+
+[node name="BladeOrbit" type="Node2D" parent="."]
+visible = false
+
+[node name="Blade1" type="Polygon2D" parent="BladeOrbit"]
+color = Color(0.82, 0.9, 1, 0.95)
+position = Vector2(34, 0)
+polygon = PackedVector2Array(-4, 8, 4, 8, 6, -8, 0, -18, -6, -8)
+
+[node name="Blade2" type="Polygon2D" parent="BladeOrbit"]
+color = Color(0.82, 0.9, 1, 0.95)
+position = Vector2(-17, 29)
+polygon = PackedVector2Array(-4, 8, 4, 8, 6, -8, 0, -18, -6, -8)
+
+[node name="Blade3" type="Polygon2D" parent="BladeOrbit"]
+color = Color(0.82, 0.9, 1, 0.95)
+position = Vector2(-17, -29)
+polygon = PackedVector2Array(-4, 8, 4, 8, 6, -8, 0, -18, -6, -8)
+
+[node name="Weapon" type="Node2D" parent="."]
+position = Vector2(16, -12)
+
+[node name="ProjectileSpawner" type="Node2D" parent="."]
+position = Vector2(26, -8)
+
+[node name="HealthComponent" type="Node" parent="."]
+script = ExtResource("2")
+
+[node name="EffectsLayer" type="Node2D" parent="."]
