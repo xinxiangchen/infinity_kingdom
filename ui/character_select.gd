@@ -1630,6 +1630,40 @@ func _about_entries() -> Array[Dictionary]:
 				"zh_Hans": "WASD 负责移动。J 是最稳定的普攻，K、L、I 是三枚战斗技能。Esc 始终负责返回菜单层，而标题界面额外保留了 G 和 A 作为图鉴与介绍的快捷入口。",
 				"zh_Hant": "WASD 負責移動。J 是最穩定的普攻，K、L、I 是三枚戰鬥技能。Esc 始終負責返回選單層，而標題介面額外保留了 G 和 A 作為圖鑑與介紹的快捷入口。"
 			}
+		},
+		{
+			"id": "about_credits",
+			"icon": "res://assets/ui/icon/ui_check.png",
+			"title": {
+				"en": "Authors",
+				"zh_Hans": "作者",
+				"zh_Hant": "作者"
+			},
+			"subtitle": {
+				"en": "Credits",
+				"zh_Hans": "制作署名",
+				"zh_Hant": "製作署名"
+			},
+			"meta": {
+				"en": "Team roles and contributors for art, UI, and gameplay design.",
+				"zh_Hans": "美术、UI、游玩调节与关卡角色设计署名。",
+				"zh_Hant": "美術、UI、遊玩調節與關卡角色設計署名。"
+			},
+			"detail_title": {
+				"en": "Authors",
+				"zh_Hans": "作者",
+				"zh_Hant": "作者"
+			},
+			"detail_role": {
+				"en": "Credits | Team",
+				"zh_Hans": "制作署名 | 团队成员",
+				"zh_Hant": "製作署名 | 團隊成員"
+			},
+			"detail_desc": {
+				"en": "Meishu ziyuan yu ditu sheji: Wang Baishu, Zhang Shurui\nUI yu youwan xiaoguo tiaojie: Li Chenghang, Yuan Yirui\nGuanka yu juese sheji: Li Jiachang, Li Kangqi",
+				"zh_Hans": "美术资源与地图设计：王百树，张书睿\nUI与游玩效果调节：李承航，袁苡瑞\n关卡与角色设计：李嘉昌，李康齐",
+				"zh_Hant": "美術資源與地圖設計：王百樹，張書睿\nUI與遊玩效果調節：李承航，袁苡瑞\n關卡與角色設計：李嘉昌，李康齊"
+			}
 		}
 	]
 

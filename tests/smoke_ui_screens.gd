@@ -161,6 +161,23 @@ func _run() -> void:
 		push_error("About detail panel did not show run primer content")
 		quit(1)
 		return
+	if not world.character_select.has_method("_set_about_entry"):
+		push_error("Character select is missing about entry setter")
+		quit(1)
+		return
+	world.character_select._set_about_entry("about_credits")
+	await process_frame
+	await process_frame
+	about_title = world.character_select.get("hero_detail_title") as Label
+	var about_desc := world.character_select.get("hero_detail_desc") as Label
+	if about_title == null or about_title.text.find("Authors") == -1:
+		push_error("About credits entry did not open")
+		quit(1)
+		return
+	if about_desc == null or about_desc.text.find("Wang Baishu") == -1 or about_desc.text.find("Li Chenghang") == -1:
+		push_error("About credits entry did not include the author list")
+		quit(1)
+		return
 	world.character_select._show_menu()
 	await process_frame
 
