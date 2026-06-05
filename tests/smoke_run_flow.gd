@@ -48,8 +48,8 @@ func _run() -> void:
 	preview_encounter.call("bind_player", encounter_player)
 	await process_frame
 	var preview_waves: Variant = preview_encounter.get("active_waves")
-	if not (preview_waves is Array) or (preview_waves as Array).size() != 4:
-		push_error("Town encounter did not build three waves plus a final wave")
+	if not (preview_waves is Array) or (preview_waves as Array).size() != 1:
+		push_error("Town encounter did not build exactly one enemy wave")
 		quit(1)
 		return
 	var modifier_title := String(preview_encounter.call("get_modifier_title")) if preview_encounter.has_method("get_modifier_title") else ""

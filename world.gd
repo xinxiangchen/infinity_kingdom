@@ -1351,7 +1351,7 @@ func _encounter_threat_hint(encounter: Node) -> String:
 				"第 %d 波已清空，在下一隊落位前重新站好位置。"
 			) % max(wave_index + 1, 1)
 			return "%s %s" % [modifier_hint, reset_hint] if not modifier_hint.is_empty() else reset_hint
-		if wave_total > 0 and wave_index >= wave_total - 1:
+		if wave_total > 1 and wave_index >= wave_total - 1:
 			var final_hint := _ui_text(
 				"Final wave mixes elites with arcanist control. Remove ranged pressure first.",
 				"最后一波会把精英和奥术控制混在一起，先拆远程压力。",
