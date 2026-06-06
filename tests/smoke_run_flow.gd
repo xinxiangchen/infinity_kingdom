@@ -64,6 +64,24 @@ func _run() -> void:
 		return
 	preview_encounter.queue_free()
 	encounter_player.queue_free()
+
+	var empty_encounter_scene := load("res://actors/encounters/empty_encounter.tscn") as PackedScene
+	if empty_encounter_scene == null:
+		push_error("Empty encounter scene did not load")
+		quit(1)
+		return
+	var empty_encounter := empty_encounter_scene.instantiate()
+	var empty_state := {"cleared": false}
+	empty_encounter.defeated.connect(func() -> void:
+		empty_state["cleared"] = true
+	)
+	root.add_child(empty_encounter)
+	await create_timer(0.1).timeout
+	if not bool(empty_state["cleared"]):
+		push_error("Empty encounter did not auto-clear")
+		quit(1)
+		return
+	empty_encounter.queue_free()
 	await process_frame
 
 	var world := world_scene.instantiate()

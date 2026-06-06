@@ -20,7 +20,7 @@ const ENCOUNTER_SCENES := [
 	preload("res://actors/encounters/town_mob_encounter.tscn"),
 	preload("res://actors/encounters/town_mob_encounter.tscn"),
 	preload("res://actors/bosses/town/judicator_boss.tscn"),
-	preload("res://actors/bosses/town/royal_guard_formation.tscn"),
+	preload("res://actors/encounters/empty_encounter.tscn"),
 	preload("res://actors/bosses/town/twin_princes_boss.tscn")
 ]
 const FINAL_BOSS_SCENES := [
@@ -476,6 +476,26 @@ func _toggle_inventory_panel() -> void:
 	_refresh_battle_status()
 
 func _on_encounter_defeated() -> void:
+	var skip_rewards := current_encounter != null and is_instance_valid(current_encounter) and _has_property(current_encounter, "skip_rewards") and bool(current_encounter.get("skip_rewards"))
+	if skip_rewards:
+		if not active_encounter_prep.is_empty():
+			RunDirector.set_pending_encounter_prep(active_encounter_prep)
+		current_encounter = null
+		active_encounter_prep.clear()
+		_refresh_battle_status(
+			_ui_text("Chamber Empty", "空房间", "空房間"),
+			_ui_text("No enemies remain here.", "这里没有敌人。", "這裡沒有敵人。"),
+			_localized_detail_text(_ui_text("Moving to the next chamber.", "正在前往下一张图。", "正在前往下一張圖。"))
+		)
+		var empty_timer := get_tree().create_timer(0.35)
+		empty_timer.timeout.connect(func() -> void:
+			if is_instance_valid(self) and player_character != null and is_instance_valid(player_character) and float(player_character.hp) > 0.0:
+				_walk_player_to_room_exit(func() -> void:
+					if is_instance_valid(self):
+						_start_next_encounter()
+				)
+		)
+		return
 	var reward := RunDirector.reward_encounter(encounter_index, player_character)
 	var reward_bonus := int(active_encounter_prep.get("reward_bonus", 0))
 	if reward_bonus > 0:
@@ -1208,9 +1228,9 @@ func _refresh_battle_status(override_title: String = "", override_subtitle: Stri
 			current_encounter.get_status_title(),
 			current_encounter.get_status_text(),
 			_localized_detail_text(_ui_text(
-				"Route: outer rooms use soldiers, Palace Hall uses early bosses, King Gate uses Twin Princes, and the final chamber pulls one of three final bosses.",
-				"路线：宫外地图为小兵战，皇宫前厅放第一个 Boss，王门前放双子 Boss。",
-				"路線：宮外地圖為小兵戰，皇宮前廳放第一個 Boss，王門前放雙子 Boss。"
+				"Route: outer rooms use soldiers, Palace Hall holds the gate boss, the next chamber is empty, King Gate holds Twin Princes, and the final chamber pulls one of three final bosses.",
+				"路线：宫外地图为小兵战，皇宫前厅放守城 Boss，下一张图为空房，王门前放双子王子。",
+				"路線：宮外地圖為小兵戰，皇宮前廳放守城 Boss，下一張圖為空房，王門前放雙子王子。"
 			))
 		)
 	if battle_status.has_method("set_context"):
