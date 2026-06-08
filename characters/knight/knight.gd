@@ -395,7 +395,7 @@ func start_attack() -> void:
 	slash_arc.position = _attack_visual_offset()
 	slash_arc.rotation = _attack_facing().angle()
 	play_animation(&"attack")
-	_animate_weapon_swing(-30.0, 122.0, 0.12, 0.18)
+	_animate_weapon_swing(-34.0, 20.0, 0.12, 0.18)
 
 func finish_attack() -> void:
 	if current_attack_name != &"":
@@ -435,7 +435,7 @@ func start_dash_from_skill() -> void:
 		dash_direction = facing if facing != Vector2.ZERO else Vector2.RIGHT
 	dash_direction = dash_direction.normalized()
 	play_animation(&"dash")
-	_animate_weapon_swing(-36.0, 92.0, 0.08, 0.12)
+	_animate_weapon_swing(-36.0, 16.0, 0.08, 0.12)
 
 func process_dash(delta: float) -> bool:
 	manual_movement_performed = true
@@ -515,7 +515,7 @@ func start_dodge() -> void:
 		dodge_direction = Vector2.RIGHT
 	dodge_direction = dodge_direction.normalized()
 	play_animation(&"dodge")
-	_animate_weapon_swing(-18.0, 44.0, 0.08, 0.1)
+	_animate_weapon_swing(-24.0, 12.0, 0.08, 0.1)
 
 func process_dodge(delta: float) -> bool:
 	dodge_elapsed += delta
@@ -778,6 +778,7 @@ func _setup_weapon_visual() -> void:
 	weapon_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	weapon_sprite.centered = true
 	weapon_sprite.scale = Vector2.ONE * 0.68
+	weapon_sprite.position = Vector2(27.0, 0.0)
 	weapon.add_child(weapon_sprite)
 
 func _sync_weapon_visual() -> void:
@@ -785,11 +786,11 @@ func _sync_weapon_visual() -> void:
 		return
 	var side_sign := _get_weapon_side_sign()
 	var vertical_bias := clampf(facing.y, -1.0, 1.0)
-	var base_right_angle := deg_to_rad(-56.0)
-	var base_angle := base_right_angle if side_sign > 0.0 else PI - base_right_angle
+	var attack_direction := _attack_facing()
+	var guard_angle := deg_to_rad(-42.0 * side_sign + vertical_bias * 5.0)
 	weapon.visible = hp > 0.0
 	weapon.position = Vector2(24.0 * side_sign, -18.0 + vertical_bias * 6.0)
-	weapon.rotation = base_angle + deg_to_rad(vertical_bias * 8.0) + weapon_swing_rotation * side_sign
+	weapon.rotation = attack_direction.angle() + guard_angle + weapon_swing_rotation * side_sign
 
 func _animate_weapon_swing(windup_degrees: float, strike_degrees: float, windup_duration: float, recover_duration: float = 0.12) -> void:
 	if weapon_swing_tween != null:

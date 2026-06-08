@@ -53,7 +53,9 @@ var burst_center: Vector2 = Vector2.ZERO
 var shadow_reposition_point: Vector2 = Vector2.ZERO
 var body_sprite: Sprite2D = null
 var weapon_sprite: Sprite2D = null
-var weapon_angle_offset: float = deg_to_rad(64.0)
+var weapon_angle_offset: float = 0.0
+var visual_last_position: Vector2 = Vector2.ZERO
+var visual_bob_time: float = 0.0
 
 func _ready() -> void:
 	add_to_group("damageable")
@@ -61,6 +63,7 @@ func _ready() -> void:
 	health_component.damaged.connect(_on_damaged)
 	health_component.died.connect(_on_died)
 	hp = max_hp
+	visual_last_position = global_position
 	_setup_body_visual()
 	_setup_weapon_visual()
 	burst_ring.visible = false
@@ -158,7 +161,7 @@ func _start_basic_attack() -> void:
 	state_time = 0.0
 	action_committed = false
 	attack_cooldown = attack_interval
-	_animate_weapon_swing(-112.0, 38.0, 0.26)
+	_animate_weapon_swing(-42.0, 20.0, 0.26)
 
 func _process_basic_attack() -> void:
 	if not action_committed and state_time >= 0.24:
@@ -187,7 +190,7 @@ func _start_skill_cast() -> void:
 			charge_direction = (target.global_position - global_position).normalized() if target != null else line_direction
 			if charge_direction == Vector2.ZERO:
 				charge_direction = Vector2.RIGHT
-			_animate_weapon_swing(-124.0, -18.0, 0.32)
+			_animate_weapon_swing(-46.0, 12.0, 0.32)
 		&"burst":
 			state = &"skill_burst"
 			burst_center = target.global_position if target != null else global_position
@@ -197,7 +200,7 @@ func _start_skill_cast() -> void:
 			burst_ring.modulate = Color(0.82, 0.9, 1.0, 0.92)
 		&"volley":
 			state = &"skill_volley"
-			_animate_weapon_swing(-44.0, 18.0, 0.24)
+			_animate_weapon_swing(-28.0, 12.0, 0.24)
 
 func _pick_skill() -> StringName:
 	var pool: Array[StringName] = [&"shadow", &"charge", &"burst", &"volley"]
@@ -213,7 +216,7 @@ func _process_skill_shadow() -> void:
 			line_direction = (target.global_position - global_position).normalized()
 			if line_direction == Vector2.ZERO:
 				line_direction = Vector2.RIGHT
-		_animate_weapon_swing(-138.0, 46.0, 0.18)
+		_animate_weapon_swing(-44.0, 18.0, 0.18)
 		_hit_target_in_arc(112.0, shadow_step_slash_damage, 145.0)
 		_spawn_slash_effect(112.0, Color(0.8, 0.9, 1.0, 0.95))
 	if state_time >= shadow_step_duration:
@@ -349,7 +352,7 @@ func _setup_body_visual() -> void:
 	body_sprite.texture = TEXTURE_LOADER.load_texture(EMPEROR_BODY_TEXTURE_PATH)
 	body_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	body_sprite.centered = true
-	body_sprite.scale = Vector2.ONE * 0.40
+	body_sprite.scale = Vector2.ONE * 0.34
 	body.add_child(body_sprite)
 	body.color = Color(1.0, 1.0, 1.0, 0.0)
 
@@ -364,8 +367,8 @@ func _setup_weapon_visual() -> void:
 	weapon_sprite.texture = TEXTURE_LOADER.load_texture(EMPEROR_WEAPON_TEXTURE_PATH)
 	weapon_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	weapon_sprite.centered = true
-	weapon_sprite.scale = Vector2.ONE * 0.42
-	weapon_sprite.position = Vector2(-40.0, 8.0)
+	weapon_sprite.scale = Vector2.ONE * 0.70
+	weapon_sprite.position = Vector2(-64.0, 8.0)
 	weapon.add_child(weapon_sprite)
 
 func _animate_weapon_swing(start_degrees: float, end_degrees: float, duration: float) -> void:
@@ -383,10 +386,27 @@ func _update_visuals() -> void:
 		body.modulate = Color(1.0, 1.0, 1.0, 0.8)
 	else:
 		body.modulate = Color.WHITE
+	_apply_body_motion(0.9, 0.025, 0.012)
 	phase_ring.default_color = Color(1.0, 0.84, 0.52, 0.88)
 	weapon.position = line_direction * 22.0 + Vector2(0.0, 0.0)
-	weapon.rotation = line_direction.angle() + weapon_angle_offset
+	weapon.rotation = _weapon_guard_rotation(line_direction, -48.0) + weapon_angle_offset
 	projectile_spawner.position = line_direction * 24.0
+	visual_last_position = global_position
+
+func _weapon_guard_rotation(direction: Vector2, guard_degrees: float) -> float:
+	var facing := direction.normalized() if direction.length_squared() > 0.0001 else Vector2.RIGHT
+	var side_sign := -1.0 if facing.x < -0.05 else 1.0
+	return facing.angle() + deg_to_rad(guard_degrees * side_sign)
+
+func _apply_body_motion(bob_scale: float, sway_scale: float, idle_sway: float) -> void:
+	var movement := global_position - visual_last_position
+	var motion_ratio := clampf(movement.length() / maxf(move_speed * get_physics_process_delta_time(), 1.0), 0.0, 1.0)
+	visual_bob_time += 0.08 + motion_ratio * 0.12
+	var facing := -1.0 if line_direction.x < -0.05 else 1.0
+	if body_sprite != null:
+		body_sprite.flip_h = facing < 0.0
+	body.position = Vector2(0.0, sin(visual_bob_time) * (1.0 + motion_ratio * 3.0) * bob_scale)
+	body.rotation = sin(visual_bob_time * 0.55) * (idle_sway + motion_ratio * sway_scale) * facing
 
 func _spawn_damage_number(amount: float, is_critical: bool) -> void:
 	var damage_number := DAMAGE_NUMBER_SCENE.instantiate()

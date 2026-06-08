@@ -409,7 +409,7 @@ func _build_active_waves() -> Array[Dictionary]:
 		pool.append((wave as Dictionary).duplicate(true))
 	var selection: Array[Dictionary] = []
 	var preferred_tags: Array = active_modifier.get("preferred_tags", [])
-	while selection.size() < 2 and not pool.is_empty() and not preferred_tags.is_empty():
+	while selection.is_empty() and not pool.is_empty() and not preferred_tags.is_empty():
 		var matching_indices: Array[int] = []
 		for wave_index_value in range(pool.size()):
 			if _wave_matches_modifier(pool[wave_index_value], preferred_tags):
@@ -419,11 +419,10 @@ func _build_active_waves() -> Array[Dictionary]:
 		var preferred_index := matching_indices[rng.randi_range(0, matching_indices.size() - 1)]
 		selection.append(pool[preferred_index])
 		pool.remove_at(preferred_index)
-	while selection.size() < 3 and not pool.is_empty():
+	while selection.is_empty() and not pool.is_empty():
 		var next_index := rng.randi_range(0, pool.size() - 1)
 		selection.append(pool[next_index])
 		pool.remove_at(next_index)
-	selection.append((final_wave as Dictionary).duplicate(true))
 	return selection
 
 func _roll_modifier() -> Dictionary:

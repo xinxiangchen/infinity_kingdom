@@ -66,11 +66,13 @@ var slow_time_remaining: float = 0.0
 var slow_factor: float = 1.0
 var body_sprite: Sprite2D = null
 var sword_sprite: Sprite2D = null
-var sword_angle_offset: float = deg_to_rad(56.0)
+var sword_angle_offset: float = 0.0
 var enraged: bool = false
 var slam_aftershock_committed: bool = false
 var barrage_wave_index: int = 0
 var barrage_next_wave_time: float = 0.0
+var visual_last_position: Vector2 = Vector2.ZERO
+var visual_bob_time: float = 0.0
 
 func _ready() -> void:
 	add_to_group("damageable")
@@ -79,6 +81,7 @@ func _ready() -> void:
 	health_component.defense_changed.connect(_on_defense_changed)
 	health_component.died.connect(_on_died)
 	hp = max_hp
+	visual_last_position = global_position
 	_setup_body_visual()
 	_setup_weapon_visual()
 	landing_ring.visible = false
@@ -413,7 +416,7 @@ func _setup_body_visual() -> void:
 	body_sprite.texture = TEXTURE_LOADER.load_texture(JUDICATOR_BODY_TEXTURE_PATH)
 	body_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	body_sprite.centered = true
-	body_sprite.scale = Vector2.ONE * 0.40
+	body_sprite.scale = Vector2.ONE * 0.36
 	body.add_child(body_sprite)
 	body.color = Color(1.0, 1.0, 1.0, 0.0)
 
@@ -428,8 +431,8 @@ func _setup_weapon_visual() -> void:
 	sword_sprite.texture = TEXTURE_LOADER.load_texture(JUDICATOR_WEAPON_TEXTURE_PATH)
 	sword_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	sword_sprite.centered = true
-	sword_sprite.scale = Vector2.ONE * 0.44
-	sword_sprite.position = Vector2(-36.0, 4.0)
+	sword_sprite.scale = Vector2.ONE * 0.68
+	sword_sprite.position = Vector2(-62.0, 4.0)
 	sword.add_child(sword_sprite)
 	sword.color = Color(1.0, 1.0, 1.0, 0.0)
 
@@ -452,7 +455,8 @@ func _update_visuals() -> void:
 		if to_target != Vector2.ZERO:
 			sword_direction = to_target.normalized()
 	sword.position = sword_direction * 18.0 + Vector2(0.0, 2.0)
-	sword.rotation = sword_direction.angle() + sword_angle_offset
+	sword.rotation = _weapon_guard_rotation(sword_direction, -46.0) + sword_angle_offset
+	_apply_heavy_body_motion()
 	var pulse := 0.82 + 0.18 * sin(Time.get_ticks_msec() * 0.01)
 	if landing_ring.visible:
 		landing_ring.scale = Vector2.ONE * (0.94 + 0.08 * pulse)
@@ -461,6 +465,24 @@ func _update_visuals() -> void:
 	if slash_line.visible:
 		slash_line.width = 4.0 + 1.2 * pulse
 		slash_line.modulate = Color(1.0, 1.0, 1.0, 0.74 + 0.16 * pulse)
+	visual_last_position = global_position
+
+func _weapon_guard_rotation(direction: Vector2, guard_degrees: float) -> float:
+	var facing := direction.normalized() if direction.length_squared() > 0.0001 else Vector2.RIGHT
+	var side_sign := -1.0 if facing.x < -0.05 else 1.0
+	return facing.angle() + deg_to_rad(guard_degrees * side_sign)
+
+func _apply_heavy_body_motion() -> void:
+	var movement := global_position - visual_last_position
+	var motion_ratio := clampf(movement.length() / maxf(move_speed * get_physics_process_delta_time(), 1.0), 0.0, 1.0)
+	visual_bob_time += 0.06 + motion_ratio * 0.17
+	var facing := -1.0 if line_direction.x < -0.05 else 1.0
+	if body_sprite != null:
+		body_sprite.flip_h = facing < 0.0
+	var stomp := absf(sin(visual_bob_time))
+	body.position = Vector2(0.0, stomp * (1.2 + motion_ratio * 3.8))
+	body.rotation = sin(visual_bob_time * 0.5) * (0.01 + motion_ratio * 0.018) * facing
+	body.scale = Vector2(1.0 + stomp * motion_ratio * 0.018, 1.0 - stomp * motion_ratio * 0.012)
 
 func _spawn_aftershock() -> void:
 	var ring := Line2D.new()

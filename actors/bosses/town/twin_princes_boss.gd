@@ -49,7 +49,9 @@ var slow_factor: float = 1.0
 var desperation_active: bool = false
 var body_sprite: Sprite2D = null
 var spear_sprite: Sprite2D = null
-var spear_angle_offset: float = deg_to_rad(66.0)
+var spear_angle_offset: float = 0.0
+var visual_last_position: Vector2 = Vector2.ZERO
+var visual_bob_time: float = 0.0
 
 func _ready() -> void:
 	add_to_group("damageable")
@@ -58,6 +60,7 @@ func _ready() -> void:
 	health_component.setup(max_hp, defense_value)
 	health_component.damaged.connect(_on_damaged)
 	health_component.died.connect(_on_died)
+	visual_last_position = global_position
 	_setup_body_visual()
 	_setup_weapon_visual()
 	_refresh_phase_visuals()
@@ -192,7 +195,7 @@ func _process_idle(delta: float) -> void:
 	var to_target := target.global_position - global_position
 	var distance := to_target.length()
 	if distance > 0.0:
-		spear.rotation = to_target.angle()
+		spear.rotation = _weapon_guard_rotation(to_target, -42.0)
 	if current_phase == 2 and _can_use_skills() and barrage_cooldown <= 0.0 and distance >= (120.0 if desperation_active else 150.0):
 		_start_barrage()
 		return
@@ -375,7 +378,7 @@ func _setup_body_visual() -> void:
 	body_sprite = Sprite2D.new()
 	body_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	body_sprite.centered = true
-	body_sprite.scale = Vector2.ONE * 0.39
+	body_sprite.scale = Vector2.ONE * 0.31
 	body.add_child(body_sprite)
 	body.color = Color(1.0, 1.0, 1.0, 0.0)
 
@@ -389,8 +392,8 @@ func _setup_weapon_visual() -> void:
 	spear_sprite = Sprite2D.new()
 	spear_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	spear_sprite.centered = true
-	spear_sprite.scale = Vector2.ONE * 0.46
-	spear_sprite.position = Vector2(-40.0, 2.0)
+	spear_sprite.scale = Vector2.ONE * 0.60
+	spear_sprite.position = Vector2(-62.0, 2.0)
 	spear.add_child(spear_sprite)
 	spear.color = Color(1.0, 1.0, 1.0, 0.0)
 
@@ -414,7 +417,8 @@ func _update_visuals() -> void:
 		if to_target != Vector2.ZERO:
 			aim_direction = to_target.normalized()
 	spear.position = aim_direction * 20.0 + Vector2(0.0, 4.0)
-	spear.rotation = aim_direction.angle() + spear_angle_offset
+	spear.rotation = _weapon_guard_rotation(aim_direction, -42.0) + spear_angle_offset
+	_apply_prince_body_motion(aim_direction)
 	var pulse := 0.82 + 0.18 * sin(Time.get_ticks_msec() * 0.01)
 	if teleport_marker.visible:
 		teleport_marker.scale = Vector2.ONE * (0.92 + 0.08 * pulse)
@@ -427,6 +431,22 @@ func _update_visuals() -> void:
 		phase_ring.scale = Vector2.ONE * (0.94 + 0.08 * pulse)
 		phase_ring.width = 3.4 + 1.0 * pulse
 		phase_ring.modulate = Color(1.0, 1.0, 1.0, 0.74 + 0.16 * pulse)
+	visual_last_position = global_position
+
+func _weapon_guard_rotation(direction: Vector2, guard_degrees: float) -> float:
+	var facing := direction.normalized() if direction.length_squared() > 0.0001 else Vector2.RIGHT
+	var side_sign := -1.0 if facing.x < -0.05 else 1.0
+	return facing.angle() + deg_to_rad(guard_degrees * side_sign)
+
+func _apply_prince_body_motion(aim_direction: Vector2) -> void:
+	var movement := global_position - visual_last_position
+	var motion_ratio := clampf(movement.length() / maxf(move_speed * get_physics_process_delta_time(), 1.0), 0.0, 1.0)
+	visual_bob_time += 0.09 + motion_ratio * 0.13
+	var facing := -1.0 if aim_direction.x < -0.05 else 1.0
+	if body_sprite != null:
+		body_sprite.flip_h = facing < 0.0
+	body.position = Vector2(0.0, sin(visual_bob_time) * (1.0 + motion_ratio * 2.6))
+	body.rotation = sin(visual_bob_time * 0.72) * (0.018 + motion_ratio * 0.04) * facing
 
 func _spawn_damage_number(amount: float, is_critical: bool) -> void:
 	var damage_number := DAMAGE_NUMBER_SCENE.instantiate()

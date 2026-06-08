@@ -20,7 +20,7 @@ const ENCOUNTER_SCENES := [
 	preload("res://actors/encounters/town_mob_encounter.tscn"),
 	preload("res://actors/encounters/town_mob_encounter.tscn"),
 	preload("res://actors/bosses/town/judicator_boss.tscn"),
-	preload("res://actors/bosses/town/royal_guard_formation.tscn"),
+	preload("res://actors/encounters/empty_encounter.tscn"),
 	preload("res://actors/bosses/town/twin_princes_boss.tscn")
 ]
 const FINAL_BOSS_SCENES := [
@@ -32,6 +32,9 @@ const ENCOUNTER_ROOM_INDICES := [0, 1, 2, 3, 8, 9, 10, 11, 12]
 const RELIC_REROLL_COST := 12
 const HIT_FEEDBACK_COOLDOWN_MSEC := 55
 const GATE_WALK_FINISH_DISTANCE := 10.0
+const GATE_WALK_TIMEOUT_SECONDS := 4.0
+const GATE_WALK_STUCK_SECONDS := 0.75
+const GATE_WALK_PROGRESS_EPSILON := 1.5
 const LEVEL_UP_FLASH_COLOR := Color(1.0, 0.92, 0.62, 1.0)
 const XP_FLASH_COLOR := Color(0.68, 0.86, 1.0, 1.0)
 const GOLD_FLASH_COLOR := Color(1.0, 0.88, 0.52, 1.0)
@@ -71,6 +74,9 @@ var map_runtime: Node = null
 var gate_walk_active: bool = false
 var gate_walk_target: Vector2 = Vector2.ZERO
 var gate_walk_callback: Callable = Callable()
+var gate_walk_elapsed: float = 0.0
+var gate_walk_stuck_elapsed: float = 0.0
+var gate_walk_last_distance: float = INF
 var door_transition_layer: CanvasLayer = null
 var door_transition_backdrop: ColorRect = null
 var inventory_panel: CanvasLayer = null
@@ -141,17 +147,31 @@ func _process_gate_walk() -> void:
 		return
 	var player_node := player_character as Node2D
 	var to_target := gate_walk_target - player_node.global_position
-	if to_target.length() <= GATE_WALK_FINISH_DISTANCE:
-		var callback := gate_walk_callback
-		_clear_player_auto_walk()
-		if callback.is_valid():
-			callback.call()
+	var distance := to_target.length()
+	var delta := get_process_delta_time()
+	gate_walk_elapsed += delta
+	if distance <= GATE_WALK_FINISH_DISTANCE:
+		_finish_gate_walk()
+		return
+	if distance >= gate_walk_last_distance - GATE_WALK_PROGRESS_EPSILON:
+		gate_walk_stuck_elapsed += delta
+	else:
+		gate_walk_stuck_elapsed = 0.0
+	gate_walk_last_distance = distance
+	if gate_walk_elapsed >= GATE_WALK_TIMEOUT_SECONDS or gate_walk_stuck_elapsed >= GATE_WALK_STUCK_SECONDS:
+		_finish_gate_walk()
 		return
 	var direction := to_target.normalized()
 	if player_character.has_method("set_auto_walk_direction"):
 		player_character.set_auto_walk_direction(direction)
 	else:
-		player_node.global_position += direction * 170.0 * get_process_delta_time()
+		player_node.global_position += direction * 170.0 * delta
+
+func _finish_gate_walk() -> void:
+	var callback := gate_walk_callback
+	_clear_player_auto_walk()
+	if callback.is_valid():
+		callback.call()
 
 func _walk_player_to_room_exit(callback: Callable) -> void:
 	if player_character == null or not is_instance_valid(player_character) or not (player_character is Node2D):
@@ -173,6 +193,9 @@ func _walk_player_to_target(target_position: Vector2, callback: Callable) -> voi
 	gate_walk_target = target_position
 	gate_walk_callback = callback
 	gate_walk_active = true
+	gate_walk_elapsed = 0.0
+	gate_walk_stuck_elapsed = 0.0
+	gate_walk_last_distance = player_node.global_position.distance_to(gate_walk_target)
 	if player_character.has_method("clear_control_effects"):
 		player_character.clear_control_effects(true, true, true)
 	if player_character.has_method("set_auto_walk_direction"):
@@ -182,6 +205,9 @@ func _clear_player_auto_walk() -> void:
 	gate_walk_active = false
 	gate_walk_target = Vector2.ZERO
 	gate_walk_callback = Callable()
+	gate_walk_elapsed = 0.0
+	gate_walk_stuck_elapsed = 0.0
+	gate_walk_last_distance = INF
 	if player_character != null and is_instance_valid(player_character) and player_character.has_method("set_auto_walk_direction"):
 		player_character.set_auto_walk_direction(Vector2.ZERO)
 
@@ -458,6 +484,26 @@ func _toggle_inventory_panel() -> void:
 	_refresh_battle_status()
 
 func _on_encounter_defeated() -> void:
+	var skip_rewards := current_encounter != null and is_instance_valid(current_encounter) and _has_property(current_encounter, "skip_rewards") and bool(current_encounter.get("skip_rewards"))
+	if skip_rewards:
+		if not active_encounter_prep.is_empty():
+			RunDirector.set_pending_encounter_prep(active_encounter_prep)
+		current_encounter = null
+		active_encounter_prep.clear()
+		_refresh_battle_status(
+			_ui_text("Chamber Empty", "空房间", "空房間"),
+			_ui_text("No enemies remain here.", "这里没有敌人。", "這裡沒有敵人。"),
+			_localized_detail_text(_ui_text("Moving to the next chamber.", "正在前往下一张图。", "正在前往下一張圖。"))
+		)
+		var empty_timer := get_tree().create_timer(0.35)
+		empty_timer.timeout.connect(func() -> void:
+			if is_instance_valid(self) and player_character != null and is_instance_valid(player_character) and float(player_character.hp) > 0.0:
+				_walk_player_to_room_exit(func() -> void:
+					if is_instance_valid(self):
+						_start_next_encounter()
+				)
+		)
+		return
 	var reward := RunDirector.reward_encounter(encounter_index, player_character)
 	var reward_bonus := int(active_encounter_prep.get("reward_bonus", 0))
 	if reward_bonus > 0:
@@ -1190,9 +1236,9 @@ func _refresh_battle_status(override_title: String = "", override_subtitle: Stri
 			current_encounter.get_status_title(),
 			current_encounter.get_status_text(),
 			_localized_detail_text(_ui_text(
-				"Route: outer rooms use soldiers, Palace Hall uses early bosses, King Gate uses Twin Princes, and the final chamber pulls one of three final bosses.",
-				"路线：宫外地图为小兵战，皇宫前厅放第一个 Boss，王门前放双子 Boss。",
-				"路線：宮外地圖為小兵戰，皇宮前廳放第一個 Boss，王門前放雙子 Boss。"
+				"Route: outer rooms use soldiers, Palace Hall holds the gate boss, the next chamber is empty, King Gate holds Twin Princes, and the final chamber pulls one of three final bosses.",
+				"路线：宫外地图为小兵战，皇宫前厅放守城 Boss，下一张图为空房，王门前放双子王子。",
+				"路線：宮外地圖為小兵戰，皇宮前廳放守城 Boss，下一張圖為空房，王門前放雙子王子。"
 			))
 		)
 	if battle_status.has_method("set_context"):
@@ -1359,7 +1405,7 @@ func _encounter_threat_hint(encounter: Node) -> String:
 				"第 %d 波已清空，在下一隊落位前重新站好位置。"
 			) % max(wave_index + 1, 1)
 			return "%s %s" % [modifier_hint, reset_hint] if not modifier_hint.is_empty() else reset_hint
-		if wave_total > 0 and wave_index >= wave_total - 1:
+		if wave_total > 1 and wave_index >= wave_total - 1:
 			var final_hint := _ui_text(
 				"Final wave mixes elites with arcanist control. Remove ranged pressure first.",
 				"最后一波会把精英和奥术控制混在一起，先拆远程压力。",

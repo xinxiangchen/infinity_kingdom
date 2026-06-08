@@ -143,6 +143,10 @@ const PROFILE_LIBRARY := {
 		"music": &"town_boss",
 		"ambience": &"town_boss"
 	},
+	"twin_princes": {
+		"music": &"town_boss",
+		"ambience": &"town_boss"
+	},
 	"palace_explore": {
 		"music": &"palace_explore",
 		"ambience": &"town_boss"

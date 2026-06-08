@@ -140,7 +140,7 @@ func _process_idle(delta: float) -> void:
 	var to_target := target.global_position - global_position
 	var distance := to_target.length()
 	if distance > 0.0:
-		sword.rotation = to_target.angle()
+		sword.rotation = _sword_visual_rotation(to_target)
 	if _can_use_skills() and skill2_cooldown_remaining <= 0.0 and distance <= 190.0:
 		_start_sweep()
 		return
@@ -240,6 +240,22 @@ func _update_visuals() -> void:
 	body.color = base_color
 	aura_ring.visible = immune
 	aura_ring.default_color = Color(0.8, 0.92, 1.0, 0.75) if immune else Color(1.0, 0.84, 0.5, 0.0)
+	if target != null and is_instance_valid(target):
+		var to_target := target.global_position - global_position
+		if to_target.length_squared() > 0.0001:
+			sword.rotation = _sword_visual_rotation(to_target)
+
+func _sword_visual_rotation(direction: Vector2) -> float:
+	var facing := direction.normalized() if direction.length_squared() > 0.0001 else Vector2.RIGHT
+	var side_sign := -1.0 if facing.x < -0.05 else 1.0
+	var guard_degrees := -44.0
+	if state == &"basic_attack":
+		var attack_progress := clampf(state_time / 0.42, 0.0, 1.0)
+		guard_degrees = lerpf(-52.0, 18.0, attack_progress)
+	elif state == &"skill_2_sweep":
+		var sweep_progress := clampf(state_time / 2.0, 0.0, 1.0)
+		guard_degrees = lerpf(-60.0, 24.0, sweep_progress)
+	return facing.angle() + deg_to_rad(guard_degrees * side_sign)
 
 func _spawn_damage_number(amount: float, is_critical: bool) -> void:
 	var damage_number := DAMAGE_NUMBER_SCENE.instantiate()

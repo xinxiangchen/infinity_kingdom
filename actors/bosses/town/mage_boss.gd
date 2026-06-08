@@ -69,6 +69,8 @@ var body_sprite: Sprite2D = null
 var weapon_sprite: Sprite2D = null
 var weapon_angle_offset: float = deg_to_rad(98.0)
 var orbit_direction: float = 1.0
+var visual_last_position: Vector2 = Vector2.ZERO
+var visual_bob_time: float = 0.0
 
 func _ready() -> void:
 	add_to_group("damageable")
@@ -78,6 +80,7 @@ func _ready() -> void:
 	health_component.shield_changed.connect(_on_shield_changed)
 	health_component.died.connect(_on_died)
 	hp = max_hp
+	visual_last_position = global_position
 	_setup_body_visual()
 	_setup_weapon_visual()
 	for child in blade_orbit.get_children():
@@ -404,7 +407,7 @@ func _setup_body_visual() -> void:
 	body_sprite.texture = TEXTURE_LOADER.load_texture(MAGE_BODY_TEXTURE_PATH)
 	body_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	body_sprite.centered = true
-	body_sprite.scale = Vector2.ONE * 0.38
+	body_sprite.scale = Vector2.ONE * 0.32
 	body.add_child(body_sprite)
 	body.color = Color(1.0, 1.0, 1.0, 0.0)
 
@@ -419,8 +422,8 @@ func _setup_weapon_visual() -> void:
 	weapon_sprite.texture = TEXTURE_LOADER.load_texture(MAGE_WEAPON_TEXTURE_PATH)
 	weapon_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	weapon_sprite.centered = true
-	weapon_sprite.scale = Vector2.ONE * 0.42
-	weapon_sprite.position = Vector2(-34.0, 4.0)
+	weapon_sprite.scale = Vector2.ONE * 0.62
+	weapon_sprite.position = Vector2(-40.0, 4.0)
 	weapon.add_child(weapon_sprite)
 
 func _animate_weapon_swing(start_degrees: float, end_degrees: float, duration: float) -> void:
@@ -450,9 +453,23 @@ func _update_visuals() -> void:
 	if enchant_sigil.visible:
 		enchant_sigil.rotation += 0.08
 		enchant_sigil.scale = Vector2.ONE * (0.96 + 0.08 * sin(Time.get_ticks_msec() * 0.008))
+	_apply_float_body_motion(1.45, 0.055)
 	weapon.position = line_direction * 18.0 + Vector2(0.0, -4.0)
 	weapon.rotation = line_direction.angle() + weapon_angle_offset
 	projectile_spawner.position = line_direction * 26.0
+	visual_last_position = global_position
+
+func _apply_float_body_motion(float_scale: float, sway_scale: float) -> void:
+	var movement := global_position - visual_last_position
+	var motion_ratio := clampf(movement.length() / maxf(move_speed * get_physics_process_delta_time(), 1.0), 0.0, 1.0)
+	visual_bob_time += 0.075 + motion_ratio * 0.11
+	var facing := -1.0 if line_direction.x < -0.05 else 1.0
+	if body_sprite != null:
+		body_sprite.flip_h = facing < 0.0
+		body_sprite.position.x = sin(visual_bob_time * 0.7) * (1.2 + motion_ratio * 2.4) * facing
+		body_sprite.scale = Vector2(0.32 + sin(visual_bob_time * 0.9) * 0.008, 0.32 + cos(visual_bob_time * 0.75) * 0.018)
+	body.position = Vector2(0.0, sin(visual_bob_time) * (2.0 + motion_ratio * 3.4) * float_scale)
+	body.rotation = sin(visual_bob_time * 0.6) * (0.018 + motion_ratio * sway_scale) * facing
 
 func _build_ring_points(radius: float, steps: int = 16) -> PackedVector2Array:
 	var points := PackedVector2Array()

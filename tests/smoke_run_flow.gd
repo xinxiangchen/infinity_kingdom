@@ -48,8 +48,8 @@ func _run() -> void:
 	preview_encounter.call("bind_player", encounter_player)
 	await process_frame
 	var preview_waves: Variant = preview_encounter.get("active_waves")
-	if not (preview_waves is Array) or (preview_waves as Array).size() != 4:
-		push_error("Town encounter did not build three waves plus a final wave")
+	if not (preview_waves is Array) or (preview_waves as Array).size() != 1:
+		push_error("Town encounter did not build exactly one enemy wave")
 		quit(1)
 		return
 	var modifier_title := String(preview_encounter.call("get_modifier_title")) if preview_encounter.has_method("get_modifier_title") else ""
@@ -64,6 +64,24 @@ func _run() -> void:
 		return
 	preview_encounter.queue_free()
 	encounter_player.queue_free()
+
+	var empty_encounter_scene := load("res://actors/encounters/empty_encounter.tscn") as PackedScene
+	if empty_encounter_scene == null:
+		push_error("Empty encounter scene did not load")
+		quit(1)
+		return
+	var empty_encounter := empty_encounter_scene.instantiate()
+	var empty_state := {"cleared": false}
+	empty_encounter.defeated.connect(func() -> void:
+		empty_state["cleared"] = true
+	)
+	root.add_child(empty_encounter)
+	await create_timer(0.1).timeout
+	if not bool(empty_state["cleared"]):
+		push_error("Empty encounter did not auto-clear")
+		quit(1)
+		return
+	empty_encounter.queue_free()
 	await process_frame
 
 	var world := world_scene.instantiate()
@@ -209,6 +227,32 @@ func _run() -> void:
 	var threat_value := world.battle_status.get("threat_value_label") as Label
 	if threat_value == null or threat_value.text.is_empty():
 		push_error("Battle status threat label did not populate after starting an encounter")
+		quit(1)
+		return
+
+	if world.current_encounter != null and is_instance_valid(world.current_encounter):
+		world.current_encounter.queue_free()
+	var first_room_stub := Node.new()
+	world.add_child(first_room_stub)
+	world.current_encounter = first_room_stub
+	world.player_character.global_position = world._room_exit_target(0)
+	world._on_encounter_defeated()
+	await create_timer(0.9).timeout
+	await process_frame
+	if world.run_event_panel == null or not world.run_event_panel.visible:
+		push_error("Run event panel did not open after the first map encounter")
+		quit(1)
+		return
+	world.run_event_panel.close()
+	world._on_run_event_choice_made("skip")
+	await create_timer(1.4).timeout
+	await process_frame
+	if world.encounter_index != 1:
+		push_error("World did not advance to the second map encounter")
+		quit(1)
+		return
+	if world.current_encounter == null or not is_instance_valid(world.current_encounter):
+		push_error("Second map encounter did not begin after first map reward")
 		quit(1)
 		return
 

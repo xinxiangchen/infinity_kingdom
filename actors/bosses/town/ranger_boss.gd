@@ -70,7 +70,9 @@ var slow_time_remaining: float = 0.0
 var slow_factor: float = 1.0
 var body_sprite: Sprite2D = null
 var weapon_sprite: Sprite2D = null
-var weapon_angle_offset: float = deg_to_rad(56.0)
+var weapon_angle_offset: float = 0.0
+var visual_last_position: Vector2 = Vector2.ZERO
+var visual_bob_time: float = 0.0
 
 func _ready() -> void:
 	add_to_group("damageable")
@@ -79,6 +81,7 @@ func _ready() -> void:
 	health_component.healed.connect(_on_healed)
 	health_component.died.connect(_on_died)
 	hp = max_hp
+	visual_last_position = global_position
 	_setup_body_visual()
 	_setup_weapon_visual()
 	aim_ring.visible = false
@@ -220,7 +223,7 @@ func _start_basic_attack() -> void:
 	state_time = 0.0
 	action_committed = false
 	attack_cooldown = _get_attack_interval()
-	_animate_weapon_swing(-94.0, 34.0, 0.2)
+	_animate_weapon_swing(-32.0, 14.0, 0.2)
 	Sfx.play_event(&"ranger_attack", global_position)
 
 func _process_basic_attack() -> void:
@@ -239,7 +242,7 @@ func _start_skill1() -> void:
 	aim_ring.visible = true
 	aim_ring.scale = Vector2.ONE * 0.42
 	aim_ring.modulate = Color(0.72, 1.0, 0.86, 0.88)
-	_animate_weapon_swing(-74.0, 24.0, skill1_cast_duration)
+	_animate_weapon_swing(-28.0, 10.0, skill1_cast_duration)
 
 func _process_skill1_cast() -> void:
 	if not action_committed and state_time >= skill1_cast_duration * 0.65:
@@ -309,7 +312,7 @@ func _start_skill3() -> void:
 	skill3_cooldown_remaining = skill3_cooldown
 	assassination_mark.visible = true
 	assassination_mark.scale = Vector2.ONE * 0.76
-	_animate_weapon_swing(-104.0, 12.0, 0.18)
+	_animate_weapon_swing(-34.0, 12.0, 0.18)
 	Sfx.play_event(&"ranger_skill3_assassinate", global_position)
 
 func _process_skill3_dash(delta: float) -> void:
@@ -446,7 +449,7 @@ func _setup_body_visual() -> void:
 	body_sprite.texture = TEXTURE_LOADER.load_texture(RANGER_BODY_TEXTURE_PATH)
 	body_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	body_sprite.centered = true
-	body_sprite.scale = Vector2.ONE * 0.38
+	body_sprite.scale = Vector2.ONE * 0.33
 	body.add_child(body_sprite)
 	body.color = Color(1.0, 1.0, 1.0, 0.0)
 
@@ -461,8 +464,8 @@ func _setup_weapon_visual() -> void:
 	weapon_sprite.texture = TEXTURE_LOADER.load_texture(RANGER_WEAPON_TEXTURE_PATH)
 	weapon_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	weapon_sprite.centered = true
-	weapon_sprite.scale = Vector2.ONE * 0.46
-	weapon_sprite.position = Vector2(-32.0, 5.0)
+	weapon_sprite.scale = Vector2.ONE * 0.66
+	weapon_sprite.position = Vector2(-60.0, 5.0)
 	weapon.add_child(weapon_sprite)
 
 func _animate_weapon_swing(start_degrees: float, end_degrees: float, duration: float) -> void:
@@ -493,8 +496,26 @@ func _update_visuals() -> void:
 		assassination_mark.rotation += 0.16
 	assassination_mark.modulate = Color(1.0, 0.48, 0.42, 0.9)
 	weapon.position = line_direction * 18.0 + Vector2(0.0, -2.0)
-	weapon.rotation = line_direction.angle() + weapon_angle_offset
+	weapon.rotation = _weapon_guard_rotation(line_direction, -38.0) + weapon_angle_offset
 	projectile_spawner.position = line_direction * 28.0
+	_apply_agile_body_motion()
+	visual_last_position = global_position
+
+func _weapon_guard_rotation(direction: Vector2, guard_degrees: float) -> float:
+	var facing := direction.normalized() if direction.length_squared() > 0.0001 else Vector2.RIGHT
+	var side_sign := -1.0 if facing.x < -0.05 else 1.0
+	return facing.angle() + deg_to_rad(guard_degrees * side_sign)
+
+func _apply_agile_body_motion() -> void:
+	var movement := global_position - visual_last_position
+	var motion_ratio := clampf(movement.length() / maxf(move_speed * get_physics_process_delta_time(), 1.0), 0.0, 1.0)
+	visual_bob_time += 0.11 + motion_ratio * 0.18
+	var facing := -1.0 if line_direction.x < -0.05 else 1.0
+	if body_sprite != null:
+		body_sprite.flip_h = facing < 0.0
+		body_sprite.position.x = sin(visual_bob_time * 0.85) * (1.0 + motion_ratio * 3.0) * facing
+	body.position = Vector2(sin(visual_bob_time * 0.8) * motion_ratio * 3.2 * facing, sin(visual_bob_time) * (1.5 + motion_ratio * 3.8))
+	body.rotation = sin(visual_bob_time * 0.7) * (0.03 + motion_ratio * 0.075) * facing
 
 func _spawn_damage_number(amount: float, is_critical: bool) -> void:
 	var damage_number := DAMAGE_NUMBER_SCENE.instantiate()
