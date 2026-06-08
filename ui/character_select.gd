@@ -198,6 +198,8 @@ var menu_left_panel: PanelContainer
 var title_label: Label
 var subtitle_label: Label
 var background_rect: TextureRect
+var title_banner_frame: PanelContainer
+var title_banner_image: TextureRect
 var hero_top_row: HBoxContainer
 var hero_portrait_frame: PanelContainer
 var hero_portrait: TextureRect
@@ -275,6 +277,22 @@ func _build_ui() -> void:
 	var root_column := VBoxContainer.new()
 	root_column.add_theme_constant_override("separation", 18)
 	panel_margin.add_child(root_column)
+
+	title_banner_frame = PanelContainer.new()
+	title_banner_frame.name = "TitleBannerFrame"
+	title_banner_frame.custom_minimum_size = Vector2(0, 164)
+	title_banner_frame.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title_banner_frame.add_theme_stylebox_override("panel", UISkin.icon_slot_style())
+	root_column.add_child(title_banner_frame)
+
+	title_banner_image = TextureRect.new()
+	title_banner_image.name = "TitleBannerImage"
+	title_banner_image.set_anchors_preset(Control.PRESET_FULL_RECT)
+	title_banner_image.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	title_banner_image.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	title_banner_image.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	title_banner_image.texture = load("res://assets/ui/background/title_screen_bg.png") as Texture2D
+	title_banner_frame.add_child(title_banner_image)
 
 	title_label = Label.new()
 	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -634,48 +652,60 @@ func _show_menu() -> void:
 	screen_mode = "menu"
 	detail_mode = "menu"
 	menu_preview_key = &""
+	_sync_title_banner_visibility()
 	menu_overview_panel.visible = false
 	cards_panel.visible = false
 	_refresh_menu_overview_copy()
 	_apply_title_preview()
 	_refresh_copy()
+	_queue_layout_refresh()
 	call_deferred("_focus_primary_button")
 
 func _show_hero_select() -> void:
 	screen_mode = "select"
 	detail_mode = "hero"
 	menu_preview_key = &""
+	_sync_title_banner_visibility()
 	menu_overview_panel.visible = false
 	cards_panel.visible = true
 	_set_selected_hero(selected_hero_index)
 	_refresh_copy()
+	_queue_layout_refresh()
 	call_deferred("_focus_selected_card")
 
 func _show_gallery() -> void:
 	screen_mode = "gallery"
 	detail_mode = "gallery"
 	menu_preview_key = &""
+	_sync_title_banner_visibility()
 	menu_overview_panel.visible = true
 	cards_panel.visible = false
 	_refresh_menu_overview_copy()
 	_set_gallery_entry(active_gallery_entry_id)
 	_refresh_copy()
+	_queue_layout_refresh()
 	call_deferred("_focus_current_overview_entry")
 
 func _show_about() -> void:
 	screen_mode = "about"
 	detail_mode = "about"
 	menu_preview_key = &""
+	_sync_title_banner_visibility()
 	menu_overview_panel.visible = true
 	cards_panel.visible = false
 	_refresh_menu_overview_copy()
 	_set_about_entry(active_about_entry_id)
 	_refresh_copy()
+	_queue_layout_refresh()
 	call_deferred("_focus_current_overview_entry")
 
 func _focus_selected_card() -> void:
 	if selected_hero_index >= 0 and selected_hero_index < hero_buttons.size():
 		hero_buttons[selected_hero_index].grab_focus()
+
+func _sync_title_banner_visibility() -> void:
+	if title_banner_frame != null:
+		title_banner_frame.visible = screen_mode == "menu"
 
 func _focus_primary_button() -> void:
 	if primary_start_button != null:
@@ -1005,9 +1035,9 @@ func _hint_text() -> String:
 			)
 		_:
 			return _locale_text(
-				"Enter hero select  |  S settings  |  F10 audio  |  G gallery  |  A about  |  Q quit",
-				"Enter 进入选角  |  S 设置  |  F10 音频  |  G 图鉴  |  A 介绍  |  Q 退出",
-				"Enter 進入選角  |  S 設定  |  F10 音訊  |  G 圖鑑  |  A 介紹  |  Q 退出"
+				"Enter New Game  |  A About  |  S Setting  |  Q Quit",
+				"Enter New Game  |  A About  |  S Setting  |  Q Quit",
+				"Enter New Game  |  A About  |  S Setting  |  Q Quit"
 			)
 
 func _queue_layout_refresh() -> void:
@@ -1033,6 +1063,9 @@ func _refresh_layout() -> void:
 	panel_margin.add_theme_constant_override("margin_bottom", 16 if compact else 24)
 	if menu_left_panel != null:
 		menu_left_panel.custom_minimum_size.x = 192.0 if very_compact else (224.0 if compact else 286.0)
+	if title_banner_frame != null:
+		title_banner_frame.visible = screen_mode == "menu"
+		title_banner_frame.custom_minimum_size.y = 96.0 if very_compact else (124.0 if compact else 164.0)
 	if hero_top_row != null:
 		hero_top_row.add_theme_constant_override("separation", 10 if very_compact else (12 if compact else 16))
 	if hero_portrait_frame != null:
@@ -1119,7 +1152,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_S:
 				settings_requested.emit()
 			KEY_G:
-				_show_gallery()
+				if screen_mode != "menu":
+					_show_gallery()
+				else:
+					return
 			KEY_A:
 				_show_about()
 			KEY_Q:

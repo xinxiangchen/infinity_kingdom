@@ -1,6 +1,7 @@
 extends Node2D
 
 const MapBrowserDemo := preload("res://tools/map_browser_demo.gd")
+const RuntimeTextureLoader := preload("res://combat/runtime_texture_loader.gd")
 
 const MAP_CAMERA_ZOOM := Vector2(1.7, 1.7)
 const PROP_COLLISION_DEBUG_VISIBLE := false
@@ -106,7 +107,7 @@ func _build_runtime_map_rooms() -> void:
 	map_walkable_rects.clear()
 	var x_cursor := 0.0
 	for index in range(MapBrowserDemo.ROOM_PATHS.size()):
-		var texture := load(String(MapBrowserDemo.ROOM_PATHS[index])) as Texture2D
+		var texture := RuntimeTextureLoader.load_texture(String(MapBrowserDemo.ROOM_PATHS[index]))
 		if texture == null:
 			push_warning("Missing map texture: %s" % MapBrowserDemo.ROOM_PATHS[index])
 			continue
@@ -254,7 +255,7 @@ func _try_add_generated_room_prop(room_index: int, candidate: Dictionary, placed
 		return false
 	if room_index < 0 or room_index >= map_room_rects.size() or room_index >= map_walkable_rects.size():
 		return false
-	var texture := load(String(candidate.get("path", ""))) as Texture2D
+	var texture := RuntimeTextureLoader.load_texture(String(candidate.get("path", "")))
 	if texture == null:
 		return false
 	var room_rect := map_room_rects[room_index]
@@ -310,7 +311,7 @@ func _add_room_prop(room_index: int, candidate: Dictionary) -> void:
 		return
 	if room_index < 0 or room_index >= map_room_rects.size() or room_index >= MapBrowserDemo.ROOM_PROP_LAYER_PATHS.size():
 		return
-	var texture := load(String(MapBrowserDemo.ROOM_PROP_LAYER_PATHS[room_index])) as Texture2D
+	var texture := RuntimeTextureLoader.load_texture(String(MapBrowserDemo.ROOM_PROP_LAYER_PATHS[room_index]))
 	if texture == null:
 		push_warning("Missing prop layer texture: %s" % MapBrowserDemo.ROOM_PROP_LAYER_PATHS[room_index])
 		return

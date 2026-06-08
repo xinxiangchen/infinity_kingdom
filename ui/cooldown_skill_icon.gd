@@ -56,6 +56,15 @@ func _draw() -> void:
 	var ring_color := accent if ready else accent.lerp(Color(0.26, 0.30, 0.36, 1.0), 0.48)
 	draw_arc(center, radius + 1.0, 0.0, TAU, 64, Color(0.0, 0.0, 0.0, 0.44), 5.0, true)
 	draw_arc(center, radius + 1.0, -PI * 0.5, TAU - PI * 0.5, 64, ring_color, 2.6 if ready else 2.0, true)
+	if not ready:
+		var cooldown_text := "%.1f" % cooldown_remaining if cooldown_remaining < 10.0 else str(int(ceil(cooldown_remaining)))
+		var font := get_theme_default_font()
+		var font_size := maxi(13, int(round(side * 0.26)))
+		var text_size := font.get_string_size(cooldown_text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size)
+		var text_pos := center + Vector2(-text_size.x * 0.5, text_size.y * 0.32)
+		draw_circle(center, radius * 0.42, Color(0.0, 0.0, 0.0, 0.42))
+		draw_string(font, text_pos + Vector2(1.0, 1.0), cooldown_text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size, Color(0.0, 0.0, 0.0, 0.86))
+		draw_string(font, text_pos, cooldown_text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size, Color(1.0, 0.92, 0.72, 1.0))
 	if not hotkey.is_empty():
 		var font := get_theme_default_font()
 		var font_size := maxi(9, int(round(side * 0.20)))

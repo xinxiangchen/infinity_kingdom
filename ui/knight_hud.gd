@@ -3,6 +3,7 @@ extends CanvasLayer
 const RunEffects := preload("res://systems/run/run_effects.gd")
 const UISkin := preload("res://ui/ui_skin.gd")
 const CooldownSkillIcon := preload("res://ui/cooldown_skill_icon.gd")
+const HudMeterBar := preload("res://ui/hud_meter_bar.gd")
 const SKILL_SLOT_ACCENTS := {
 	"attack": Color(0.98, 0.86, 0.58),
 	"skill1": Color(0.92, 0.74, 0.70),
@@ -38,11 +39,11 @@ var status_header_label: Label
 var skills_header_label: Label
 var accessory_header_label: Label
 var run_header_label: Label
-var hp_bar: TextureProgressBar
+var hp_bar: Control
 var hp_label: Label
-var defense_bar: TextureProgressBar
+var defense_bar: Control
 var defense_label: Label
-var inspiration_bar: TextureProgressBar
+var inspiration_bar: Control
 var inspiration_label: Label
 var vitals_panel_root: PanelContainer
 var status_panel_root: PanelContainer
@@ -63,7 +64,7 @@ var accessory_grid: GridContainer
 var accessory_panel_root: PanelContainer
 var skill_grid: GridContainer
 var skill_slots: Dictionary = {}
-var meter_bars: Array[TextureProgressBar] = []
+var meter_bars: Array[Control] = []
 var combat_feed_tween: Tween = null
 var last_control_summary: String = ""
 var layout_size_override: Vector2 = Vector2.ZERO
@@ -455,19 +456,20 @@ func _add_run_metric(metric_id: String, caption: String) -> void:
 		"value": value_label
 	}
 
-func _meter(meter_id: String, label_text: String, _fill_color: Color) -> VBoxContainer:
+func _meter(meter_id: String, label_text: String, fill_color: Color) -> VBoxContainer:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 3)
 	var label := _make_label("%s 0 / 0" % label_text, 13, Color(0.86, 0.88, 0.92))
 	box.add_child(label)
-	var bar := TextureProgressBar.new()
+	var bar := HudMeterBar.new()
 	var bar_height := 20.0
 	if meter_id == "hp":
 		bar_height = 28.0
 	elif meter_id == "defense":
 		bar_height = 22.0
 	bar.custom_minimum_size = Vector2(386, bar_height)
-	UISkin.texture_bar(bar, meter_id)
+	bar.configure(meter_id, fill_color)
+	bar.set_meter_value(0.0, 0.0)
 	meter_bars.append(bar)
 	box.add_child(bar)
 	match meter_id:
@@ -589,19 +591,22 @@ func _connect_character_signal(signal_name: String, callable: Callable) -> void:
 		player_character.connect(StringName(signal_name), callable)
 
 func _on_hp_changed(current_hp: float, max_hp_value: float) -> void:
-	hp_bar.value = 0.0 if max_hp_value <= 0.0 else clampf(current_hp / max_hp_value, 0.0, 1.0)
+	if hp_bar != null:
+		hp_bar.call("set_meter_value", current_hp, max_hp_value)
 	var hp_percent := 0 if max_hp_value <= 0.0 else int(round(clampf(current_hp / max_hp_value, 0.0, 1.0) * 100.0))
 	hp_label.text = "%s %d / %d  |  %d%%" % [_locale_text("HP", "生命", "生命"), int(round(current_hp)), int(round(max_hp_value)), hp_percent]
 	_refresh_section_emphasis()
 
 func _on_inspiration_changed(current_inspiration: float, max_inspiration_value: float) -> void:
-	inspiration_bar.value = 0.0 if max_inspiration_value <= 0.0 else clampf(current_inspiration / max_inspiration_value, 0.0, 1.0)
+	if inspiration_bar != null:
+		inspiration_bar.call("set_meter_value", current_inspiration, max_inspiration_value)
 	var inspiration_percent := 0 if max_inspiration_value <= 0.0 else int(round(clampf(current_inspiration / max_inspiration_value, 0.0, 1.0) * 100.0))
 	inspiration_label.text = "%s %d / %d  |  %d%%" % [_locale_text("Inspiration", "灵感", "靈感"), int(round(current_inspiration)), int(round(max_inspiration_value)), inspiration_percent]
 	_refresh_section_emphasis()
 
 func _on_defense_changed(current_defense: float, max_defense_value: float) -> void:
-	defense_bar.value = 0.0 if max_defense_value <= 0.0 else clampf(current_defense / max_defense_value, 0.0, 1.0)
+	if defense_bar != null:
+		defense_bar.call("set_meter_value", current_defense, max_defense_value)
 	var defense_percent := 0 if max_defense_value <= 0.0 else int(round(clampf(current_defense / max_defense_value, 0.0, 1.0) * 100.0))
 	defense_label.text = "%s %d / %d  |  %d%%" % [_locale_text("Defense", "护甲", "護甲"), int(round(current_defense)), int(round(max_defense_value)), defense_percent]
 	_refresh_section_emphasis()
@@ -835,23 +840,29 @@ func _update_danger_visuals() -> void:
 		var pulse := 0.78 + 0.22 * sin(Time.get_ticks_msec() * 0.01)
 		hp_label.modulate = Color(1.0, 0.70 + 0.12 * pulse, 0.70 + 0.10 * pulse, 1.0)
 		hp_bar.modulate = Color(1.0, 0.92, 0.92, 0.92 + 0.08 * pulse)
+		hp_bar.call("set_meter_alert", true)
 	else:
 		hp_label.modulate = Color.WHITE
 		hp_bar.modulate = Color.WHITE
+		hp_bar.call("set_meter_alert", false)
 	if defense_ratio <= 0.22:
 		var defense_pulse := 0.82 + 0.18 * sin(Time.get_ticks_msec() * 0.012 + 0.7)
 		defense_label.modulate = Color(0.74 + 0.18 * defense_pulse, 0.92, 1.0, 1.0)
 		defense_bar.modulate = Color(0.90, 0.98, 1.0, 0.90 + 0.10 * defense_pulse)
+		defense_bar.call("set_meter_alert", true)
 	else:
 		defense_label.modulate = Color.WHITE
 		defense_bar.modulate = Color.WHITE
+		defense_bar.call("set_meter_alert", false)
 	if inspiration_ratio >= 0.95:
 		var inspiration_pulse := 0.86 + 0.14 * sin(Time.get_ticks_msec() * 0.011 + 1.5)
 		inspiration_label.modulate = Color(0.90, 0.96, 1.0, 1.0)
 		inspiration_bar.modulate = Color(1.0, 1.0, 1.0, 0.92 + 0.08 * inspiration_pulse)
+		inspiration_bar.call("set_meter_alert", true)
 	else:
 		inspiration_label.modulate = Color.WHITE
 		inspiration_bar.modulate = Color.WHITE
+		inspiration_bar.call("set_meter_alert", false)
 
 func _set_combat_feed(text: String, color_value: Color, scale_value: float = 1.0) -> void:
 	if combat_feed_label == null:

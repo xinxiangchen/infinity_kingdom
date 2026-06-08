@@ -97,9 +97,19 @@ func _run() -> void:
 		quit(1)
 		return
 	var background_rect := world.character_select.get("background_rect") as TextureRect
+	var title_banner_frame := world.character_select.get("title_banner_frame") as PanelContainer
+	var title_banner_image := world.character_select.get("title_banner_image") as TextureRect
 	var hero_portrait := world.character_select.get("hero_portrait") as TextureRect
 	if background_rect == null or background_rect.texture == null:
 		push_error("Character select background art did not initialize")
+		quit(1)
+		return
+	if title_banner_frame == null or not title_banner_frame.visible:
+		push_error("Title screen top banner did not initialize")
+		quit(1)
+		return
+	if title_banner_image == null or title_banner_image.texture == null:
+		push_error("Title screen top banner art did not initialize")
 		quit(1)
 		return
 	if hero_portrait == null or hero_portrait.texture == null:
@@ -131,6 +141,20 @@ func _run() -> void:
 		return
 	if not world.character_select.has_method("_set_selected_hero"):
 		push_error("Character select is missing hero detail selection")
+		quit(1)
+		return
+	world.character_select._show_hero_select()
+	await process_frame
+	if String(world.character_select.get("screen_mode")) != "select":
+		push_error("Character select did not enter hero select from New Game")
+		quit(1)
+		return
+	if cards_panel == null or not cards_panel.visible:
+		push_error("Character select did not show hero cards after New Game")
+		quit(1)
+		return
+	if title_banner_frame == null or title_banner_frame.visible:
+		push_error("Character select kept title banner visible during hero select")
 		quit(1)
 		return
 	world.character_select._set_selected_hero(1)
