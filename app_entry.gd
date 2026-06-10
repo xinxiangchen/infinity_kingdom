@@ -95,10 +95,16 @@ func _show_save_slots() -> void:
 
 func _on_save_slot_selected(slot_index: int) -> void:
 	selected_slot_index = slot_index
+	var slot := {}
 	if SaveManager != null:
-		SaveManager.select_slot(slot_index)
+		slot = SaveManager.select_slot(slot_index)
 	if save_slot_select != null:
 		save_slot_select.visible = false
+	var family_id := String(slot.get("family_id", ""))
+	if not family_id.is_empty():
+		selected_character_id = _character_id_for_family_id(family_id)
+		_on_normal_requested()
+		return
 	if character_select != null:
 		character_select.visible = true
 
@@ -189,3 +195,12 @@ func _locale_text(en_text: String, zh_hans_text: String, zh_hant_text: String) -
 			"zh_Hans":
 				return zh_hans_text
 	return en_text
+
+func _character_id_for_family_id(family_id: String) -> StringName:
+	match family_id:
+		"ranger":
+			return &"ranger"
+		"mage":
+			return &"mage"
+		_:
+			return &"knight"

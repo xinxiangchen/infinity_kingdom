@@ -68,6 +68,17 @@ func create_slot(slot_index: int, save_name: String, family_id: String = "") -> 
 	active_slot_changed.emit(active_slot.duplicate(true))
 	return active_slot.duplicate(true)
 
+func delete_slot(slot_index: int) -> void:
+	if not _is_valid_slot(slot_index):
+		return
+	_ensure_save_file()
+	_write_full_record(slot_index, _default_record(slot_index))
+	if slot_index == active_slot_index:
+		active_slot_index = -1
+		active_slot = {}
+		active_slot_changed.emit({})
+	slots_changed.emit(list_slots())
+
 func select_slot(slot_index: int) -> Dictionary:
 	var slot := read_slot(slot_index)
 	if slot.is_empty() or not bool(slot.get("occupied", false)):

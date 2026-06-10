@@ -76,6 +76,17 @@ func heal(amount: float) -> void:
 
 func receive_hit(payload: Dictionary) -> Dictionary:
 	var source: Node = payload.get("source", null)
+	if _is_owner_cheat_protected():
+		return {
+			"damage": 0.0,
+			"hp_damage": 0.0,
+			"defense_damage": 0.0,
+			"shield_damage": 0.0,
+			"total_damage": 0.0,
+			"is_critical": false,
+			"remaining_hp": hp,
+			"source": source
+		}
 	var incoming_damage := float(payload.get("damage", 0.0))
 	var crit_rate := float(payload.get("crit_rate", 0.0))
 	var is_critical := randf() < crit_rate
@@ -124,6 +135,12 @@ func receive_hit(payload: Dictionary) -> Dictionary:
 		died.emit()
 		result["died"] = true
 	return result
+
+func _is_owner_cheat_protected() -> bool:
+	if CheatMode == null or not bool(CheatMode.infinite_hp):
+		return false
+	var holder := get_parent()
+	return holder != null and holder.is_in_group("player")
 
 func apply_armor_break(multiplier: float, duration: float) -> void:
 	damage_taken_multiplier = multiplier

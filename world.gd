@@ -15,6 +15,7 @@ const HEIR_SELECT_PANEL_SCRIPT := preload("res://ui/heir_select_panel.gd")
 const RANGER_BOSS_SCENE := preload("res://actors/bosses/town/ranger_boss.tscn")
 const MAGE_BOSS_SCENE := preload("res://actors/bosses/town/mage_boss.tscn")
 const EMPEROR_BOSS_SCENE := preload("res://actors/bosses/town/emperor_boss.tscn")
+const TWIN_PRINCES_BOSS_SCENE := preload("res://actors/bosses/town/twin_princes_boss.tscn")
 const ENCOUNTER_SCENES := [
 	preload("res://actors/encounters/town_mob_encounter.tscn"),
 	preload("res://actors/encounters/town_mob_encounter.tscn"),
@@ -22,8 +23,7 @@ const ENCOUNTER_SCENES := [
 	preload("res://actors/encounters/town_mob_encounter.tscn"),
 	preload("res://actors/encounters/town_mob_encounter.tscn"),
 	preload("res://actors/bosses/town/judicator_boss.tscn"),
-	preload("res://actors/encounters/empty_encounter.tscn"),
-	preload("res://actors/bosses/town/twin_princes_boss.tscn")
+	preload("res://actors/encounters/empty_encounter.tscn")
 ]
 const FINAL_BOSS_SCENES := [
 	EMPEROR_BOSS_SCENE,
@@ -854,6 +854,9 @@ func _play_ui_feedback(success: bool) -> void:
 func _complete_run_victory() -> void:
 	if EndingDirector != null:
 		EndingDirector.record_final_boss_defeated()
+	var ending_kind := _victory_result_kind()
+	if ending_kind == "victory" and LineageDirector != null:
+		LineageDirector.complete_reincarnation()
 	if Music != null:
 		Music.play_profile(&"victory")
 	_schedule_title_music(2.8)
@@ -863,7 +866,7 @@ func _complete_run_victory() -> void:
 		_localized_detail_text(_ui_text("Pick another champion to restart the sequence.", "重新选择角色即可再次开始这一轮试炼。", "重新選擇角色即可再次開始這一輪試煉。"))
 	)
 	if character_select != null:
-		character_select.visible = true
+		character_select.visible = false
 	_update_screen_layers()
 	if result_screen != null and result_screen.has_method("show_result"):
 		result_screen.show_result(
@@ -874,7 +877,6 @@ func _complete_run_victory() -> void:
 			_build_result_summary()
 		)
 	if result_screen != null and result_screen.has_method("show_result"):
-		var ending_kind := _victory_result_kind()
 		if ending_kind != "victory":
 			result_screen.show_result(
 				ending_kind,
@@ -1362,7 +1364,24 @@ func _encounter_count() -> int:
 func _encounter_scene_for_index(index: int) -> PackedScene:
 	if index < ENCOUNTER_SCENES.size():
 		return ENCOUNTER_SCENES[index]
-	return FINAL_BOSS_SCENES[randi() % FINAL_BOSS_SCENES.size()]
+	return _final_boss_scene_for_lineage()
+
+func _final_boss_scene_for_lineage() -> PackedScene:
+	var reincarnation := 1
+	var family_id := _character_id_to_family_id(active_character_id)
+	if LineageDirector != null:
+		var lineage_state := LineageDirector.get_state()
+		reincarnation = int(lineage_state.get("reincarnation_index", 1))
+		family_id = String(lineage_state.get("family_id", family_id))
+	if reincarnation <= 1:
+		return TWIN_PRINCES_BOSS_SCENE
+	match family_id:
+		"ranger":
+			return RANGER_BOSS_SCENE
+		"mage":
+			return MAGE_BOSS_SCENE
+		_:
+			return EMPEROR_BOSS_SCENE
 
 func _refresh_battle_status(override_title: String = "", override_subtitle: String = "", override_detail: String = "") -> void:
 	if battle_status == null or not battle_status.has_method("set_message"):
@@ -1374,9 +1393,9 @@ func _refresh_battle_status(override_title: String = "", override_subtitle: Stri
 			current_encounter.get_status_title(),
 			current_encounter.get_status_text(),
 			_localized_detail_text(_ui_text(
-				"Route: outer rooms use soldiers, Palace Hall holds the gate boss, the next chamber is empty, King Gate holds Twin Princes, and the final chamber pulls one of three final bosses.",
-				"路线：宫外地图为小兵战，皇宫前厅放守城 Boss，下一张图为空房，王门前放双子王子。",
-				"路線：宮外地圖為小兵戰，皇宮前廳放守城 Boss，下一張圖為空房，王門前放雙子王子。"
+				"Route: outer rooms use soldiers, Palace Hall holds the gate boss, the next chamber is empty, and the final chamber changes by reincarnation.",
+				"路线：宫外地图为小兵战，皇宫前厅放守城 Boss，下一张图为空房，最终房会随轮回变化。",
+				"路線：宮外地圖為小兵戰，皇宮前廳放守城 Boss，下一張圖為空房，最終房會隨輪迴變化。"
 			))
 		)
 	if battle_status.has_method("set_context"):
@@ -1734,9 +1753,14 @@ func _victory_result_kind() -> String:
 		if CheatMode.has_method("unlock_developer_room"):
 			CheatMode.unlock_developer_room()
 		return "developer_room"
-	if EndingDirector != null and EndingDirector.can_break_crown():
+	if _current_reincarnation_index() > 1 and EndingDirector != null and EndingDirector.can_break_crown():
 		return "true_ending"
 	return "victory"
+
+func _current_reincarnation_index() -> int:
+	if LineageDirector == null:
+		return 1
+	return int(LineageDirector.get_state().get("reincarnation_index", 1))
 
 func _victory_result_title(kind: String) -> String:
 	if kind == "developer_room":

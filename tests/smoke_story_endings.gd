@@ -62,4 +62,26 @@ func _run() -> void:
 		quit(1)
 		return
 
+	var health_script := load("res://combat/health_component.gd") as Script
+	if health_script == null:
+		push_error("HealthComponent script did not load")
+		quit(1)
+		return
+	cheat_mode.reset_session()
+	for keycode in sequence:
+		cheat_mode.input_key(keycode)
+	var holder := Node.new()
+	holder.add_to_group("player")
+	root.add_child(holder)
+	var health: Node = health_script.new()
+	holder.add_child(health)
+	health.set("hp", 10.0)
+	health.set("max_hp", 10.0)
+	var result: Dictionary = health.call("receive_hit", {"damage": 999.0})
+	if bool(result.get("died", false)) or float(result.get("damage", 0.0)) > 0.0:
+		push_error("CheatMode did not prevent lethal HealthComponent damage")
+		quit(1)
+		return
+	holder.queue_free()
+
 	quit(0)

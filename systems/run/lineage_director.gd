@@ -198,6 +198,25 @@ func apply_manual_aptitude_bonus(attribute_id: String) -> Dictionary:
 	_emit_state()
 	return current_aptitude.duplicate(true)
 
+func complete_reincarnation() -> Dictionary:
+	reincarnation_index += 1
+	generation_index = 1
+	seeds_left = MAX_SEEDS
+	current_encounter_index = 0
+	last_score.clear()
+	if SaveManager != null and SaveManager.active_slot_index >= 0:
+		var active := SaveManager.get_active_slot()
+		SaveManager.update_active_slot_patch({
+			"cleared": true,
+			"reincarnation_index": reincarnation_index,
+			"generation_index": generation_index,
+			"seeds_left": seeds_left,
+			"current_encounter_index": current_encounter_index,
+			"total_runs": int(active.get("total_runs", 1)) + 1
+		})
+	_emit_state()
+	return get_state()
+
 func get_state() -> Dictionary:
 	return {
 		"family_id": family_id,

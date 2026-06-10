@@ -42,6 +42,13 @@ func _run() -> void:
 		push_error("SaveManager did not update aptitude fields")
 		quit(1)
 		return
+	save_manager.create_slot(1, "Delete Smoke", "mage")
+	save_manager.delete_slot(1)
+	var deleted_slot: Dictionary = save_manager.read_slot(1)
+	if bool(deleted_slot.get("occupied", true)) or not String(deleted_slot.get("family_id", "")).is_empty():
+		push_error("SaveManager did not delete a single fixed record slot")
+		quit(1)
+		return
 
 	var lineage := root.get_node_or_null("/root/LineageDirector")
 	if lineage == null:

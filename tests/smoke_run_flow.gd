@@ -273,8 +273,8 @@ func _run() -> void:
 		push_error("Victory result screen did not appear after the final encounter")
 		quit(1)
 		return
-	if world.character_select == null or not world.character_select.visible:
-		push_error("Character select did not return after victory")
+	if world.character_select != null and world.character_select.visible:
+		push_error("Character select should not reopen inside a locked archive after victory")
 		quit(1)
 		return
 
