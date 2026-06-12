@@ -769,6 +769,7 @@ func _setup_weapon_visual() -> void:
 	weapon_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	weapon_sprite.centered = true
 	weapon_sprite.scale = Vector2.ONE * 0.5
+	weapon_sprite.flip_h = true
 	weapon.add_child(weapon_sprite)
 
 func _sync_weapon_visual() -> void:
@@ -781,6 +782,8 @@ func _sync_weapon_visual() -> void:
 	weapon.visible = hp > 0.0
 	weapon.position = Vector2(17.0 * side_sign, -16.0 + vertical_bias * 5.0)
 	weapon.rotation = base_angle + deg_to_rad(vertical_bias * 5.0) + weapon_angle_offset * side_sign
+	if weapon_sprite != null:
+		weapon_sprite.rotation = deg_to_rad(30.0 * side_sign)
 
 func _animate_weapon_swing(start_degrees: float, end_degrees: float, duration: float) -> void:
 	weapon_angle_offset = deg_to_rad(start_degrees)
