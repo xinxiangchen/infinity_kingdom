@@ -877,7 +877,7 @@ func _sync_weapon_visual() -> void:
 	var base_right_angle := deg_to_rad(-24.0)
 	var base_angle := base_right_angle if side_sign > 0.0 else PI - base_right_angle
 	weapon.visible = hp > 0.0 and not shadow_step_active
-	weapon.position = Vector2(18.0 * side_sign, -9.0 + vertical_bias * 4.0)
+	weapon.position = Vector2(18.0 * side_sign, 1.0 + vertical_bias * 4.0)
 	weapon.rotation = base_angle + deg_to_rad(vertical_bias * 6.0) + weapon_angle_offset * side_sign
 
 func _animate_weapon_swing(start_degrees: float, end_degrees: float, duration: float) -> void:

@@ -786,11 +786,11 @@ func _sync_weapon_visual() -> void:
 		return
 	var side_sign := _get_weapon_side_sign()
 	var vertical_bias := clampf(facing.y, -1.0, 1.0)
-	var attack_direction := _attack_facing()
-	var guard_angle := deg_to_rad(-42.0 * side_sign + vertical_bias * 5.0)
+	var base_right_angle := deg_to_rad(-42.0)
+	var base_angle := base_right_angle if side_sign > 0.0 else PI - base_right_angle
 	weapon.visible = hp > 0.0
-	weapon.position = Vector2(24.0 * side_sign, -18.0 + vertical_bias * 6.0)
-	weapon.rotation = attack_direction.angle() + guard_angle + weapon_swing_rotation * side_sign
+	weapon.position = Vector2(24.0 * side_sign, -7.0 + vertical_bias * 6.0)
+	weapon.rotation = base_angle + deg_to_rad(vertical_bias * 5.0) + weapon_swing_rotation * side_sign
 
 func _animate_weapon_swing(windup_degrees: float, strike_degrees: float, windup_duration: float, recover_duration: float = 0.12) -> void:
 	if weapon_swing_tween != null:

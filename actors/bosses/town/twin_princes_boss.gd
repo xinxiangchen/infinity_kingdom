@@ -15,6 +15,9 @@ const TWIN_PHASE2_WEAPON_TEXTURE_PATH := "res://art/final_materials/weapons/boss
 @export var defense_value: float = 220.0
 @export var move_speed: float = 170.0
 @export var teleport_slash_damage: float = 30.0
+@export var teleport_charge_duration: float = 4.0
+@export var teleport_shock_damage: float = 30.0
+@export var teleport_shock_radius: float = 116.0
 @export var spear_charge_damage: float = 50.0
 @export var barrage_damage: float = 18.0
 @export_range(0.1, 0.9, 0.05) var desperation_threshold_ratio: float = 0.35
@@ -214,7 +217,7 @@ func _start_teleport_attack() -> void:
 	state = &"teleport_mark"
 	state_time = 0.0
 	action_committed = false
-	teleport_cooldown = 5.0 if current_phase == 1 else (2.45 if desperation_active else 3.2)
+	teleport_cooldown = teleport_charge_duration + (5.0 if current_phase == 1 else (2.45 if desperation_active else 3.2))
 	if target != null and is_instance_valid(target):
 		var side := Vector2(52.0, 0.0)
 		side.x *= -1.0 if int(Time.get_ticks_msec() / 100) % 2 == 0 else 1.0
@@ -229,17 +232,18 @@ func _start_teleport_attack() -> void:
 
 func _process_teleport_mark() -> void:
 	teleport_marker.rotation += 0.18
-	if state_time >= 0.35:
+	if state_time >= teleport_charge_duration:
 		state = &"teleport_slash"
 		state_time = 0.0
 		action_committed = false
 		global_position = teleport_target_position
 		teleport_marker.visible = false
+		_spawn_teleport_shockwave(teleport_target_position, teleport_shock_radius)
+		_hit_teleport_landing_targets()
 
 func _process_teleport_slash() -> void:
 	if not action_committed and state_time >= 0.08:
 		action_committed = true
-		_hit_target_in_radius(84.0, teleport_slash_damage)
 	if state_time >= 0.28:
 		_enter_recover(0.4 if current_phase == 1 else (0.16 if desperation_active else 0.24))
 
@@ -260,11 +264,12 @@ func _start_spear_charge() -> void:
 
 func _process_spear_charge(delta: float) -> void:
 	if state_time < 1.0:
+		charge_line.visible = true
 		charge_line.global_position = global_position
 		return
+	charge_line.visible = false
 	if state_time < 1.35:
 		global_position += charge_direction * 480.0 * slow_factor * delta
-		charge_line.global_position = global_position
 		if not action_committed:
 			action_committed = true
 			_hit_target_in_line(spear_charge_damage, 220.0, 38.0)
@@ -343,6 +348,24 @@ func _hit_target_in_line(damage: float, length: float, width: float) -> void:
 	var end_position := global_position + charge_direction * length
 	if _distance_to_segment(target.global_position, start_position, end_position) > width:
 		return
+	target.receive_hit({
+		"source": self,
+		"damage": damage,
+		"crit_rate": 0.0
+	})
+
+func _hit_teleport_landing_targets() -> void:
+	if target == null or not is_instance_valid(target):
+		return
+	var distance := global_position.distance_to(target.global_position)
+	var damage := 0.0
+	if distance <= teleport_shock_radius:
+		damage += teleport_shock_damage
+	if distance <= 84.0:
+		damage += teleport_slash_damage
+	if damage <= 0.0:
+		return
+	action_committed = true
 	target.receive_hit({
 		"source": self,
 		"damage": damage,
@@ -461,6 +484,19 @@ func _show_intent_text(label_text: String, color_value: Color, world_position: V
 		popup.setup_text(label_text, color_value, scale_value)
 	effects_layer.add_child(popup)
 
+func _spawn_teleport_shockwave(center: Vector2, radius: float) -> void:
+	var ring := Line2D.new()
+	ring.width = 5.0
+	ring.closed = true
+	ring.default_color = Color(1.0, 0.74, 0.48, 0.9)
+	ring.points = _build_ring_points(radius, 20)
+	ring.global_position = center
+	get_tree().current_scene.add_child(ring)
+	var tween := create_tween()
+	tween.tween_property(ring, "scale", Vector2.ONE * 1.16, 0.18)
+	tween.parallel().tween_property(ring, "modulate:a", 0.0, 0.18)
+	tween.finished.connect(ring.queue_free)
+
 func _on_damaged(_amount: float, remaining_hp: float, _source: Node) -> void:
 	hp = remaining_hp
 	_set_body_tint(Color(1.0, 0.8, 0.8, 1.0))
@@ -498,6 +534,13 @@ func _on_died() -> void:
 			defeated.emit()
 			queue_free()
 	)
+
+func _build_ring_points(radius: float, steps: int = 16) -> PackedVector2Array:
+	var points := PackedVector2Array()
+	for index in range(steps):
+		var angle := TAU * float(index) / float(steps)
+		points.append(Vector2.RIGHT.rotated(angle) * radius)
+	return points
 
 func _spawn_barrage_wave(base_direction: Vector2, angles: Array, damage: float) -> void:
 	var payload := {
