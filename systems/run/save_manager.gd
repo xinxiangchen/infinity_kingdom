@@ -33,6 +33,12 @@ const SCORE_GRADE_SIZE := 8
 const OFF_TOTAL_RUNS := 136
 const OFF_TOTAL_DEATHS := 140
 const OFF_UPDATED_UNIX_TIME := 144
+const OFF_CROWNED_FAMILIES := 152
+const CROWNED_FAMILIES_SIZE := 48
+const OFF_CURRENT_EMPEROR_FAMILY := 200
+const CURRENT_EMPEROR_FAMILY_SIZE := 16
+const OFF_ENDING_TYPE := 216
+const ENDING_TYPE_SIZE := 32
 
 var active_slot_index: int = -1
 var active_slot: Dictionary = {}
@@ -168,6 +174,15 @@ func update_slot_patch(slot_index: int, patch: Dictionary) -> Dictionary:
 			"total_deaths":
 				file.seek(base + OFF_TOTAL_DEATHS)
 				file.store_32(int(patch[key]))
+			"crowned_families":
+				file.seek(base + OFF_CROWNED_FAMILIES)
+				file.store_buffer(_fixed_string_bytes(String(patch[key]), CROWNED_FAMILIES_SIZE))
+			"current_emperor_family":
+				file.seek(base + OFF_CURRENT_EMPEROR_FAMILY)
+				file.store_buffer(_fixed_string_bytes(String(patch[key]), CURRENT_EMPEROR_FAMILY_SIZE))
+			"ending_type":
+				file.seek(base + OFF_ENDING_TYPE)
+				file.store_buffer(_fixed_string_bytes(String(patch[key]), ENDING_TYPE_SIZE))
 	file.seek(base + OFF_UPDATED_UNIX_TIME)
 	file.store_64(int(Time.get_unix_time_from_system()))
 	if slot_index == active_slot_index:
@@ -180,6 +195,18 @@ func mark_active_dead_archive() -> void:
 	update_active_slot_patch({
 		"dead_archive": true,
 		"seeds_left": 0
+	})
+
+func seal_active_ending(ending_type: String) -> void:
+	if ending_type.is_empty():
+		return
+	var current := get_active_slot()
+	if not String(current.get("ending_type", "")).is_empty():
+		return
+	update_active_slot_patch({
+		"dead_archive": true,
+		"cleared": true,
+		"ending_type": ending_type
 	})
 
 func _ensure_save_file() -> void:
@@ -234,6 +261,12 @@ func _store_record(file: FileAccess, record: Dictionary) -> void:
 	file.store_32(int(record.get("total_runs", 1)))
 	file.store_32(int(record.get("total_deaths", 0)))
 	file.store_64(int(record.get("updated_unix_time", Time.get_unix_time_from_system())))
+	file.seek(start + OFF_CROWNED_FAMILIES)
+	file.store_buffer(_fixed_string_bytes(String(record.get("crowned_families", "")), CROWNED_FAMILIES_SIZE))
+	file.seek(start + OFF_CURRENT_EMPEROR_FAMILY)
+	file.store_buffer(_fixed_string_bytes(String(record.get("current_emperor_family", "")), CURRENT_EMPEROR_FAMILY_SIZE))
+	file.seek(start + OFF_ENDING_TYPE)
+	file.store_buffer(_fixed_string_bytes(String(record.get("ending_type", "")), ENDING_TYPE_SIZE))
 	while file.get_position() < start + RECORD_SIZE:
 		file.store_8(0)
 
@@ -266,8 +299,17 @@ func _read_record_at_current_position(file: FileAccess, fallback_slot_id: int) -
 		"last_score_grade": _read_fixed_string(file, SCORE_GRADE_SIZE),
 		"total_runs": int(file.get_32()),
 		"total_deaths": int(file.get_32()),
-		"updated_unix_time": int(file.get_64())
+		"updated_unix_time": int(file.get_64()),
+		"crowned_families": "",
+		"current_emperor_family": "",
+		"ending_type": ""
 	}
+	file.seek(start + OFF_CROWNED_FAMILIES)
+	record["crowned_families"] = _read_fixed_string(file, CROWNED_FAMILIES_SIZE)
+	file.seek(start + OFF_CURRENT_EMPEROR_FAMILY)
+	record["current_emperor_family"] = _read_fixed_string(file, CURRENT_EMPEROR_FAMILY_SIZE)
+	file.seek(start + OFF_ENDING_TYPE)
+	record["ending_type"] = _read_fixed_string(file, ENDING_TYPE_SIZE)
 	file.seek(start + RECORD_SIZE)
 	if not occupied:
 		record["slot_id"] = fallback_slot_id
@@ -294,6 +336,9 @@ func _default_record(slot_index: int) -> Dictionary:
 		"last_score_grade": "",
 		"total_runs": 1,
 		"total_deaths": 0,
+		"crowned_families": "",
+		"current_emperor_family": "",
+		"ending_type": "",
 		"updated_unix_time": 0
 	}
 

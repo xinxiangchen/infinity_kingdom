@@ -1,4 +1,4 @@
-extends CanvasLayer
+﻿extends CanvasLayer
 
 signal slot_selected(slot_index: int)
 signal new_slot_requested(slot_index: int)
@@ -133,7 +133,11 @@ func _refresh_slots() -> void:
 			delete_button.text = _locale_text("Delete", "删除", "刪除")
 			continue
 		var state_text := _locale_text("Active", "可继续", "可繼續")
-		if bool(slot.get("dead_archive", false)):
+		var ending_type := String(slot.get("ending_type", ""))
+		if not ending_type.is_empty():
+			state_text = _ending_label(ending_type)
+			button.disabled = true
+		elif bool(slot.get("dead_archive", false)):
 			state_text = _locale_text("Dead Archive", "死档", "死檔")
 			button.disabled = true
 		elif bool(slot.get("cleared", false)):
@@ -162,6 +166,8 @@ func _refresh_slots() -> void:
 func _activate_slot(slot_index: int) -> void:
 	_cancel_delete()
 	var slot := SaveManager.read_slot(slot_index) if SaveManager != null else {}
+	if not String(slot.get("ending_type", "")).is_empty():
+		return
 	if bool(slot.get("dead_archive", false)):
 		return
 	if bool(slot.get("occupied", false)):
@@ -221,6 +227,19 @@ func _family_label(family_id: String) -> String:
 			return _locale_text("Unset", "未定", "未定")
 
 
+func _ending_label(ending_type: String) -> String:
+	match ending_type:
+		"break_crown":
+			return _locale_text("Ending: Broken Crown", "结局：打碎王冠", "結局：打碎王冠")
+		"ember_extinguished":
+			return _locale_text("Ending: Embers Out", "结局：火种熄灭", "結局：火種熄滅")
+		"escape":
+			return _locale_text("Ending: Far Road", "结局：奔向远方", "結局：奔向遠方")
+		"crown_bad":
+			return _locale_text("Ending: Crown Taken", "结局：戴上王冠", "結局：戴上王冠")
+		_:
+			return _locale_text("Ending: Sealed", "结局：档案封存", "結局：檔案封存")
+
 func _locale_text(en_text: String, zh_hans_text: String, zh_hant_text: String) -> String:
 	if UISettings != null and UISettings.has_method("get_locale"):
 		match String(UISettings.get_locale()):
@@ -229,3 +248,4 @@ func _locale_text(en_text: String, zh_hans_text: String, zh_hant_text: String) -
 			"zh_Hans":
 				return zh_hans_text
 	return en_text
+

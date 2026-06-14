@@ -23,13 +23,19 @@ func _run() -> void:
 		push_error("Player was not spawned")
 		quit(1)
 		return
-	if world.accessory_choice == null or not world.accessory_choice.visible:
-		push_error("Accessory choice did not open after character select")
+	if world.current_encounter == null:
+		push_error("Encounter did not start directly after character select")
 		quit(1)
 		return
 	var accessory_manager := root.get_node_or_null("/root/AccessoryManager")
 	if accessory_manager == null:
 		push_error("AccessoryManager autoload missing")
+		quit(1)
+		return
+	world._offer_accessory("Smoke Relic", "test")
+	await process_frame
+	if world.accessory_choice == null or not world.accessory_choice.visible:
+		push_error("Accessory choice did not open when explicitly requested")
 		quit(1)
 		return
 	var choices: Array = accessory_manager.current_choices
@@ -42,7 +48,7 @@ func _run() -> void:
 	world._on_accessory_choice_made(String(first_choice.get("id", "")), false)
 	await process_frame
 	if world.current_encounter == null:
-		push_error("Encounter did not start after accessory choice")
+		push_error("Encounter was lost after accessory choice")
 		quit(1)
 		return
 	if String(accessory_manager.get_equipped_accessory().get("id", "none")) == "none":

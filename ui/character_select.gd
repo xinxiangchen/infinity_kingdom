@@ -230,6 +230,7 @@ var active_about_entry_id: String = "about_overview"
 var detail_mode: String = "hero"
 var screen_mode: String = "menu"
 var menu_preview_key: StringName = &""
+var disabled_family_ids: Array[String] = []
 
 func _ready() -> void:
 	_build_ui()
@@ -703,6 +704,17 @@ func _focus_selected_card() -> void:
 	if selected_hero_index >= 0 and selected_hero_index < hero_buttons.size():
 		hero_buttons[selected_hero_index].grab_focus()
 
+func set_disabled_family_ids(next_disabled_family_ids: Array) -> void:
+	disabled_family_ids.clear()
+	for raw_id in next_disabled_family_ids:
+		var family_id := String(raw_id)
+		if not disabled_family_ids.has(family_id):
+			disabled_family_ids.append(family_id)
+	if _is_selected_hero_disabled():
+		selected_hero_index = _first_enabled_hero_index()
+	_refresh_hero_button_enabled_states()
+	_set_selected_hero(selected_hero_index)
+
 func _sync_title_banner_visibility() -> void:
 	if title_banner_frame != null:
 		title_banner_frame.visible = screen_mode == "menu"
@@ -867,6 +879,7 @@ func _set_selected_hero(hero_index: int) -> void:
 	detail_mode = "hero"
 	selected_hero_index = clampi(hero_index, 0, HEROES.size() - 1)
 	var hero: Dictionary = HEROES[selected_hero_index]
+	var disabled := _is_hero_disabled(hero)
 	hero_portrait.texture = load(String(hero.get("portrait", ""))) as Texture2D
 	hero_detail_title.text = _hero_name(hero)
 	hero_detail_role.text = "%s  |  %s" % [
@@ -878,6 +891,8 @@ func _set_selected_hero(hero_index: int) -> void:
 		"若已进入选角，按 Enter 直接开始；否则先打开选角再锁定这名角色。",
 		"若已進入選角，按 Enter 直接開始；否則先打開選角再鎖定這名角色。"
 	)
+	if disabled:
+		action_text = _disabled_hero_text()
 	hero_detail_desc.text = "%s\n%s\n%s\n%s" % [
 		_hero_summary(hero),
 		" / ".join(_hero_stats(hero)),
@@ -891,8 +906,41 @@ func _activate_selected_hero() -> void:
 
 func _activate_hero(hero_index: int) -> void:
 	var safe_index := clampi(hero_index, 0, HEROES.size() - 1)
+	if _is_hero_disabled(HEROES[safe_index]):
+		_set_selected_hero(_first_enabled_hero_index())
+		return
 	visible = false
 	character_selected.emit(HEROES[safe_index]["id"])
+
+func _refresh_hero_button_enabled_states() -> void:
+	for hero_index in range(hero_buttons.size()):
+		var button := hero_buttons[hero_index]
+		if button == null:
+			continue
+		var disabled := _is_hero_disabled(HEROES[hero_index])
+		button.disabled = disabled
+		button.modulate = Color(0.55, 0.55, 0.58, 0.72) if disabled else Color.WHITE
+
+func _is_selected_hero_disabled() -> bool:
+	if selected_hero_index < 0 or selected_hero_index >= HEROES.size():
+		return false
+	return _is_hero_disabled(HEROES[selected_hero_index])
+
+func _is_hero_disabled(hero: Dictionary) -> bool:
+	return disabled_family_ids.has(String(hero.get("id", "")))
+
+func _first_enabled_hero_index() -> int:
+	for hero_index in range(HEROES.size()):
+		if not _is_hero_disabled(HEROES[hero_index]):
+			return hero_index
+	return 0
+
+func _disabled_hero_text() -> String:
+	return _locale_text(
+		"This family has already worn the crown in this archive. Choose one of the remaining bloodlines.",
+		"这个家族已经在本档案里戴过王冠。请选择剩余血脉。",
+		"這個家族已經在本檔案裡戴過王冠。請選擇剩餘血脈。"
+	)
 
 func _set_gallery_entry(entry_id: String) -> void:
 	detail_mode = "gallery"
