@@ -83,8 +83,12 @@ func _run() -> void:
 	await process_frame
 
 	var battle_objective := world.battle_status.get("objective_value_label") as Label
-	if battle_objective == null or battle_objective.text.find("选择") == -1:
+	if battle_objective == null or battle_objective.text.find("场") == -1 or battle_objective.text.find("清空战场") == -1:
 		push_error("Battle status objective did not localize to Simplified Chinese")
+		quit(1)
+		return
+	if battle_objective.text.find("Encounter") != -1 or battle_objective.text.find("clear the arena") != -1:
+		push_error("Battle status objective still contains English in Simplified Chinese")
 		quit(1)
 		return
 

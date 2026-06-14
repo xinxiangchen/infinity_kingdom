@@ -165,12 +165,18 @@ func _run() -> void:
 		quit(1)
 		return
 	var objective_value := world.battle_status.get("objective_value_label") as Label
-	if objective_value == null or objective_value.text.find("relic") == -1:
-		push_error("Battle status did not switch to relic objective after character select")
+	if objective_value == null or objective_value.text.is_empty():
+		push_error("Battle status did not populate after character select")
 		quit(1)
 		return
+	if world.current_encounter == null:
+		push_error("Encounter did not start directly after character select")
+		quit(1)
+		return
+	world._offer_accessory("Smoke Relic", "test")
+	await process_frame
 	if world.accessory_choice == null or not world.accessory_choice.visible:
-		push_error("Accessory choice did not open after character select")
+		push_error("Accessory choice did not open when explicitly requested")
 		quit(1)
 		return
 	var accessory_preview := world.accessory_choice.get_node("Backdrop/CenterContainer/PanelContainer/MarginContainer/VBoxContainer/PreviewPanel/MarginContainer/VBoxContainer/PreviewDetail") as Label
@@ -178,6 +184,7 @@ func _run() -> void:
 		push_error("Accessory choice preview did not initialize")
 		quit(1)
 		return
+	world.accessory_choice.close()
 
 	world.active_run_event_kind = "shop"
 	world.run_event_panel.open("shop", 0)
@@ -188,29 +195,14 @@ func _run() -> void:
 		push_error("Unaffordable shop choice did not keep the event panel open")
 		quit(1)
 		return
-	if world.encounter_index != -1:
-		push_error("Unaffordable shop choice incorrectly advanced the encounter index")
+	if world.encounter_index != 0:
+		push_error("Unaffordable shop choice incorrectly changed the encounter index")
 		quit(1)
 		return
 	world.run_event_panel.close()
 
-	var choices: Array = accessory_manager.current_choices
-	if choices.is_empty():
-		push_error("No accessory choices were generated")
-		quit(1)
-		return
-
-	var keep_event := InputEventKey.new()
-	keep_event.keycode = KEY_K
-	keep_event.pressed = true
-	world.accessory_choice._unhandled_input(keep_event)
-	await process_frame
-	if world.accessory_choice.visible:
-		push_error("Accessory choice did not close after keep shortcut")
-		quit(1)
-		return
 	if world.current_encounter == null:
-		push_error("Encounter did not begin after keep shortcut")
+		push_error("Encounter was lost after explicit accessory preview")
 		quit(1)
 		return
 	await process_frame
@@ -239,16 +231,20 @@ func _run() -> void:
 	world._on_encounter_defeated()
 	await create_timer(0.9).timeout
 	await process_frame
-	if world.run_event_panel == null or not world.run_event_panel.visible:
-		push_error("Run event panel did not open after the first map encounter")
+	if world.stage_reward_panel == null or not world.stage_reward_panel.visible:
+		push_error("Stage reward panel did not open after the first map encounter")
 		quit(1)
 		return
-	world.run_event_panel.close()
-	world._on_run_event_choice_made("skip")
-	await create_timer(1.4).timeout
+	var reward_choices: Array = world.stage_reward_panel.get("choices")
+	if reward_choices.is_empty():
+		push_error("Stage reward panel did not receive choices")
+		quit(1)
+		return
+	world._on_stage_reward_chosen(reward_choices[0])
+	await create_timer(5.2).timeout
 	await process_frame
 	if world.encounter_index != 1:
-		push_error("World did not advance to the second map encounter")
+		push_error("World did not advance to the second map encounter after stage reward")
 		quit(1)
 		return
 	if world.current_encounter == null or not is_instance_valid(world.current_encounter):
@@ -262,7 +258,7 @@ func _run() -> void:
 	world.add_child(stub_encounter)
 	world.current_encounter = stub_encounter
 	world._on_encounter_defeated()
-	await create_timer(1.3).timeout
+	await create_timer(5.2).timeout
 	await process_frame
 
 	if world.run_event_panel != null and world.run_event_panel.visible:

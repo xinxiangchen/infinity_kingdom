@@ -2,6 +2,7 @@ extends CanvasLayer
 
 signal closed
 signal quit_requested
+signal open_ending_reached
 
 const UISkin := preload("res://ui/ui_skin.gd")
 const PANEL_MIN_SIZE := Vector2(320, 320)
@@ -71,6 +72,9 @@ func show_result(kind: String, title: String, subtitle: String, detail: String, 
 	elif kind == "true_ending":
 		accent = Color(1.0, 0.90, 0.50)
 		badge_text = "CROWN BROKEN"
+	elif kind == "crown_bad":
+		accent = Color(0.92, 0.62, 0.48)
+		badge_text = "CROWN TAKEN"
 	elif kind == "developer_room":
 		accent = Color(0.56, 0.94, 1.0)
 		badge_text = "DEBUG DOOR"
@@ -90,7 +94,7 @@ func show_result(kind: String, title: String, subtitle: String, detail: String, 
 	_refresh_copy()
 	idle_seconds = 0.0
 	open_ending_triggered = false
-	open_ending_allowed = kind == "victory" or kind == "true_ending"
+	open_ending_allowed = kind == "victory"
 	visible = true
 	get_tree().paused = true
 	continue_button.grab_focus()
@@ -128,6 +132,7 @@ func _close_result() -> void:
 func _show_open_ending() -> void:
 	open_ending_triggered = true
 	open_ending_allowed = false
+	open_ending_reached.emit()
 	title_label.text = "No Crown"
 	subtitle_label.text = "The heir waits, then turns away from the throne."
 	detail_label.text = "After thirty quiet minutes, no one claims the crown. The loop remains behind as the archive walks out into an unwritten road."

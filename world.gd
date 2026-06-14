@@ -1,4 +1,4 @@
-extends Node2D
+﻿extends Node2D
 
 const KNIGHT_SCENE := preload("res://characters/knight/knight.tscn")
 const RANGER_SCENE := preload("res://characters/ranger/ranger.tscn")
@@ -10,6 +10,8 @@ const DAMAGE_NUMBER_SCENE := preload("res://effects/damage_number.tscn")
 const RUN_PICKUP_SCRIPT := preload("res://systems/pickups/run_pickup.gd")
 const WORLD_HEALTH_BAR_SCRIPT := preload("res://ui/world_health_bar.gd")
 const INVENTORY_PANEL_SCRIPT := preload("res://ui/inventory_panel.gd")
+const CONSUMABLE_BAR_SCRIPT := preload("res://ui/consumable_bar.gd")
+const STAGE_REWARD_PANEL_SCRIPT := preload("res://ui/stage_reward_panel.gd")
 const LINEAGE_HUD_SCRIPT := preload("res://ui/lineage_hud.gd")
 const HEIR_SELECT_PANEL_SCRIPT := preload("res://ui/heir_select_panel.gd")
 const RANGER_BOSS_SCENE := preload("res://actors/bosses/town/ranger_boss.tscn")
@@ -82,6 +84,8 @@ var gate_walk_last_distance: float = INF
 var door_transition_layer: CanvasLayer = null
 var door_transition_backdrop: ColorRect = null
 var inventory_panel: CanvasLayer = null
+var consumable_bar: CanvasLayer = null
+var stage_reward_panel: CanvasLayer = null
 var lineage_hud: CanvasLayer = null
 var heir_select_panel: CanvasLayer = null
 var pending_lineage_respawn: Dictionary = {}
@@ -92,6 +96,8 @@ func _ready() -> void:
 	_prepare_map_runtime()
 	_build_door_transition_overlay()
 	_build_inventory_panel()
+	_build_consumable_bar()
+	_build_stage_reward_panel()
 	_build_lineage_hud()
 	_build_heir_select_panel()
 	if get_tree() != null and not get_tree().node_added.is_connected(_on_tree_node_added):
@@ -111,6 +117,8 @@ func _ready() -> void:
 			accessory_choice.reroll_requested.connect(_on_accessory_reroll_requested)
 	if run_event_panel != null and run_event_panel.has_signal("event_choice_made"):
 		run_event_panel.event_choice_made.connect(_on_run_event_choice_made)
+	if stage_reward_panel != null and stage_reward_panel.has_signal("reward_chosen"):
+		stage_reward_panel.reward_chosen.connect(_on_stage_reward_chosen)
 	if pause_menu != null:
 		if pause_menu.has_method("bind_world"):
 			pause_menu.bind_world(self)
@@ -123,6 +131,8 @@ func _ready() -> void:
 		result_screen.closed.connect(_on_result_closed)
 		if result_screen.has_signal("quit_requested"):
 			result_screen.quit_requested.connect(_on_quit_requested)
+		if result_screen.has_signal("open_ending_reached"):
+			result_screen.open_ending_reached.connect(_on_open_ending_reached)
 	if audio_settings_panel != null and audio_settings_panel.has_signal("closed"):
 		audio_settings_panel.closed.connect(_on_audio_settings_panel_closed)
 	if settings_panel != null and settings_panel.has_signal("closed"):
@@ -254,6 +264,16 @@ func _build_inventory_panel() -> void:
 	if inventory_panel.has_method("reset_run"):
 		inventory_panel.reset_run()
 
+func _build_consumable_bar() -> void:
+	consumable_bar = CONSUMABLE_BAR_SCRIPT.new()
+	consumable_bar.name = "ConsumableBar"
+	add_child(consumable_bar)
+
+func _build_stage_reward_panel() -> void:
+	stage_reward_panel = STAGE_REWARD_PANEL_SCRIPT.new()
+	stage_reward_panel.name = "StageRewardPanel"
+	add_child(stage_reward_panel)
+
 func _build_lineage_hud() -> void:
 	lineage_hud = LINEAGE_HUD_SCRIPT.new()
 	lineage_hud.name = "LineageHud"
@@ -369,6 +389,13 @@ func _unhandled_input(event: InputEvent) -> void:
 			_toggle_inventory_panel()
 			get_viewport().set_input_as_handled()
 			return
+		if event.keycode >= KEY_1 and event.keycode < KEY_1 + (ConsumableManager.MAX_SLOTS if ConsumableManager != null else 4):
+			var used := ConsumableManager.use_slot(event.keycode - KEY_1, player_character) if ConsumableManager != null else false
+			if used:
+				_push_hud_feed(_ui_text("Consumable used", "已使用消耗品", "已使用消耗品"), XP_FLASH_COLOR, 1.02)
+				_refresh_battle_status()
+			get_viewport().set_input_as_handled()
+			return
 
 func _on_character_selected(character_id: StringName) -> void:
 	_cancel_scheduled_title_music()
@@ -384,6 +411,8 @@ func _on_character_selected(character_id: StringName) -> void:
 	if Sfx != null:
 		_play_ui_feedback(true)
 	AccessoryManager.reset_run()
+	if ConsumableManager != null:
+		ConsumableManager.reset_run()
 	RunDirector.reset_run()
 	if EndingDirector != null:
 		EndingDirector.reset_run()
@@ -391,7 +420,13 @@ func _on_character_selected(character_id: StringName) -> void:
 	if slot.is_empty() or not bool(slot.get("occupied", false)):
 		LineageDirector.begin_new_lineage(_character_id_to_family_id(character_id))
 	elif String(slot.get("family_id", "")).is_empty():
-		LineageDirector.begin_new_lineage(_character_id_to_family_id(character_id))
+		var crowned_families := String(slot.get("crowned_families", ""))
+		var saved_reincarnation := int(slot.get("reincarnation_index", 1))
+		if saved_reincarnation > 1 or not crowned_families.is_empty():
+			LineageDirector.start_or_resume_from_slot(slot)
+			LineageDirector.begin_reincarnation_family(_character_id_to_family_id(character_id))
+		else:
+			LineageDirector.begin_new_lineage(_character_id_to_family_id(character_id))
 	else:
 		LineageDirector.start_or_resume_from_slot(slot, _character_id_to_family_id(character_id))
 	if inventory_panel != null:
@@ -423,7 +458,7 @@ func _on_character_selected(character_id: StringName) -> void:
 		player_character.died.connect(_on_player_died)
 	_apply_cheat_safety()
 	encounter_index = -1
-	_offer_accessory(_ui_text("First Relic", "初始饰品", "初始飾品"), "opening")
+	_start_next_encounter()
 
 func _consume_startup_context() -> void:
 	var startup := get_node_or_null("/root/StartupContext")
@@ -572,7 +607,7 @@ func _on_encounter_defeated() -> void:
 				if defeated_final_encounter:
 					_complete_run_victory()
 				else:
-					_offer_next_run_event()
+					_offer_stage_clear_reward()
 			)
 	)
 
@@ -674,6 +709,136 @@ func _offer_next_run_event() -> void:
 		_ui_text("Choose a reward before the next fight.", "在下一场战斗前选择一项奖励。", "在下一場戰鬥前選擇一項獎勵。"),
 		_localized_detail_text("%s: %d" % [_ui_text("Gold", "金币", "金幣"), int(RunDirector.gold)])
 	)
+
+func _offer_stage_clear_reward() -> void:
+	var choices := _build_stage_reward_choices()
+	if stage_reward_panel != null and stage_reward_panel.has_method("open"):
+		_play_intermission_audio()
+		stage_reward_panel.open(choices)
+		_refresh_battle_status(
+			_ui_text("Field Reward", "关间奖励", "關間獎勵"),
+			_ui_text("Choose one reward before entering the next map.", "进入下一张图前选择一项奖励。", "進入下一張圖前選擇一項獎勵。"),
+			_localized_detail_text(_ui_text("Status lasts for one map; consumables go into number slots.", "状态只持续一张图；消耗品进入数字栏。", "狀態只持續一張圖；消耗品進入數字欄。"))
+		)
+		return
+	if not choices.is_empty():
+		_apply_stage_reward_choice(choices[0])
+	_start_next_encounter()
+
+func _build_stage_reward_choices() -> Array[Dictionary]:
+	var choices: Array[Dictionary] = []
+	var status_count := 0
+	var consumable_count := 0
+	while choices.size() < 3:
+		var force_consumable := choices.size() == 2 and consumable_count == 0
+		var force_status := choices.size() == 2 and status_count == 0
+		var make_consumable := force_consumable or (not force_status and reward_rng.randf() < 0.42)
+		if make_consumable:
+			var consumable_choice := _random_consumable_reward_choice()
+			if not consumable_choice.is_empty():
+				choices.append(consumable_choice)
+				consumable_count += 1
+		else:
+			choices.append(_stage_status_choice(_roll_dcba_grade()))
+			status_count += 1
+	return choices
+
+func _random_consumable_reward_choice() -> Dictionary:
+	if ConsumableManager == null:
+		return {}
+	var consumable_id := ConsumableManager.random_consumable_id()
+	if consumable_id.is_empty():
+		return {}
+	var data := ConsumableManager.describe(consumable_id)
+	return {
+		"type": "consumable",
+		"consumable_id": consumable_id,
+		"title": String(data.get("name", consumable_id)),
+		"summary": String(data.get("summary", "")),
+		"icon": String(data.get("icon", "res://assets/ui/icon/ui_unknown.png"))
+	}
+
+func _on_stage_reward_chosen(choice: Dictionary) -> void:
+	if stage_reward_panel != null and stage_reward_panel.has_method("close") and stage_reward_panel.visible:
+		stage_reward_panel.close()
+	_apply_stage_reward_choice(choice)
+	_start_next_encounter()
+
+func _apply_stage_reward_choice(choice: Dictionary) -> void:
+	match String(choice.get("type", "")):
+		"consumable":
+			var consumable_id := String(choice.get("consumable_id", ""))
+			if ConsumableManager != null:
+				ConsumableManager.add_consumable(consumable_id)
+			_refresh_battle_status(
+				_ui_text("Supply Packed", "补给入袋", "補給入袋"),
+				String(choice.get("title", consumable_id)),
+				_localized_detail_text(_ui_text("Use number keys to consume it.", "按数字键使用。", "按數字鍵使用。"))
+			)
+		"status":
+			var prep := choice.get("prep", {}) as Dictionary
+			RunDirector.set_pending_encounter_prep(prep)
+			_refresh_battle_status(
+				_ui_text("Status Prepared", "状态已准备", "狀態已準備"),
+				String(choice.get("title", "Status")),
+				_localized_detail_text(String(choice.get("summary", "")))
+			)
+
+func _roll_dcba_grade() -> String:
+	var roll := reward_rng.randf()
+	if roll < 0.50:
+		return "D"
+	if roll < 0.80:
+		return "C"
+	if roll < 0.95:
+		return "B"
+	return "A"
+
+func _stage_status_choice(grade: String) -> Dictionary:
+	var grade_scale := {
+		"D": 0.08,
+		"C": 0.12,
+		"B": 0.17,
+		"A": 0.24
+	}
+	var value := float(grade_scale.get(grade, 0.08))
+	var options := [
+		{
+			"title": _ui_text("Battle Focus", "战斗专注", "戰鬥專注"),
+			"summary": _ui_text("Next map: attack damage is temporarily increased.", "下一张小图：临时提升攻击伤害。", "下一張小圖：臨時提升攻擊傷害。"),
+			"icon": "res://assets/ui/buff/buff_attack_up.png",
+			"temporary_effects": {"attack_damage_pct": value}
+		},
+		{
+			"title": _ui_text("Quick Step", "迅步", "迅步"),
+			"summary": _ui_text("Next map: move speed is temporarily increased.", "下一张小图：临时提升移动速度。", "下一張小圖：臨時提升移動速度。"),
+			"icon": "res://assets/ui/buff/buff_speed_up.png",
+			"temporary_effects": {"move_speed_pct": value}
+		},
+		{
+			"title": _ui_text("Guarded Breath", "守势呼吸", "守勢呼吸"),
+			"summary": _ui_text("Next map: defense and max health are temporarily increased.", "下一张小图：临时提升护甲和生命上限。", "下一張小圖：臨時提升護甲和生命上限。"),
+			"icon": "res://assets/ui/buff/buff_defense_up.png",
+			"temporary_effects": {"max_defense": 10.0 + value * 80.0, "max_hp": 8.0 + value * 60.0}
+		},
+		{
+			"title": _ui_text("Clear Mind", "澄心", "澄心"),
+			"summary": _ui_text("Next map: skill cooldowns are temporarily reduced.", "下一张小图：临时缩短技能冷却。", "下一張小圖：臨時縮短技能冷卻。"),
+			"icon": "res://assets/ui/buff/buff_mana_regen_up.png",
+			"temporary_effects": {"skill_cooldown_pct": -value}
+		}
+	]
+	var prep: Dictionary = (options[reward_rng.randi_range(0, options.size() - 1)] as Dictionary).duplicate(true)
+	prep["choice_id"] = "stage_status_%s" % grade.to_lower()
+	prep["grade"] = grade
+	return {
+		"type": "status",
+		"title": String(prep.get("title", "Status")),
+		"summary": String(prep.get("summary", "")),
+		"grade": grade,
+		"icon": String(prep.get("icon", "res://assets/ui/icon/ui_unknown.png")),
+		"prep": prep
+	}
 
 func _on_accessory_choice_made(_accessory_id: String, kept_current: bool) -> void:
 	waiting_for_accessory_choice = false
@@ -857,34 +1022,27 @@ func _complete_run_victory() -> void:
 	var ending_kind := _victory_result_kind()
 	if ending_kind == "victory" and LineageDirector != null:
 		LineageDirector.complete_reincarnation()
+	elif _is_final_ending_kind(ending_kind):
+		_seal_final_ending(ending_kind)
 	if Music != null:
 		Music.play_profile(&"victory")
 	_schedule_title_music(2.8)
 	_refresh_battle_status(
-		_ui_text("Town Cleared", "城镇试炼完成", "城鎮試煉完成"),
-		_ui_text("All enemy waves and town boss encounters are defeated.", "所有敌军波次与城镇 Boss 都已击破。", "所有敵軍波次與城鎮 Boss 都已擊破。"),
-		_localized_detail_text(_ui_text("Pick another champion to restart the sequence.", "重新选择角色即可再次开始这一轮试炼。", "重新選擇角色即可再次開始這一輪試煉。"))
+		_ui_text("Stage Cleared", "阶段通关", "階段通關"),
+		_ui_text("The boss is defeated. Final endings seal the archive; normal clears enter the next cycle.", "Boss 已击败。大结局会封存档案，普通通关会进入下一轮。", "Boss 已擊敗。大結局會封存檔案，普通通關會進入下一輪。"),
+		_localized_detail_text(_ui_text("Continue to return to archive flow.", "继续后回到档案流程。", "繼續後回到檔案流程。"))
 	)
 	if character_select != null:
 		character_select.visible = false
 	_update_screen_layers()
 	if result_screen != null and result_screen.has_method("show_result"):
 		result_screen.show_result(
-			"victory",
-			_ui_text("Town Cleared", "城镇试炼完成", "城鎮試煉完成"),
-			_ui_text("All enemy waves and bosses are defeated.", "所有敌军波次与 Boss 都已击破。", "所有敵軍波次與 Boss 都已擊破。"),
-			_ui_text("Your relic build survived the trial. Continue to select a new champion.", "你的饰品构筑撑过了整场试炼。继续后可重新选择角色。", "你的飾品構築撐過了整場試煉。繼續後可重新選擇角色。"),
+			ending_kind,
+			_victory_result_title(ending_kind),
+			_victory_result_subtitle(ending_kind),
+			_victory_result_detail(ending_kind),
 			_build_result_summary()
 		)
-	if result_screen != null and result_screen.has_method("show_result"):
-		if ending_kind != "victory":
-			result_screen.show_result(
-				ending_kind,
-				_victory_result_title(ending_kind),
-				_victory_result_subtitle(ending_kind),
-				_victory_result_detail(ending_kind),
-				_build_result_summary()
-			)
 	_refresh_battle_status()
 
 func _bind_actor_audio(actor: Node) -> void:
@@ -1098,6 +1256,9 @@ func _build_defeat_rewards(actor: Node) -> Dictionary:
 		drops.append(_drop_entry("repair", maxf(22.0, _player_stat_value("max_defense") * 0.28)))
 		drops.append(_drop_entry("inspiration", maxf(8.0, _player_stat_value("max_inspiration") * 0.40)))
 		drops.append(_drop_entry("heal", maxf(12.0, _player_stat_value("max_hp") * 0.14)))
+		for _drop_index in range(reward_rng.randi_range(1, 2)):
+			drops.append(_consumable_drop_entry(ConsumableManager.random_consumable_id() if ConsumableManager != null else ""))
+		drops.append(_accessory_drop_entry(_random_accessory_drop_id(_roll_dcba_grade())))
 	else:
 		if is_shield or max_defense_value >= 90.0 or reward_rng.randf() < (0.18 + (0.16 if elite else 0.0)):
 			drops.append(_drop_entry("repair", clampf(10.0 + max_defense_value * 0.09, 10.0, 28.0)))
@@ -1107,6 +1268,10 @@ func _build_defeat_rewards(actor: Node) -> Dictionary:
 			drops.append(_drop_entry("heal", clampf(6.0 + max_hp_value * 0.025, 6.0, 18.0)))
 		if elite and drops.size() < 3:
 			drops.append(_drop_entry("inspiration", 8.0))
+		if ConsumableManager != null and reward_rng.randf() < 0.03:
+			drops.append(_consumable_drop_entry(ConsumableManager.random_consumable_id()))
+		if reward_rng.randf() < 0.001:
+			drops.append(_accessory_drop_entry(_random_accessory_drop_id(_roll_dcba_grade())))
 	return {
 		"xp": xp_amount,
 		"drops": drops
@@ -1125,14 +1290,15 @@ func _spawn_reward_pickups(world_position: Vector2, drops: Array) -> void:
 			float(drop.get("amount", 0.0)),
 			{
 				"tint": _pickup_tint(String(drop.get("kind", "gold"))),
+				"icon": String(drop.get("icon", "")),
 				"launch_speed": 34.0 + float(index) * 8.0,
 				"launch_angle": angle
 			}
 		)
-		pickup.collected.connect(_on_run_pickup_collected)
+		pickup.collected.connect(_on_run_pickup_collected.bind(drop))
 		add_child(pickup)
 
-func _on_run_pickup_collected(kind: String, amount: float, world_position: Vector2) -> void:
+func _on_run_pickup_collected(kind: String, amount: float, world_position: Vector2, drop_data: Dictionary = {}) -> void:
 	if player_character == null or not is_instance_valid(player_character):
 		return
 	if inventory_panel != null and inventory_panel.has_method("record_pickup"):
@@ -1155,6 +1321,20 @@ func _on_run_pickup_collected(kind: String, amount: float, world_position: Vecto
 			_heal_actor(player_character, amount)
 			_spawn_world_text(world_position, _ui_text("+%d HP", "+%d 生命", "+%d 生命") % int(round(amount)), HEAL_FLASH_COLOR, 0.76)
 			_push_hud_feed(_ui_text("Recovered +%d HP", "恢复 +%d 生命", "恢復 +%d 生命") % int(round(amount)), HEAL_FLASH_COLOR, 1.02)
+		"consumable":
+			var consumable_id := String(drop_data.get("consumable_id", ""))
+			if ConsumableManager != null and ConsumableManager.add_consumable(consumable_id):
+				var data := ConsumableManager.describe(consumable_id)
+				_spawn_world_text(world_position, String(data.get("short_name", "ITEM")), XP_FLASH_COLOR, 0.78)
+				_push_hud_feed(_ui_text("Consumable picked up", "拾取消耗品", "拾取消耗品"), XP_FLASH_COLOR, 1.02)
+		"accessory":
+			var accessory_id := String(drop_data.get("accessory_id", ""))
+			if not accessory_id.is_empty():
+				var equipped := AccessoryManager.equip(accessory_id, player_character)
+				if inventory_panel != null and inventory_panel.has_method("record_relic_equipped"):
+					inventory_panel.record_relic_equipped(equipped)
+				_spawn_world_text(world_position, _ui_text("Relic", "饰品", "飾品"), LEVEL_UP_FLASH_COLOR, 0.82)
+				_push_hud_feed(String(equipped.get("name", _ui_text("Relic equipped", "已装备饰品", "已裝備飾品"))), LEVEL_UP_FLASH_COLOR, 1.06)
 
 func _apply_level_up_rewards(actor: Node, levels_gained: int) -> void:
 	if actor == null or not is_instance_valid(actor):
@@ -1258,11 +1438,29 @@ func _push_hud_feed(text: String, color_value: Color, scale_value: float = 1.0) 
 	if character_hud != null and character_hud.has_method("push_feed_message"):
 		character_hud.push_feed_message(text, color_value, scale_value)
 
-func _drop_entry(kind: String, amount: float) -> Dictionary:
-	return {
+func _drop_entry(kind: String, amount: float, meta: Dictionary = {}) -> Dictionary:
+	var entry := {
 		"kind": kind,
 		"amount": amount
 	}
+	for key in meta.keys():
+		entry[key] = meta[key]
+	return entry
+
+func _consumable_drop_entry(consumable_id: String) -> Dictionary:
+	if ConsumableManager == null or consumable_id.is_empty():
+		return _drop_entry("consumable", 1.0, {"consumable_id": consumable_id})
+	var data := ConsumableManager.describe(consumable_id)
+	return _drop_entry("consumable", 1.0, {
+		"consumable_id": consumable_id,
+		"icon": String(data.get("icon", "res://assets/ui/icon/ui_unknown.png"))
+	})
+
+func _accessory_drop_entry(accessory_id: String) -> Dictionary:
+	return _drop_entry("accessory", 1.0, {
+		"accessory_id": accessory_id,
+		"icon": _accessory_icon_path(accessory_id)
+	})
 
 func _split_drop_amount(total_amount: int, parts: int) -> Array[int]:
 	var result: Array[int] = []
@@ -1285,8 +1483,53 @@ func _pickup_tint(kind: String) -> Color:
 			return REPAIR_FLASH_COLOR
 		"heal":
 			return HEAL_FLASH_COLOR
+		"consumable":
+			return Color(0.80, 0.90, 1.0, 1.0)
+		"accessory":
+			return LEVEL_UP_FLASH_COLOR
 		_:
 			return GOLD_FLASH_COLOR
+
+func _random_accessory_drop_id(grade: String) -> String:
+	var target_rarity := _rarity_for_drop_grade(grade)
+	var catalog := AccessoryManager.get_catalog() if AccessoryManager != null else []
+	var candidates: Array[Dictionary] = []
+	for accessory in catalog:
+		var rarity := String(accessory.get("rarity_key", accessory.get("rarity", "")))
+		var accessory_id := String(accessory.get("id", ""))
+		if accessory_id.is_empty() or accessory_id == "none":
+			continue
+		if rarity == target_rarity:
+			candidates.append(accessory)
+	if candidates.is_empty():
+		for accessory in catalog:
+			var accessory_id := String(accessory.get("id", ""))
+			if not accessory_id.is_empty() and accessory_id != "none":
+				candidates.append(accessory)
+	if candidates.is_empty():
+		return ""
+	return String(candidates[reward_rng.randi_range(0, candidates.size() - 1)].get("id", ""))
+
+func _accessory_icon_path(accessory_id: String) -> String:
+	if AccessoryManager == null or accessory_id.is_empty():
+		return ""
+	for accessory in AccessoryManager.get_catalog():
+		if String(accessory.get("id", "")) == accessory_id:
+			return String(accessory.get("icon", ""))
+	return ""
+
+func _rarity_for_drop_grade(grade: String) -> String:
+	match grade:
+		"D":
+			return "Common"
+		"C":
+			return "Uncommon"
+		"B":
+			return "Rare"
+		"A":
+			return "Epic"
+		_:
+			return "Common"
 
 func _player_stat_value(field: String) -> float:
 	if player_character == null or not is_instance_valid(player_character) or not _has_property(player_character, field):
@@ -1372,7 +1615,7 @@ func _final_boss_scene_for_lineage() -> PackedScene:
 	if LineageDirector != null:
 		var lineage_state := LineageDirector.get_state()
 		reincarnation = int(lineage_state.get("reincarnation_index", 1))
-		family_id = String(lineage_state.get("family_id", family_id))
+		family_id = String(lineage_state.get("current_emperor_family", lineage_state.get("family_id", family_id)))
 	if reincarnation <= 1:
 		return TWIN_PRINCES_BOSS_SCENE
 	match family_id:
@@ -1755,7 +1998,32 @@ func _victory_result_kind() -> String:
 		return "developer_room"
 	if _current_reincarnation_index() > 1 and EndingDirector != null and EndingDirector.can_break_crown():
 		return "true_ending"
+	if LineageDirector != null and LineageDirector.has_method("would_complete_throne_cycle_after_current") and bool(LineageDirector.would_complete_throne_cycle_after_current()):
+		return "crown_bad"
 	return "victory"
+
+func _is_final_ending_kind(kind: String) -> bool:
+	return kind == "true_ending" or kind == "crown_bad"
+
+func _save_ending_type_for_kind(kind: String) -> String:
+	match kind:
+		"true_ending":
+			return "break_crown"
+		"crown_bad":
+			return "crown_bad"
+		_:
+			return ""
+
+func _seal_final_ending(kind: String) -> void:
+	if SaveManager == null:
+		return
+	var ending_type := _save_ending_type_for_kind(kind)
+	if not ending_type.is_empty() and SaveManager.has_method("seal_active_ending"):
+		SaveManager.seal_active_ending(ending_type)
+
+func _on_open_ending_reached() -> void:
+	if SaveManager != null and SaveManager.has_method("seal_active_ending"):
+		SaveManager.seal_active_ending("escape")
 
 func _current_reincarnation_index() -> int:
 	if LineageDirector == null:
@@ -1767,21 +2035,27 @@ func _victory_result_title(kind: String) -> String:
 		return _ui_text("Developer Room", "开发者房间", "開發者房間")
 	if kind == "true_ending":
 		return _ui_text("Crown Breaker", "王冠坠地", "王冠墜地")
-	return _ui_text("Town Cleared", "Town Cleared", "Town Cleared")
+	if kind == "crown_bad":
+		return _ui_text("Crowned Again", "再戴王冠", "再戴王冠")
+	return _ui_text("Stage Cleared", "阶段通关", "階段通關")
 
 func _victory_result_subtitle(kind: String) -> String:
 	if kind == "developer_room":
 		return _ui_text("Three forbidden arts answer beneath the throne.", "三道禁术在王座下回应。", "三道禁術在王座下回應。")
 	if kind == "true_ending":
 		return _ui_text("The crown can be broken because the bloodline remained unscarred.", "血脉未被玷污，王冠终于可以被击碎。", "血脈未被玷污，王冠終於可以被擊碎。")
-	return _ui_text("All enemy waves and bosses are defeated.", "All enemy waves and bosses are defeated.", "All enemy waves and bosses are defeated.")
+	if kind == "crown_bad":
+		return _ui_text("Every family has worn the throne, but the loop still chooses a ruler.", "三个家族都已称帝，轮回却仍把王冠交回血脉。", "三個家族都已稱帝，輪迴卻仍把王冠交回血脈。")
+	return _ui_text("The boss is defeated, but this is only a stage ending.", "Boss 已击败，但这只是阶段性结局。", "Boss 已擊敗，但這只是階段性結局。")
 
 func _victory_result_detail(kind: String) -> String:
 	if kind == "developer_room":
 		return _ui_text("Cheat mode rewrites the throne-room exit into a hidden development chamber.", "作弊模式已把王座出口改写为隐藏开发房间。", "作弊模式已把王座出口改寫為隱藏開發房間。")
 	if kind == "true_ending":
 		return _ui_text("The heir raises a weapon, not to inherit, but to shatter the crown and end the loop.", "继承者举起武器，不为继位，只为打碎王冠并终止轮回。", "繼承者舉起武器，不為繼位，只為打碎王冠並終止輪迴。")
-	return _ui_text("Your relic build survived the trial. Continue to select a new champion.", "Your relic build survived the trial. Continue to select a new champion.", "Your relic build survived the trial. Continue to select a new champion.")
+	if kind == "crown_bad":
+		return _ui_text("After the fourth crown, the archive is sealed by the same choice it tried to escape.", "第四顶王冠落下，档案被它试图逃离的选择封存。", "第四頂王冠落下，檔案被它試圖逃離的選擇封存。")
+	return _ui_text("Continue to select the next champion and enter the next cycle.", "继续后选择下一名角色，进入下一轮轮回。", "繼續後選擇下一名角色，進入下一輪輪迴。")
 
 func _sync_audio_hint_state() -> void:
 	if audio_shortcut_hint == null or not audio_shortcut_hint.has_method("set_panel_open"):
@@ -1881,9 +2155,9 @@ func _open_heir_select_panel() -> void:
 		return
 	_respawn_lineage_heir()
 
-func _on_heir_aptitude_confirmed(attribute_id: String) -> void:
+func _on_heir_aptitude_confirmed(from_attribute: String, to_attribute: String) -> void:
 	if LineageDirector != null:
-		LineageDirector.apply_manual_aptitude_bonus(attribute_id)
+		LineageDirector.apply_manual_aptitude_shift(from_attribute, to_attribute)
 	_respawn_lineage_heir()
 
 func _respawn_lineage_heir() -> void:
@@ -1903,6 +2177,8 @@ func _respawn_lineage_heir() -> void:
 	if character_hud != null and character_hud.has_method("bind_character"):
 		character_hud.bind_character(player_character)
 	AccessoryManager.reset_run()
+	if ConsumableManager != null:
+		ConsumableManager.reset_run()
 	RunDirector.reset_run()
 	if EndingDirector != null:
 		EndingDirector.reset_run()
@@ -1915,7 +2191,7 @@ func _respawn_lineage_heir() -> void:
 	_apply_cheat_safety()
 	var restart_index := maxi(int(LineageDirector.get_state().get("current_encounter_index", 0)), 0)
 	encounter_index = restart_index - 1
-	_offer_accessory(_ui_text("Inherited Relic", "继承开局饰品", "繼承開局飾品"), "lineage")
+	_start_next_encounter()
 
 func _reset_to_character_select() -> void:
 	_cancel_scheduled_title_music()
@@ -1940,6 +2216,8 @@ func _reset_to_character_select() -> void:
 	return_pause_after_audio_panel = false
 	return_pause_after_settings_panel = false
 	AccessoryManager.reset_run()
+	if ConsumableManager != null:
+		ConsumableManager.reset_run()
 	RunDirector.reset_run()
 	if SaveManager != null:
 		SaveManager.active_slot_index = -1
@@ -2060,3 +2338,4 @@ func _is_target_defeated(target: Node) -> bool:
 		if String(property.get("name", "")) == "hp":
 			return float(target.get("hp")) <= 0.0
 	return false
+

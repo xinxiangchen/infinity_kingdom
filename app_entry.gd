@@ -106,6 +106,7 @@ func _on_save_slot_selected(slot_index: int) -> void:
 		_on_normal_requested()
 		return
 	if character_select != null:
+		_configure_character_select_for_slot(slot)
 		character_select.visible = true
 
 func _on_new_slot_requested(slot_index: int) -> void:
@@ -118,11 +119,23 @@ func _on_new_slot_requested(slot_index: int) -> void:
 		opening_prologue.open()
 		return
 	if character_select != null:
+		_configure_character_select_for_slot(SaveManager.get_active_slot() if SaveManager != null else {})
 		character_select.visible = true
 
 func _on_opening_prologue_finished() -> void:
 	if character_select != null:
+		_configure_character_select_for_slot(SaveManager.get_active_slot() if SaveManager != null else {})
 		character_select.visible = true
+
+func _configure_character_select_for_slot(slot: Dictionary) -> void:
+	if character_select == null or not character_select.has_method("set_disabled_family_ids"):
+		return
+	var disabled: Array[String] = []
+	for raw_id in String(slot.get("crowned_families", "")).split(",", false):
+		var family_id := raw_id.strip_edges()
+		if not family_id.is_empty() and not disabled.has(family_id):
+			disabled.append(family_id)
+	character_select.set_disabled_family_ids(disabled)
 
 func _input(event: InputEvent) -> void:
 	if not (event is InputEventKey) or not event.pressed or event.echo:
@@ -158,6 +171,9 @@ func _on_character_selected(character_id: StringName) -> void:
 	selected_character_id = character_id
 	if character_select != null:
 		character_select.visible = false
+	if play_mode_select != null and play_mode_select.has_method("open"):
+		play_mode_select.open(character_id)
+		return
 	_on_normal_requested()
 
 
