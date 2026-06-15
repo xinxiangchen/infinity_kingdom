@@ -24,6 +24,10 @@ func _ready() -> void:
 	_build_cheat_notice()
 	if character_select != null:
 		character_select.character_selected.connect(_on_character_selected)
+		if character_select.has_method("set_new_game_opens_save_slots"):
+			character_select.set_new_game_opens_save_slots(true)
+		if character_select.has_signal("new_game_requested"):
+			character_select.new_game_requested.connect(_show_save_slots)
 		if character_select.has_signal("settings_requested"):
 			character_select.settings_requested.connect(_on_settings_requested)
 		if character_select.has_signal("quit_requested"):
@@ -34,7 +38,7 @@ func _ready() -> void:
 		play_mode_select.back_requested.connect(_on_mode_back_requested)
 	if Music != null:
 		Music.play_profile(&"title", true)
-	_show_save_slots()
+	_show_title_menu()
 
 func _build_save_slot_select() -> void:
 	save_slot_select = SAVE_SLOT_SELECT_SCRIPT.new()
@@ -42,6 +46,8 @@ func _build_save_slot_select() -> void:
 	add_child(save_slot_select)
 	save_slot_select.slot_selected.connect(_on_save_slot_selected)
 	save_slot_select.new_slot_requested.connect(_on_new_slot_requested)
+	if save_slot_select.has_signal("back_requested"):
+		save_slot_select.back_requested.connect(_show_title_menu)
 	save_slot_select.quit_requested.connect(_on_quit_requested)
 
 func _build_opening_prologue() -> void:
@@ -93,6 +99,18 @@ func _show_save_slots() -> void:
 	if play_mode_select != null and play_mode_select.has_method("close"):
 		play_mode_select.close()
 
+func _show_title_menu() -> void:
+	selected_slot_index = -1
+	selected_character_id = &""
+	if save_slot_select != null:
+		save_slot_select.visible = false
+	if play_mode_select != null and play_mode_select.has_method("close"):
+		play_mode_select.close()
+	if character_select != null:
+		character_select.visible = true
+		if character_select.has_method("show_title_menu"):
+			character_select.show_title_menu()
+
 func _on_save_slot_selected(slot_index: int) -> void:
 	selected_slot_index = slot_index
 	var slot := {}
@@ -108,6 +126,8 @@ func _on_save_slot_selected(slot_index: int) -> void:
 	if character_select != null:
 		_configure_character_select_for_slot(slot)
 		character_select.visible = true
+		if character_select.has_method("show_hero_select"):
+			character_select.show_hero_select()
 
 func _on_new_slot_requested(slot_index: int) -> void:
 	selected_slot_index = slot_index
@@ -121,11 +141,15 @@ func _on_new_slot_requested(slot_index: int) -> void:
 	if character_select != null:
 		_configure_character_select_for_slot(SaveManager.get_active_slot() if SaveManager != null else {})
 		character_select.visible = true
+		if character_select.has_method("show_hero_select"):
+			character_select.show_hero_select()
 
 func _on_opening_prologue_finished() -> void:
 	if character_select != null:
 		_configure_character_select_for_slot(SaveManager.get_active_slot() if SaveManager != null else {})
 		character_select.visible = true
+		if character_select.has_method("show_hero_select"):
+			character_select.show_hero_select()
 
 func _configure_character_select_for_slot(slot: Dictionary) -> void:
 	if character_select == null or not character_select.has_method("set_disabled_family_ids"):

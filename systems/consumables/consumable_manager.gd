@@ -48,6 +48,72 @@ const CATALOG := {
 		"tint": Color(1.0, 0.72, 0.46, 1.0)
 	}
 }
+const LOCALIZED_CATALOG := {
+	"zh_Hans": {
+		"bandage_pack": {
+			"name": "绷带包",
+			"short_name": "绷带",
+			"summary": "恢复 22% 最大生命。"
+		},
+		"healing_vial": {
+			"name": "治疗药瓶",
+			"short_name": "小疗",
+			"summary": "恢复 35% 最大生命。"
+		},
+		"medkit": {
+			"name": "医疗包",
+			"short_name": "医疗",
+			"summary": "恢复 55% 最大生命。"
+		},
+		"armor_patch": {
+			"name": "轻甲修补包",
+			"short_name": "护甲",
+			"summary": "恢复 45% 最大护甲。"
+		},
+		"inspiration_ampoule": {
+			"name": "守护蜡烛",
+			"short_name": "灵感",
+			"summary": "恢复 45% 最大灵感。"
+		},
+		"edge_oil": {
+			"name": "磨锋油",
+			"short_name": "攻击",
+			"summary": "下一场战斗：攻击伤害 +10%。"
+		}
+	},
+	"zh_Hant": {
+		"bandage_pack": {
+			"name": "繃帶包",
+			"short_name": "繃帶",
+			"summary": "恢復 22% 最大生命。"
+		},
+		"healing_vial": {
+			"name": "治療藥瓶",
+			"short_name": "小療",
+			"summary": "恢復 35% 最大生命。"
+		},
+		"medkit": {
+			"name": "醫療包",
+			"short_name": "醫療",
+			"summary": "恢復 55% 最大生命。"
+		},
+		"armor_patch": {
+			"name": "輕甲修補包",
+			"short_name": "護甲",
+			"summary": "恢復 45% 最大護甲。"
+		},
+		"inspiration_ampoule": {
+			"name": "守護蠟燭",
+			"short_name": "靈感",
+			"summary": "恢復 45% 最大靈感。"
+		},
+		"edge_oil": {
+			"name": "磨鋒油",
+			"short_name": "攻擊",
+			"summary": "下一場戰鬥：攻擊傷害 +10%。"
+		}
+	}
+}
 
 var slots: Array[Dictionary] = []
 var rng := RandomNumberGenerator.new()
@@ -66,7 +132,10 @@ func get_slots() -> Array[Dictionary]:
 	return slots.duplicate(true)
 
 func get_catalog() -> Dictionary:
-	return CATALOG.duplicate(true)
+	var output := {}
+	for consumable_id in CATALOG.keys():
+		output[consumable_id] = describe(String(consumable_id))
+	return output
 
 func random_consumable_id() -> String:
 	var keys := CATALOG.keys()
@@ -110,6 +179,11 @@ func use_slot(slot_index: int, actor: Node) -> bool:
 
 func describe(consumable_id: String) -> Dictionary:
 	var data: Dictionary = (CATALOG.get(consumable_id, {}) as Dictionary).duplicate(true)
+	var locale := _current_locale()
+	var locale_catalog: Dictionary = LOCALIZED_CATALOG.get(locale, {}) as Dictionary
+	var localized: Dictionary = locale_catalog.get(consumable_id, {}) as Dictionary
+	for key in localized.keys():
+		data[key] = localized[key]
 	data["id"] = consumable_id
 	return data
 
@@ -128,7 +202,8 @@ func _apply_consumable(consumable_id: String, actor: Node) -> bool:
 		"inspiration_ampoule":
 			return _restore_ratio(actor, "inspiration", "max_inspiration", 0.45)
 		"edge_oil":
-			return _queue_next_fight_prep("edge_oil", "Edge Oil", {"attack_damage_pct": 0.10})
+			var data := describe("edge_oil")
+			return _queue_next_fight_prep("edge_oil", String(data.get("name", "Edge Oil")), {"attack_damage_pct": 0.10})
 	return false
 
 func _restore_ratio(actor: Node, current_field: String, max_field: String, ratio: float) -> bool:
@@ -148,10 +223,28 @@ func _queue_next_fight_prep(consumable_id: String, title: String, effects: Dicti
 	RunDirector.set_pending_encounter_prep({
 		"choice_id": consumable_id,
 		"title": title,
-		"summary": "Consumable prep for the next map.",
+		"summary": _locale_text(
+			"Consumable prep for the next map.",
+			"消耗品备战将在下一张小地图生效。",
+			"消耗品備戰將在下一張小地圖生效。"
+		),
 		"temporary_effects": effects
 	})
 	return true
+
+func _current_locale() -> String:
+	if UISettings != null and UISettings.has_method("get_locale"):
+		return String(UISettings.get_locale())
+	return "zh_Hans"
+
+func _locale_text(en_text: String, zh_hans_text: String, zh_hant_text: String) -> String:
+	match _current_locale():
+		"zh_Hant":
+			return zh_hant_text
+		"zh_Hans":
+			return zh_hans_text
+		_:
+			return en_text
 
 func _has_property(actor: Node, field: String) -> bool:
 	if actor == null:

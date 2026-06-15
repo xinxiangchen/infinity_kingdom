@@ -2,6 +2,7 @@
 
 signal slot_selected(slot_index: int)
 signal new_slot_requested(slot_index: int)
+signal back_requested
 signal quit_requested
 
 const UISkin := preload("res://ui/ui_skin.gd")
@@ -33,7 +34,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			_activate_slot(key_event.keycode - KEY_1)
 			get_viewport().set_input_as_handled()
 		elif key_event.keycode == KEY_ESCAPE:
-			_cancel_delete()
+			if pending_delete_slot >= 0:
+				_cancel_delete()
+			else:
+				back_requested.emit()
 			get_viewport().set_input_as_handled()
 		elif key_event.keycode == KEY_Q:
 			quit_requested.emit()
@@ -248,4 +252,3 @@ func _locale_text(en_text: String, zh_hans_text: String, zh_hant_text: String) -
 			"zh_Hans":
 				return zh_hans_text
 	return en_text
-

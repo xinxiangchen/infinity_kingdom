@@ -4,6 +4,7 @@ signal character_selected(character_id: StringName)
 signal audio_requested
 signal settings_requested
 signal quit_requested
+signal new_game_requested
 
 const UICardFx := preload("res://ui/ui_card_fx.gd")
 const UISkin := preload("res://ui/ui_skin.gd")
@@ -231,6 +232,7 @@ var detail_mode: String = "hero"
 var screen_mode: String = "menu"
 var menu_preview_key: StringName = &""
 var disabled_family_ids: Array[String] = []
+var new_game_opens_save_slots: bool = false
 
 func _ready() -> void:
 	_build_ui()
@@ -647,6 +649,9 @@ func _on_primary_pressed() -> void:
 	if screen_mode == "select":
 		_activate_selected_hero()
 		return
+	if new_game_opens_save_slots:
+		new_game_requested.emit()
+		return
 	_show_hero_select()
 
 func _show_menu() -> void:
@@ -699,6 +704,15 @@ func _show_about() -> void:
 	_refresh_copy()
 	_queue_layout_refresh()
 	call_deferred("_focus_current_overview_entry")
+
+func set_new_game_opens_save_slots(enabled: bool) -> void:
+	new_game_opens_save_slots = enabled
+
+func show_title_menu() -> void:
+	_show_menu()
+
+func show_hero_select() -> void:
+	_show_hero_select()
 
 func _focus_selected_card() -> void:
 	if selected_hero_index >= 0 and selected_hero_index < hero_buttons.size():
@@ -1002,9 +1016,13 @@ func _refresh_copy(_locale: String = "") -> void:
 func _apply_title_preview() -> void:
 	detail_mode = "menu"
 	hero_portrait.texture = load("res://assets/ui/background/title_screen_bg.png") as Texture2D
-	hero_detail_title.text = "Town Trial"
+	hero_detail_title.text = _locale_text("Town Trial", "城镇试炼", "城鎮試煉")
 	hero_detail_role.text = "New Game / About / Setting / Quit"
-	hero_detail_desc.text = "Use New Game to choose one champion and enter the run. About stays here for credits and the primer; Setting handles display and language before play."
+	hero_detail_desc.text = _locale_text(
+		"Use New Game to choose an archive and champion. About keeps the primer here; Setting handles display and language before play.",
+		"New Game 进入档案与角色选择。About 保留玩法介绍，Setting 在开局前调整显示与语言。",
+		"New Game 進入檔案與角色選擇。About 保留玩法介紹，Setting 在開局前調整顯示與語言。"
+	)
 	_refresh_card_focus_states()
 
 func _subtitle_for_mode() -> String:
@@ -1179,19 +1197,28 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		match event.keycode:
 			KEY_1, KEY_KP_1:
+				if new_game_opens_save_slots and screen_mode != "select":
+					new_game_requested.emit()
+					get_viewport().set_input_as_handled()
+					return
 				_show_hero_select()
 				_set_selected_hero(0)
 			KEY_2, KEY_KP_2:
+				if new_game_opens_save_slots and screen_mode != "select":
+					new_game_requested.emit()
+					get_viewport().set_input_as_handled()
+					return
 				_show_hero_select()
 				_set_selected_hero(1)
 			KEY_3, KEY_KP_3:
+				if new_game_opens_save_slots and screen_mode != "select":
+					new_game_requested.emit()
+					get_viewport().set_input_as_handled()
+					return
 				_show_hero_select()
 				_set_selected_hero(2)
 			KEY_ENTER, KEY_KP_ENTER, KEY_SPACE:
-				if screen_mode == "select":
-					_activate_selected_hero()
-				else:
-					_show_hero_select()
+				_on_primary_pressed()
 			KEY_ESCAPE:
 				if screen_mode != "menu":
 					_show_menu()

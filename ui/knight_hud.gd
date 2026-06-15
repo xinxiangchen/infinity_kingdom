@@ -511,7 +511,7 @@ func _skill_slot(key: String, hotkey: String, icon_path: String) -> Dictionary:
 	stack.add_child(icon)
 
 	var label := Label.new()
-	label.text = _locale_text("Ready", "Ready", "Ready")
+	label.text = _locale_text("Ready", "就绪", "就緒")
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	UISkin.label(label, 11, Color(0.78, 1.0, 0.78))
@@ -796,7 +796,7 @@ func _update_skill_slots() -> void:
 		if icon != null:
 			icon.call("set_cooldown_state", cooldown, total)
 		if cooldown <= 0.05:
-			label.text = _locale_text("Ready", "Ready", "Ready")
+			label.text = _locale_text("Ready", "就绪", "就緒")
 			label.modulate = Color(0.78, 1.0, 0.78)
 			if root != null:
 				root.add_theme_stylebox_override("panel", _skill_slot_style(String(slot.get("key", key)), true))

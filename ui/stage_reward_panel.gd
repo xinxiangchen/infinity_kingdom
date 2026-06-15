@@ -1,6 +1,7 @@
 extends CanvasLayer
 
 signal reward_chosen(choice: Dictionary)
+signal pause_requested
 
 const UISkin := preload("res://ui/ui_skin.gd")
 
@@ -59,7 +60,11 @@ func _build_ui() -> void:
 	column.add_child(title_label)
 
 	detail_label = Label.new()
-	detail_label.text = _locale_text("Pick one. Status rewards last only for the next map.", "三选一。状态奖励只在下一张小地图生效。", "三選一。狀態獎勵只在下一張小地圖生效。")
+	detail_label.text = _locale_text(
+		"Pick one. Status rewards last only for the next map. Esc opens the menu.",
+		"三选一。状态奖励只在下一张小地图生效。Esc 打开菜单。",
+		"三選一。狀態獎勵只在下一張小地圖生效。Esc 打開選單。"
+	)
 	detail_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	UISkin.label(detail_label, 14, Color(0.78, 0.84, 0.92))
 	column.add_child(detail_label)
@@ -99,6 +104,24 @@ func _choose(index: int) -> void:
 	var choice := choices[index].duplicate(true)
 	close()
 	reward_chosen.emit(choice)
+
+func _unhandled_input(event: InputEvent) -> void:
+	if not visible:
+		return
+	if event is InputEventKey and event.pressed and not event.echo:
+		match event.keycode:
+			KEY_1, KEY_KP_1:
+				_choose(0)
+				get_viewport().set_input_as_handled()
+			KEY_2, KEY_KP_2:
+				_choose(1)
+				get_viewport().set_input_as_handled()
+			KEY_3, KEY_KP_3:
+				_choose(2)
+				get_viewport().set_input_as_handled()
+			KEY_ESCAPE:
+				pause_requested.emit()
+				get_viewport().set_input_as_handled()
 
 func _locale_text(en_text: String, zh_hans_text: String, zh_hant_text: String) -> String:
 	if UISettings != null and UISettings.has_method("get_locale"):

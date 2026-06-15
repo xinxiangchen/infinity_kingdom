@@ -33,6 +33,8 @@ var body_label: Label
 var hint_label: Label
 var current_index: int = 0
 var layout_size_override: Vector2 = Vector2.ZERO
+var transition_tween: Tween = null
+var transitioning: bool = false
 
 
 func _ready() -> void:
@@ -49,10 +51,19 @@ func open() -> void:
 	current_index = 0
 	visible = true
 	get_tree().paused = true
+	image_rect.modulate = Color.WHITE
+	title_label.modulate = Color.WHITE
+	body_label.modulate = Color.WHITE
+	hint_label.modulate = Color.WHITE
+	dimmer.color = Color(0.02, 0.018, 0.018, 0.46)
 	_show_current_panel()
+	_play_intro_fade()
 
 
 func close() -> void:
+	if transition_tween != null and transition_tween.is_valid():
+		transition_tween.kill()
+	transitioning = false
 	visible = false
 	get_tree().paused = false
 	finished.emit()
@@ -115,11 +126,56 @@ func _show_current_panel() -> void:
 
 
 func _advance() -> void:
+	if transitioning:
+		return
 	if current_index >= PANELS.size() - 1:
 		close()
 		return
 	current_index += 1
-	_show_current_panel()
+	_transition_to_current_panel()
+
+func _play_intro_fade() -> void:
+	if transition_tween != null and transition_tween.is_valid():
+		transition_tween.kill()
+	transitioning = true
+	image_rect.modulate.a = 0.0
+	title_label.modulate.a = 0.0
+	body_label.modulate.a = 0.0
+	hint_label.modulate.a = 0.0
+	transition_tween = create_tween()
+	transition_tween.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
+	transition_tween.set_parallel(true)
+	transition_tween.tween_property(image_rect, "modulate:a", 1.0, 0.36).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	transition_tween.tween_property(title_label, "modulate:a", 1.0, 0.28).set_delay(0.10)
+	transition_tween.tween_property(body_label, "modulate:a", 1.0, 0.30).set_delay(0.16)
+	transition_tween.tween_property(hint_label, "modulate:a", 1.0, 0.24).set_delay(0.22)
+	transition_tween.finished.connect(func() -> void:
+		transitioning = false
+	)
+
+func _transition_to_current_panel() -> void:
+	if transition_tween != null and transition_tween.is_valid():
+		transition_tween.kill()
+	transitioning = true
+	transition_tween = create_tween()
+	transition_tween.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
+	transition_tween.set_parallel(true)
+	transition_tween.tween_property(image_rect, "modulate:a", 0.18, 0.16).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	transition_tween.tween_property(title_label, "modulate:a", 0.0, 0.12)
+	transition_tween.tween_property(body_label, "modulate:a", 0.0, 0.12)
+	transition_tween.tween_property(hint_label, "modulate:a", 0.0, 0.12)
+	transition_tween.set_parallel(false)
+	transition_tween.tween_callback(func() -> void:
+		_show_current_panel()
+	)
+	transition_tween.set_parallel(true)
+	transition_tween.tween_property(image_rect, "modulate:a", 1.0, 0.26).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	transition_tween.tween_property(title_label, "modulate:a", 1.0, 0.22).set_delay(0.04)
+	transition_tween.tween_property(body_label, "modulate:a", 1.0, 0.24).set_delay(0.08)
+	transition_tween.tween_property(hint_label, "modulate:a", 1.0, 0.20).set_delay(0.12)
+	transition_tween.finished.connect(func() -> void:
+		transitioning = false
+	)
 
 
 func _unhandled_input(event: InputEvent) -> void:

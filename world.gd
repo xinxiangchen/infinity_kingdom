@@ -72,6 +72,7 @@ var active_run_event_kind: String = ""
 var active_encounter_prep: Dictionary = {}
 var return_pause_after_audio_panel: bool = false
 var return_pause_after_settings_panel: bool = false
+var reward_pause_resume_pending: bool = false
 var last_attack_feedback_msec: int = 0
 var reward_rng := RandomNumberGenerator.new()
 var map_runtime: Node = null
@@ -119,6 +120,8 @@ func _ready() -> void:
 		run_event_panel.event_choice_made.connect(_on_run_event_choice_made)
 	if stage_reward_panel != null and stage_reward_panel.has_signal("reward_chosen"):
 		stage_reward_panel.reward_chosen.connect(_on_stage_reward_chosen)
+		if stage_reward_panel.has_signal("pause_requested"):
+			stage_reward_panel.pause_requested.connect(_on_stage_reward_pause_requested)
 	if pause_menu != null:
 		if pause_menu.has_method("bind_world"):
 			pause_menu.bind_world(self)
@@ -373,12 +376,17 @@ func _unhandled_input(event: InputEvent) -> void:
 				return
 			if pause_menu != null and pause_menu.has_method("is_open") and bool(pause_menu.is_open()):
 				pause_menu.close()
+				_restore_reward_pause_after_pause_menu_close()
 				_refresh_battle_status()
 				get_viewport().set_input_as_handled()
 				return
 			if accessory_choice != null and accessory_choice.visible:
 				return
 			if run_event_panel != null and run_event_panel.visible:
+				return
+			if stage_reward_panel != null and stage_reward_panel.visible:
+				_on_stage_reward_pause_requested()
+				get_viewport().set_input_as_handled()
 				return
 			if pause_menu != null and pause_menu.has_method("open"):
 				pause_menu.open()
@@ -759,10 +767,24 @@ func _random_consumable_reward_choice() -> Dictionary:
 	}
 
 func _on_stage_reward_chosen(choice: Dictionary) -> void:
+	reward_pause_resume_pending = false
 	if stage_reward_panel != null and stage_reward_panel.has_method("close") and stage_reward_panel.visible:
 		stage_reward_panel.close()
 	_apply_stage_reward_choice(choice)
 	_start_next_encounter()
+
+func _on_stage_reward_pause_requested() -> void:
+	if pause_menu == null or not pause_menu.has_method("open"):
+		return
+	reward_pause_resume_pending = stage_reward_panel != null and stage_reward_panel.visible
+	pause_menu.open()
+	_refresh_battle_status()
+
+func _restore_reward_pause_after_pause_menu_close() -> void:
+	if reward_pause_resume_pending and stage_reward_panel != null and stage_reward_panel.visible:
+		get_tree().paused = true
+	else:
+		reward_pause_resume_pending = false
 
 func _apply_stage_reward_choice(choice: Dictionary) -> void:
 	match String(choice.get("type", "")):
@@ -2073,6 +2095,7 @@ func _on_pause_resume_requested() -> void:
 	return_pause_after_settings_panel = false
 	if pause_menu != null and pause_menu.has_method("close"):
 		pause_menu.close()
+	_restore_reward_pause_after_pause_menu_close()
 	_refresh_battle_status()
 
 func _on_pause_audio_requested() -> void:
@@ -2099,6 +2122,7 @@ func _on_pause_settings_requested() -> void:
 	_refresh_battle_status()
 
 func _on_pause_restart_requested() -> void:
+	reward_pause_resume_pending = false
 	if pause_menu != null and pause_menu.has_method("close"):
 		pause_menu.close()
 	_reset_to_character_select()
@@ -2138,6 +2162,7 @@ func _on_settings_panel_closed() -> void:
 func _on_quit_requested() -> void:
 	return_pause_after_audio_panel = false
 	return_pause_after_settings_panel = false
+	reward_pause_resume_pending = false
 	if pause_menu != null and pause_menu.has_method("close") and bool(pause_menu.is_open()):
 		pause_menu.close()
 	get_tree().paused = false
@@ -2338,4 +2363,3 @@ func _is_target_defeated(target: Node) -> bool:
 		if String(property.get("name", "")) == "hp":
 			return float(target.get("hp")) <= 0.0
 	return false
-
