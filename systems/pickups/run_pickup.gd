@@ -2,6 +2,10 @@ extends Node2D
 
 signal collected(kind: String, amount: float, world_position: Vector2)
 
+const TEXTURE_LOADER := preload("res://combat/runtime_texture_loader.gd")
+const GOLD_TEXTURE_PATH := "res://assets/effects/pickups/gold.webp"
+const EXPERIENCE_TEXTURE_PATH := "res://assets/effects/pickups/experience.webp"
+
 var kind: String = "gold"
 var amount: float = 0.0
 var tint: Color = Color(1.0, 0.88, 0.42, 1.0)
@@ -18,7 +22,7 @@ func setup(pickup_kind: String, pickup_amount: float, options: Dictionary = {}) 
 	amount = maxf(pickup_amount, 0.0)
 	tint = options.get("tint", _default_tint(kind))
 	var icon_path := String(options.get("icon", ""))
-	icon_texture = load(icon_path) as Texture2D if not icon_path.is_empty() else null
+	icon_texture = TEXTURE_LOADER.load_texture(icon_path) if not icon_path.is_empty() else _default_texture(kind)
 	var launch_speed := float(options.get("launch_speed", randf_range(34.0, 62.0)))
 	var launch_angle := float(options.get("launch_angle", randf() * TAU))
 	velocity = Vector2.RIGHT.rotated(launch_angle) * launch_speed
@@ -64,7 +68,11 @@ func _draw() -> void:
 	draw_circle(center, outer_radius + 2.0, Color(0.02, 0.03, 0.05, 0.52))
 	if icon_texture != null:
 		var icon_size := Vector2(28.0, 28.0)
-		if kind == "accessory":
+		if kind == "gold":
+			icon_size = Vector2(20.0, 26.0)
+		elif kind == "inspiration":
+			icon_size = Vector2(26.0, 26.0)
+		elif kind == "accessory":
 			icon_size = Vector2(26.0, 26.0)
 		elif kind == "consumable":
 			icon_size = Vector2(30.0, 30.0)
@@ -131,3 +139,12 @@ func _default_tint(pickup_kind: String) -> Color:
 			return Color(1.0, 0.88, 0.52, 1.0)
 		_:
 			return Color(1.0, 0.88, 0.42, 1.0)
+
+func _default_texture(pickup_kind: String) -> Texture2D:
+	match pickup_kind:
+		"gold":
+			return TEXTURE_LOADER.load_texture(GOLD_TEXTURE_PATH)
+		"inspiration":
+			return TEXTURE_LOADER.load_texture(EXPERIENCE_TEXTURE_PATH)
+		_:
+			return null

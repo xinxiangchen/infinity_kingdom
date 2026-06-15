@@ -1,4 +1,4 @@
-﻿extends Node2D
+extends Node2D
 
 const KNIGHT_SCENE := preload("res://characters/knight/knight.tscn")
 const RANGER_SCENE := preload("res://characters/ranger/ranger.tscn")
@@ -153,6 +153,8 @@ func _ready() -> void:
 		settings_panel.closed.connect(_on_settings_panel_closed)
 	if debug_panel != null and debug_panel.has_method("bind_world"):
 		debug_panel.bind_world(self)
+	if battle_status != null and battle_status.has_signal("debug_requested") and not battle_status.debug_requested.is_connected(_on_battle_status_debug_requested):
+		battle_status.debug_requested.connect(_on_battle_status_debug_requested)
 	_refresh_battle_status(
 		_ui_text("Town Boss Trial", "城镇王战试炼", "城鎮王戰試煉"),
 		_ui_text("Pick a champion, then claim relics between encounters.", "先选择角色，再在战斗间隙领取饰品。", "先選擇角色，再在戰鬥間隙領取飾品。"),
@@ -2185,6 +2187,11 @@ func _on_title_settings_requested() -> void:
 	if settings_panel != null and settings_panel.has_method("open"):
 		settings_panel.open()
 	_refresh_battle_status()
+
+func _on_battle_status_debug_requested() -> void:
+	if debug_panel == null or not debug_panel.has_method("toggle"):
+		return
+	debug_panel.toggle()
 
 func _on_audio_settings_panel_closed() -> void:
 	if return_pause_after_audio_panel:

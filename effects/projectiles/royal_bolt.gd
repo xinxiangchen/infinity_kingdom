@@ -1,9 +1,14 @@
 extends Area2D
 
+const TEXTURE_LOADER := preload("res://combat/runtime_texture_loader.gd")
+const BOSS_RED_TEXTURE_PATH := "res://assets/effects/projectiles/boss_bullet_red.webp"
+const BOSS_YELLOW_TEXTURE_PATH := "res://assets/effects/projectiles/boss_bullet_yellow.webp"
+
 @export var speed: float = 440.0
 @export var lifetime: float = 3.0
 
-@onready var bolt: Polygon2D = $Bolt
+@onready var bolt: Sprite2D = $Bolt
+@onready var collision_shape: CollisionShape2D = $CollisionShape2D
 
 var direction: Vector2 = Vector2.RIGHT
 var damage: float = 18.0
@@ -14,6 +19,8 @@ var pulse_time: float = 0.0
 var trail_timer: float = 0.0
 
 func _ready() -> void:
+	_setup_texture_visual(BOSS_YELLOW_TEXTURE_PATH)
+	_setup_collision_shape()
 	body_entered.connect(_on_body_entered)
 	area_entered.connect(_on_area_entered)
 
@@ -22,7 +29,7 @@ func setup(owner_actor: Node, travel_direction: Vector2, hit_damage: float, payl
 	direction = travel_direction.normalized() if travel_direction != Vector2.ZERO else Vector2.RIGHT
 	damage = hit_damage
 	extra_payload = payload.duplicate(true)
-	bolt.polygon = _pixel_bolt_polygon()
+	_setup_texture_visual(BOSS_RED_TEXTURE_PATH if hit_damage > 22.0 else BOSS_YELLOW_TEXTURE_PATH)
 	rotation = direction.angle()
 	var timer := get_tree().create_timer(lifetime)
 	timer.timeout.connect(queue_free)
@@ -33,7 +40,7 @@ func _physics_process(delta: float) -> void:
 	if _expire_if_blocked_between(previous_position, global_position):
 		return
 	pulse_time += delta
-	bolt.scale = Vector2.ONE * (1.08 if int(pulse_time * 18.0) % 2 == 0 else 0.96)
+	bolt.scale = Vector2.ONE * (0.9 if int(pulse_time * 18.0) % 2 == 0 else 0.82)
 	trail_timer -= delta
 	if trail_timer <= 0.0:
 		trail_timer = 0.05
@@ -101,18 +108,12 @@ func _resolve_damage_target(target: Variant) -> Node:
 	return null
 
 func _spawn_hit_flash() -> void:
-	var flash := Polygon2D.new()
-	flash.polygon = PackedVector2Array([
-		Vector2(-12.0, -4.0),
-		Vector2(-4.0, -12.0),
-		Vector2(4.0, -12.0),
-		Vector2(12.0, -4.0),
-		Vector2(12.0, 4.0),
-		Vector2(4.0, 12.0),
-		Vector2(-4.0, 12.0),
-		Vector2(-12.0, 4.0)
-	])
-	flash.color = Color(1.0, 0.84, 0.52, 0.9)
+	var flash := Sprite2D.new()
+	flash.texture = bolt.texture
+	flash.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	flash.centered = true
+	flash.scale = Vector2.ONE
+	flash.modulate = Color(1.0, 0.84, 0.52, 0.9)
 	flash.global_position = global_position
 	flash.rotation = rotation
 	get_tree().current_scene.add_child(flash)
@@ -120,17 +121,6 @@ func _spawn_hit_flash() -> void:
 	tween.tween_property(flash, "scale", Vector2.ONE * 1.7, 0.1)
 	tween.parallel().tween_property(flash, "modulate:a", 0.0, 0.1)
 	tween.finished.connect(flash.queue_free)
-
-func _pixel_bolt_polygon() -> PackedVector2Array:
-	return PackedVector2Array([
-		Vector2(-12.0, -4.0),
-		Vector2(-4.0, -9.0),
-		Vector2(6.0, -9.0),
-		Vector2(18.0, 0.0),
-		Vector2(6.0, 9.0),
-		Vector2(-4.0, 9.0),
-		Vector2(-12.0, 4.0)
-	])
 
 func _spawn_pixel_trail() -> void:
 	var scene_root := get_tree().current_scene
@@ -151,3 +141,17 @@ func _spawn_pixel_trail() -> void:
 	tween.tween_property(chip, "global_position", chip.global_position - direction * 8.0, 0.12)
 	tween.parallel().tween_property(chip, "modulate:a", 0.0, 0.12)
 	tween.finished.connect(chip.queue_free)
+
+func _setup_texture_visual(texture_path: String) -> void:
+	bolt.texture = TEXTURE_LOADER.load_texture(texture_path)
+	bolt.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	bolt.centered = true
+	bolt.scale = Vector2.ONE * 0.84
+
+func _setup_collision_shape() -> void:
+	if collision_shape == null:
+		return
+	var shape := CapsuleShape2D.new()
+	shape.radius = 8.0
+	shape.height = 34.0
+	collision_shape.shape = shape

@@ -1,10 +1,13 @@
 extends Area2D
 
+const TEXTURE_LOADER := preload("res://combat/runtime_texture_loader.gd")
+const PLAYER_ORB_TEXTURE_PATH := "res://assets/effects/projectiles/player_staff_orb.webp"
+
 @export var speed: float = 620.0
 @export var lifetime: float = 1.5
 @export var hit_radius: float = 18.0
 
-@onready var bolt: Polygon2D = $Bolt
+@onready var bolt: Sprite2D = $Bolt
 @onready var collision_shape: CollisionShape2D = $CollisionShape2D
 
 var direction: Vector2 = Vector2.RIGHT
@@ -19,6 +22,8 @@ var trail_timer: float = 0.0
 
 func _ready() -> void:
 	add_to_group("arcane_bolt_test")
+	_setup_texture_visual()
+	_setup_collision_shape()
 	body_entered.connect(_on_body_entered)
 	area_entered.connect(_on_area_entered)
 
@@ -29,7 +34,6 @@ func setup(owner_actor: Node, travel_direction: Vector2, hit_damage: float, hit_
 	crit_rate = hit_crit_rate
 	attack_name = attack_label
 	extra_payload = hit_extra_payload.duplicate(true)
-	bolt.polygon = _pixel_bolt_polygon()
 	rotation = direction.angle()
 	var timer := get_tree().create_timer(lifetime)
 	timer.timeout.connect(queue_free)
@@ -40,7 +44,7 @@ func _physics_process(delta: float) -> void:
 	if _expire_if_blocked_between(previous_position, global_position):
 		return
 	pulse_time += delta
-	bolt.scale = Vector2.ONE * (1.06 if int(pulse_time * 16.0) % 2 == 0 else 0.94)
+	bolt.scale = Vector2.ONE * (0.72 if int(pulse_time * 16.0) % 2 == 0 else 0.66)
 	trail_timer -= delta
 	if trail_timer <= 0.0:
 		trail_timer = 0.045
@@ -131,18 +135,12 @@ func _consume_bolt() -> void:
 	call_deferred("queue_free")
 
 func _spawn_hit_flash() -> void:
-	var flash := Polygon2D.new()
-	flash.polygon = PackedVector2Array([
-		Vector2(-14.0, -4.0),
-		Vector2(-4.0, -14.0),
-		Vector2(4.0, -14.0),
-		Vector2(14.0, -4.0),
-		Vector2(14.0, 4.0),
-		Vector2(4.0, 14.0),
-		Vector2(-4.0, 14.0),
-		Vector2(-14.0, 4.0)
-	])
-	flash.color = Color(0.82, 0.92, 1.0, 0.92)
+	var flash := Sprite2D.new()
+	flash.texture = TEXTURE_LOADER.load_texture(PLAYER_ORB_TEXTURE_PATH)
+	flash.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	flash.centered = true
+	flash.scale = Vector2.ONE * 0.82
+	flash.modulate = Color(0.82, 0.92, 1.0, 0.92)
 	flash.global_position = global_position
 	flash.rotation = rotation
 	get_tree().current_scene.add_child(flash)
@@ -151,37 +149,32 @@ func _spawn_hit_flash() -> void:
 	tween.parallel().tween_property(flash, "modulate:a", 0.0, 0.1)
 	tween.finished.connect(flash.queue_free)
 
-func _pixel_bolt_polygon() -> PackedVector2Array:
-	return PackedVector2Array([
-		Vector2(-16.0, -4.0),
-		Vector2(-6.0, -10.0),
-		Vector2(4.0, -10.0),
-		Vector2(12.0, -4.0),
-		Vector2(18.0, 0.0),
-		Vector2(12.0, 4.0),
-		Vector2(4.0, 10.0),
-		Vector2(-6.0, 10.0),
-		Vector2(-16.0, 4.0),
-		Vector2(-10.0, 0.0)
-	])
-
 func _spawn_pixel_trail() -> void:
 	var scene_root := get_tree().current_scene
 	if scene_root == null:
 		return
-	var rune := Polygon2D.new()
-	rune.color = Color(0.72, 0.88, 1.0, 0.34)
-	rune.polygon = PackedVector2Array([
-		Vector2(-3.0, -5.0),
-		Vector2(3.0, -5.0),
-		Vector2(5.0, 0.0),
-		Vector2(3.0, 5.0),
-		Vector2(-3.0, 5.0),
-		Vector2(-5.0, 0.0)
-	])
+	var rune := Sprite2D.new()
+	rune.texture = TEXTURE_LOADER.load_texture(PLAYER_ORB_TEXTURE_PATH)
+	rune.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	rune.centered = true
+	rune.scale = Vector2.ONE * 0.32
+	rune.modulate = Color(0.72, 0.88, 1.0, 0.34)
 	rune.global_position = global_position - direction * 10.0
 	scene_root.add_child(rune)
 	var tween := rune.create_tween()
 	tween.tween_property(rune, "scale", Vector2.ONE * 0.7, 0.12)
 	tween.parallel().tween_property(rune, "modulate:a", 0.0, 0.12)
 	tween.finished.connect(rune.queue_free)
+
+func _setup_texture_visual() -> void:
+	bolt.texture = TEXTURE_LOADER.load_texture(PLAYER_ORB_TEXTURE_PATH)
+	bolt.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	bolt.centered = true
+	bolt.scale = Vector2.ONE * 0.68
+
+func _setup_collision_shape() -> void:
+	if collision_shape == null:
+		return
+	var shape := CircleShape2D.new()
+	shape.radius = hit_radius
+	collision_shape.shape = shape

@@ -8,6 +8,7 @@ const MELEE_UTILS := preload("res://combat/melee_utils.gd")
 const TEXTURE_LOADER := preload("res://combat/runtime_texture_loader.gd")
 const RANGER_BODY_TEXTURE_PATH := "res://actors/bosses/textures/ranger_boss.png"
 const RANGER_WEAPON_TEXTURE_PATH := "res://art/final_materials/weapons/boss_weapon_ranger_blade.png"
+const MELEE_EFFECT_TEXTURE_PATH := "res://assets/effects/vfx/magic_circle.webp"
 
 @export var max_hp: float = 3600.0
 @export var defense_value: float = 190.0
@@ -71,6 +72,7 @@ var slow_factor: float = 1.0
 var body_sprite: Sprite2D = null
 var weapon_sprite: Sprite2D = null
 var weapon_angle_offset: float = 0.0
+var melee_texture: Texture2D = null
 var visual_last_position: Vector2 = Vector2.ZERO
 var visual_bob_time: float = 0.0
 
@@ -82,6 +84,7 @@ func _ready() -> void:
 	health_component.died.connect(_on_died)
 	hp = max_hp
 	visual_last_position = global_position
+	melee_texture = TEXTURE_LOADER.load_texture(MELEE_EFFECT_TEXTURE_PATH)
 	_setup_body_visual()
 	_setup_weapon_visual()
 	aim_ring.visible = false
@@ -412,6 +415,20 @@ func _spawn_piercing_arrow(direction: Vector2, damage: float) -> void:
 	arrow.setup(self, direction, damage, 0.1)
 
 func _spawn_slash_effect(radius: float, color: Color) -> void:
+	if melee_texture != null:
+		var texture_slash := Sprite2D.new()
+		texture_slash.texture = melee_texture
+		texture_slash.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		texture_slash.centered = true
+		texture_slash.modulate = color
+		texture_slash.position = line_direction * (radius * 0.42)
+		texture_slash.rotation = line_direction.angle()
+		texture_slash.scale = Vector2(0.22, 0.10)
+		effects_layer.add_child(texture_slash)
+		var texture_tween := texture_slash.create_tween()
+		texture_tween.tween_property(texture_slash, "scale", Vector2(0.32, 0.16), 0.12)
+		texture_tween.parallel().tween_property(texture_slash, "modulate:a", 0.0, 0.12)
+		texture_tween.finished.connect(texture_slash.queue_free)
 	var slash := Line2D.new()
 	slash.width = 12.0
 	slash.antialiased = true

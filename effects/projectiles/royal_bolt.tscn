@@ -2,8 +2,9 @@
 
 [ext_resource type="Script" path="res://effects/projectiles/royal_bolt.gd" id="1"]
 
-[sub_resource type="CircleShape2D" id="1"]
+[sub_resource type="CapsuleShape2D" id="1"]
 radius = 8.0
+height = 34.0
 
 [node name="RoyalBolt" type="Area2D"]
 script = ExtResource("1")
@@ -12,9 +13,8 @@ collision_mask = 1
 monitoring = true
 monitorable = false
 
-[node name="Bolt" type="Polygon2D" parent="."]
-color = Color(1, 0.82, 0.48, 1)
-polygon = PackedVector2Array(-12, -6, 8, -8, 16, 0, 8, 8, -12, 6, -4, 0)
+[node name="Bolt" type="Sprite2D" parent="."]
+texture_filter = 1
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 shape = SubResource("1")

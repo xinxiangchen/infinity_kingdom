@@ -1,5 +1,7 @@
 extends CanvasLayer
 
+signal debug_requested
+
 const RunEffects := preload("res://systems/run/run_effects.gd")
 const UISkin := preload("res://ui/ui_skin.gd")
 
@@ -33,6 +35,7 @@ var metric_caption_labels: Array[Label] = []
 var layout_size_override: Vector2 = Vector2.ZERO
 var context_state: Dictionary = {}
 var run_panel_root: PanelContainer
+var debug_button: Button
 
 func _ready() -> void:
 	context_state = _default_context_state()
@@ -94,6 +97,13 @@ func _build_ui() -> void:
 	title_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	UISkin.label(title_label, 24, Color(0.98, 0.90, 0.66))
 	content.add_child(title_label)
+
+	debug_button = Button.new()
+	debug_button.text = "Debug"
+	debug_button.tooltip_text = "Open the test panel"
+	UISkin.button_styles(debug_button, "thin")
+	debug_button.pressed.connect(_on_debug_pressed)
+	content.add_child(debug_button)
 
 	subtitle_label = Label.new()
 	subtitle_label.text = _locale_text(
@@ -416,6 +426,9 @@ func _default_context_state() -> Dictionary:
 			"無飾品\n選擇一件飾品來決定這一局的構築方向。"
 		)
 	}
+
+func _on_debug_pressed() -> void:
+	debug_requested.emit()
 
 func _refresh_context() -> void:
 	if objective_value_label == null:

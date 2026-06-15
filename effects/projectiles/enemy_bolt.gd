@@ -1,10 +1,16 @@
 extends Area2D
 
+const TEXTURE_LOADER := preload("res://combat/runtime_texture_loader.gd")
+const BASIC_BULLET_TEXTURE_PATH := "res://assets/effects/projectiles/basic_bullet.webp"
+const APPRENTICE_ORB_TEXTURE_PATH := "res://assets/effects/projectiles/apprentice_orb.webp"
+const ARCANIST_MISSILE_TEXTURE_PATH := "res://assets/effects/projectiles/arcanist_missile.webp"
+
 @export var speed: float = 420.0
 @export var lifetime: float = 2.4
 @export var hit_radius: float = 18.0
 
-@onready var bolt: Polygon2D = $Bolt
+@onready var bolt: Sprite2D = $Bolt
+@onready var collision_shape: CollisionShape2D = $CollisionShape2D
 
 var direction: Vector2 = Vector2.RIGHT
 var damage: float = 10.0
@@ -15,6 +21,8 @@ var pulse_time: float = 0.0
 var trail_timer: float = 0.0
 
 func _ready() -> void:
+	_setup_texture_visual(BASIC_BULLET_TEXTURE_PATH)
+	_setup_collision_shape()
 	body_entered.connect(_on_body_entered)
 	area_entered.connect(_on_area_entered)
 
@@ -23,8 +31,8 @@ func setup(owner_actor: Node, travel_direction: Vector2, hit_damage: float, colo
 	direction = travel_direction.normalized() if travel_direction != Vector2.ZERO else Vector2.RIGHT
 	damage = hit_damage
 	speed = new_speed
-	bolt.color = color
-	bolt.polygon = _pixel_bolt_polygon()
+	bolt.modulate = color
+	_setup_texture_visual(_texture_for_color(color))
 	extra_payload = payload.duplicate(true)
 	rotation = direction.angle()
 	var timer := get_tree().create_timer(lifetime)
@@ -37,7 +45,7 @@ func _physics_process(delta: float) -> void:
 		return
 	pulse_time += delta
 	var pixel_pulse := 1.08 if int(pulse_time * 18.0) % 2 == 0 else 0.96
-	bolt.scale = Vector2.ONE * pixel_pulse
+	bolt.scale = Vector2.ONE * (0.72 * pixel_pulse)
 	trail_timer -= delta
 	if trail_timer <= 0.0:
 		trail_timer = 0.055
@@ -119,18 +127,12 @@ func _resolve_damage_target(target: Variant) -> Node:
 	return null
 
 func _spawn_hit_flash() -> void:
-	var flash := Polygon2D.new()
-	flash.polygon = PackedVector2Array([
-		Vector2(-12, -4),
-		Vector2(-4, -12),
-		Vector2(4, -12),
-		Vector2(12, -4),
-		Vector2(12, 4),
-		Vector2(4, 12),
-		Vector2(-4, 12),
-		Vector2(-12, 4)
-	])
-	flash.color = bolt.color
+	var flash := Sprite2D.new()
+	flash.texture = bolt.texture
+	flash.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	flash.centered = true
+	flash.scale = Vector2.ONE * 0.82
+	flash.modulate = bolt.modulate
 	flash.global_position = global_position
 	flash.rotation = rotation
 	get_tree().current_scene.add_child(flash)
@@ -139,29 +141,16 @@ func _spawn_hit_flash() -> void:
 	tween.parallel().tween_property(flash, "modulate:a", 0.0, 0.1)
 	tween.finished.connect(flash.queue_free)
 
-func _pixel_bolt_polygon() -> PackedVector2Array:
-	return PackedVector2Array([
-		Vector2(-14.0, -4.0),
-		Vector2(-6.0, -8.0),
-		Vector2(10.0, -8.0),
-		Vector2(18.0, 0.0),
-		Vector2(10.0, 8.0),
-		Vector2(-6.0, 8.0),
-		Vector2(-14.0, 4.0)
-	])
-
 func _spawn_pixel_trail() -> void:
 	var scene_root := get_tree().current_scene
 	if scene_root == null:
 		return
-	var chip := Polygon2D.new()
-	chip.color = Color(bolt.color.r, bolt.color.g, bolt.color.b, 0.46)
-	chip.polygon = PackedVector2Array([
-		Vector2(-3.0, -3.0),
-		Vector2(3.0, -3.0),
-		Vector2(3.0, 3.0),
-		Vector2(-3.0, 3.0)
-	])
+	var chip := Sprite2D.new()
+	chip.texture = bolt.texture
+	chip.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	chip.centered = true
+	chip.scale = Vector2.ONE * 0.26
+	chip.modulate = Color(bolt.modulate.r, bolt.modulate.g, bolt.modulate.b, 0.46)
 	chip.global_position = global_position - direction * 12.0
 	chip.rotation = rotation
 	scene_root.add_child(chip)
@@ -169,3 +158,24 @@ func _spawn_pixel_trail() -> void:
 	tween.tween_property(chip, "global_position", chip.global_position - direction * 10.0, 0.12)
 	tween.parallel().tween_property(chip, "modulate:a", 0.0, 0.12)
 	tween.finished.connect(chip.queue_free)
+
+func _texture_for_color(color: Color) -> String:
+	if color.r > 0.9 and color.g < 0.72:
+		return ARCANIST_MISSILE_TEXTURE_PATH
+	if color.b > color.r and color.b > color.g:
+		return APPRENTICE_ORB_TEXTURE_PATH
+	return BASIC_BULLET_TEXTURE_PATH
+
+func _setup_texture_visual(texture_path: String) -> void:
+	bolt.texture = TEXTURE_LOADER.load_texture(texture_path)
+	bolt.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	bolt.centered = true
+	bolt.scale = Vector2.ONE * 0.72
+
+func _setup_collision_shape() -> void:
+	if collision_shape == null:
+		return
+	var shape := CapsuleShape2D.new()
+	shape.radius = 7.5
+	shape.height = 34.0
+	collision_shape.shape = shape

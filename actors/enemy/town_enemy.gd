@@ -4,6 +4,10 @@ signal defeated
 
 const DAMAGE_NUMBER_SCENE := preload("res://effects/damage_number.tscn")
 const ENEMY_BOLT_SCENE := preload("res://effects/projectiles/enemy_bolt.tscn")
+const TEXTURE_LOADER := preload("res://combat/runtime_texture_loader.gd")
+const LASER_BODY_TEXTURE_PATH := "res://assets/effects/vfx/laser_body.webp"
+const LASER_CORE_TEXTURE_PATH := "res://assets/effects/vfx/laser_core.webp"
+const SLASH_TEXTURE_PATH := "res://assets/effects/vfx/magic_circle.webp"
 const ENEMY_WEAPON_TEXTURE_PATHS := [
 	[
 		"res://art/final_materials/weapons/enemy_sword_guard_sword_normal.png",
@@ -107,6 +111,9 @@ var base_weapon_position: Vector2 = Vector2.ZERO
 var base_projectile_spawner_position: Vector2 = Vector2.ZERO
 var visual_bob_time: float = 0.0
 var death_sequence_started: bool = false
+var laser_effect_root: Node2D = null
+var laser_body_sprite: Sprite2D = null
+var laser_core_sprite: Sprite2D = null
 
 func _ready() -> void:
 	movement_rng.randomize()
@@ -125,6 +132,7 @@ func _ready() -> void:
 	hp = max_hp
 	telegraph_ring.visible = false
 	telegraph_line.visible = false
+	_setup_effect_sprites()
 	_find_target()
 	_update_visuals()
 
@@ -545,6 +553,8 @@ func _enter_recover(duration: float) -> void:
 	recover_duration = duration
 	velocity = Vector2.ZERO
 	telegraph_ring.visible = false
+	telegraph_line.visible = false
+	_set_laser_visual_visible(false)
 
 func _process_recover() -> void:
 	velocity = Vector2.ZERO
@@ -558,6 +568,16 @@ func _can_use_skills() -> bool:
 func _spawn_melee_attack_effect(radius: float, color: Color, spread: float, forward_offset: float, heavy: bool = false) -> void:
 	if effects_layer == null:
 		return
+	var slash_sprite := Sprite2D.new()
+	slash_sprite.texture = TEXTURE_LOADER.load_texture(SLASH_TEXTURE_PATH)
+	slash_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	slash_sprite.centered = true
+	slash_sprite.modulate = color
+	slash_sprite.position = line_direction * (forward_offset + radius * 0.42)
+	slash_sprite.rotation = line_direction.angle()
+	slash_sprite.scale = Vector2(0.24 if heavy else 0.18, 0.10 if heavy else 0.08)
+	effects_layer.add_child(slash_sprite)
+
 	var slash := Line2D.new()
 	slash.antialiased = false
 	slash.width = 12.0 if heavy else 8.0
@@ -603,6 +623,11 @@ func _spawn_melee_attack_effect(radius: float, color: Color, spread: float, forw
 	spark_tween.parallel().tween_property(spark, "modulate:a", 0.0, 0.12)
 	spark_tween.finished.connect(spark.queue_free)
 
+	var slash_sprite_tween := slash_sprite.create_tween()
+	slash_sprite_tween.tween_property(slash_sprite, "scale", slash_sprite.scale * Vector2(1.3, 1.6), 0.14)
+	slash_sprite_tween.parallel().tween_property(slash_sprite, "modulate:a", 0.0, 0.14)
+	slash_sprite_tween.finished.connect(slash_sprite.queue_free)
+
 func _show_intent_text(label_text: String, color_value: Color, scale_value: float = 0.8) -> void:
 	if effects_layer == null:
 		return
@@ -643,6 +668,7 @@ func _update_laser_telegraph(length: float = ARCANIST_LASER_LENGTH) -> void:
 	telegraph_line.global_position = global_position
 	telegraph_line.rotation = line_direction.angle()
 	telegraph_line.points = PackedVector2Array([Vector2.ZERO, Vector2(visible_length, 0.0)])
+	_update_laser_visuals(visible_length)
 
 func _laser_blocked_length(length: float) -> float:
 	var world := get_world_2d()
@@ -845,6 +871,7 @@ func _on_died() -> void:
 	set_physics_process(false)
 	telegraph_ring.visible = false
 	telegraph_line.visible = false
+	_set_laser_visual_visible(false)
 	if has_node("CollisionShape2D"):
 		var collision_shape := $CollisionShape2D as CollisionShape2D
 		if collision_shape != null:
@@ -874,6 +901,55 @@ func _on_died() -> void:
 			defeated.emit()
 			queue_free()
 	)
+
+func _setup_effect_sprites() -> void:
+	if effects_layer == null:
+		return
+	laser_effect_root = Node2D.new()
+	laser_effect_root.name = "LaserEffectRoot"
+	laser_effect_root.visible = false
+	effects_layer.add_child(laser_effect_root)
+	laser_body_sprite = Sprite2D.new()
+	laser_body_sprite.texture = TEXTURE_LOADER.load_texture(LASER_BODY_TEXTURE_PATH)
+	laser_body_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	laser_body_sprite.centered = false
+	laser_body_sprite.visible = false
+	laser_body_sprite.modulate = Color(1.0, 1.0, 1.0, 0.92)
+	laser_effect_root.add_child(laser_body_sprite)
+	laser_core_sprite = Sprite2D.new()
+	laser_core_sprite.texture = TEXTURE_LOADER.load_texture(LASER_CORE_TEXTURE_PATH)
+	laser_core_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	laser_core_sprite.centered = true
+	laser_core_sprite.visible = false
+	laser_effect_root.add_child(laser_core_sprite)
+
+func _update_laser_visuals(length: float) -> void:
+	if laser_body_sprite == null or laser_core_sprite == null:
+		return
+	var show_laser := telegraph_line.visible and length > 0.0
+	_set_laser_visual_visible(show_laser)
+	if not show_laser:
+		return
+	var texture_size := laser_body_sprite.texture.get_size() if laser_body_sprite.texture != null else Vector2(84.0, 24.0)
+	var body_scale_x := maxf(length / maxf(texture_size.x, 1.0), 0.01)
+	var body_scale_y := (1.08 if state == &"skill_laser" else 0.8) * (1.08 if elite else 1.0)
+	laser_body_sprite.position = Vector2.ZERO
+	laser_body_sprite.rotation = 0.0
+	laser_body_sprite.scale = Vector2(body_scale_x, body_scale_y)
+	laser_body_sprite.modulate = Color(1.0, 0.8, 0.62, 0.92) if state == &"skill_laser" else Color(1.0, 0.9, 0.78, 0.62)
+	laser_core_sprite.position = Vector2(0.0, 0.0)
+	laser_core_sprite.scale = Vector2.ONE * (0.78 if state == &"skill_laser" else 0.62) * (1.12 if elite else 1.0)
+	laser_core_sprite.modulate = Color(1.0, 0.88, 0.6, 0.94) if state == &"skill_laser" else Color(1.0, 0.94, 0.8, 0.72)
+	laser_effect_root.position = Vector2.ZERO
+	laser_effect_root.rotation = line_direction.angle()
+
+func _set_laser_visual_visible(visible_value: bool) -> void:
+	if laser_effect_root != null:
+		laser_effect_root.visible = visible_value
+	if laser_body_sprite != null:
+		laser_body_sprite.visible = visible_value
+	if laser_core_sprite != null:
+		laser_core_sprite.visible = visible_value
 
 func _spawn_death_burst() -> void:
 	if effects_layer == null:

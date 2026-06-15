@@ -1,9 +1,12 @@
 extends Area2D
 
+const TEXTURE_LOADER := preload("res://combat/runtime_texture_loader.gd")
+const ARROW_TEXTURE_PATH := "res://assets/effects/projectiles/arrow.webp"
+
 @export var speed: float = 700.0
 @export var lifetime: float = 1.4
 
-@onready var trail: Polygon2D = $Trail
+@onready var trail: Sprite2D = $Trail
 
 var direction: Vector2 = Vector2.RIGHT
 var damage: float = 100.0
@@ -16,6 +19,7 @@ var expired: bool = false
 var trail_timer: float = 0.0
 
 func _ready() -> void:
+	_setup_texture_visual()
 	body_entered.connect(_on_body_entered)
 	area_entered.connect(_on_area_entered)
 
@@ -25,7 +29,6 @@ func setup(owner_actor: Node, travel_direction: Vector2, hit_damage: float, hit_
 	damage = hit_damage
 	crit_rate = hit_crit_rate
 	attack_name = attack_label
-	trail.polygon = _pixel_arrow_polygon()
 	rotation = direction.angle()
 	var timer := get_tree().create_timer(lifetime)
 	timer.timeout.connect(queue_free)
@@ -36,8 +39,8 @@ func _physics_process(delta: float) -> void:
 	if _expire_if_blocked_between(previous_position, global_position):
 		return
 	pulse_time += delta
-	trail.scale = Vector2(1.08 if int(pulse_time * 20.0) % 2 == 0 else 0.98, 1.0)
-	trail.color = Color(1.0, 0.96, 0.72, 1.0)
+	trail.scale = Vector2.ONE * (0.82 if int(pulse_time * 20.0) % 2 == 0 else 0.76)
+	trail.modulate = Color(1.0, 0.96, 0.72, 1.0)
 	trail_timer -= delta
 	if trail_timer <= 0.0:
 		trail_timer = 0.035
@@ -101,16 +104,12 @@ func _resolve_damage_target(target: Variant) -> Node:
 	return null
 
 func _spawn_hit_flash() -> void:
-	var flash := Polygon2D.new()
-	flash.polygon = PackedVector2Array([
-		Vector2(-10.0, -4.0),
-		Vector2(6.0, -4.0),
-		Vector2(14.0, 0.0),
-		Vector2(6.0, 4.0),
-		Vector2(-10.0, 4.0),
-		Vector2(-4.0, 0.0)
-	])
-	flash.color = Color(1.0, 1.0, 0.8, 0.9)
+	var flash := Sprite2D.new()
+	flash.texture = TEXTURE_LOADER.load_texture(ARROW_TEXTURE_PATH)
+	flash.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	flash.centered = true
+	flash.scale = Vector2.ONE * 0.92
+	flash.modulate = Color(1.0, 1.0, 0.8, 0.9)
 	flash.global_position = global_position
 	flash.rotation = rotation
 	get_tree().current_scene.add_child(flash)
@@ -118,18 +117,6 @@ func _spawn_hit_flash() -> void:
 	tween.tween_property(flash, "scale", Vector2.ONE * 2.2, 0.08)
 	tween.parallel().tween_property(flash, "modulate:a", 0.0, 0.08)
 	tween.finished.connect(flash.queue_free)
-
-func _pixel_arrow_polygon() -> PackedVector2Array:
-	return PackedVector2Array([
-		Vector2(-20.0, -3.0),
-		Vector2(4.0, -3.0),
-		Vector2(4.0, -7.0),
-		Vector2(20.0, 0.0),
-		Vector2(4.0, 7.0),
-		Vector2(4.0, 3.0),
-		Vector2(-20.0, 3.0),
-		Vector2(-12.0, 0.0)
-	])
 
 func _spawn_pixel_trail() -> void:
 	var scene_root := get_tree().current_scene
@@ -150,3 +137,9 @@ func _spawn_pixel_trail() -> void:
 	tween.tween_property(chip, "global_position", chip.global_position - direction * 12.0, 0.1)
 	tween.parallel().tween_property(chip, "modulate:a", 0.0, 0.1)
 	tween.finished.connect(chip.queue_free)
+
+func _setup_texture_visual() -> void:
+	trail.texture = TEXTURE_LOADER.load_texture(ARROW_TEXTURE_PATH)
+	trail.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	trail.centered = true
+	trail.scale = Vector2.ONE * 0.78
