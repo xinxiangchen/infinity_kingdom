@@ -48,7 +48,7 @@ func build() -> void:
 	world_root.add_child(map_camera)
 
 
-func activate_room(room_index: int, player_character: Node) -> void:
+func activate_room(room_index: int, player_character: Node, move_player: bool = true) -> void:
 	if map_walkable_rects.is_empty():
 		return
 	var clamped_index := clampi(room_index, 0, map_walkable_rects.size() - 1)
@@ -56,7 +56,7 @@ func activate_room(room_index: int, player_character: Node) -> void:
 		spawn_marker.position = player_spawn_for_room(clamped_index)
 	if encounter_marker != null:
 		encounter_marker.position = encounter_spawn_for_room(clamped_index)
-	if player_character is Node2D and spawn_marker != null and is_instance_valid(player_character):
+	if move_player and player_character is Node2D and spawn_marker != null and is_instance_valid(player_character):
 		(player_character as Node2D).position = spawn_marker.position
 	update_camera(clamped_index, player_character, true)
 
@@ -263,6 +263,7 @@ func _try_add_generated_room_prop(room_index: int, candidate: Dictionary, placed
 	var source_width := maxf(1.0, float(source_size[0]))
 	var source_height := maxf(1.0, float(source_size[1]))
 	var texture_to_room_scale := Vector2(room_rect.size.x / source_width, room_rect.size.y / source_height)
+	texture_to_room_scale *= MapBrowserDemo.RANDOM_PROP_WORLD_SCALE
 	var prop_size := Vector2(float(texture.get_width()) * texture_to_room_scale.x, float(texture.get_height()) * texture_to_room_scale.y)
 	if not MapBrowserDemo.is_generated_prop_size_usable(prop_size, room_rect.size):
 		return false

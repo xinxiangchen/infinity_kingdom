@@ -35,7 +35,10 @@ func setup(owner_actor: Node, travel_direction: Vector2, hit_damage: float, hit_
 	timer.timeout.connect(queue_free)
 
 func _physics_process(delta: float) -> void:
+	var previous_position := global_position
 	global_position += direction * speed * delta
+	if _expire_if_blocked_between(previous_position, global_position):
+		return
 	pulse_time += delta
 	bolt.scale = Vector2.ONE * (1.06 if int(pulse_time * 16.0) % 2 == 0 else 0.94)
 	trail_timer -= delta
@@ -79,6 +82,19 @@ func _expire_on_blocker() -> void:
 	expired = true
 	_spawn_hit_flash()
 	_consume_bolt()
+
+func _expire_if_blocked_between(from_position: Vector2, to_position: Vector2) -> bool:
+	if expired or from_position == to_position:
+		return false
+	var query := PhysicsRayQueryParameters2D.create(from_position, to_position)
+	query.collision_mask = 1
+	query.exclude = [self]
+	var hit := get_world_2d().direct_space_state.intersect_ray(query)
+	var collider = hit.get("collider", null)
+	if collider is Node and (collider as Node).is_in_group("projectile_blocker"):
+		_expire_on_blocker()
+		return true
+	return false
 
 func _try_hit_overlapping_targets() -> void:
 	if expired:

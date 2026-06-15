@@ -110,6 +110,12 @@ func reset_run() -> void:
 	town_service_consumed = false
 	_emit_state()
 
+func mark_town_services_consumed() -> void:
+	if town_service_consumed:
+		return
+	town_service_consumed = true
+	_emit_state()
+
 func reward_encounter(encounter_index: int, actor: Node = null) -> int:
 	cleared_encounters += 1
 	var base_reward: int = 12 + maxi(encounter_index, 0) * 6
