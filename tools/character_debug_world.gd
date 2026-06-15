@@ -15,6 +15,7 @@ const TWIN_PRINCES_BOSS_SCENE := preload("res://actors/bosses/town/twin_princes_
 const RANGER_BOSS_SCENE := preload("res://actors/bosses/town/ranger_boss.tscn")
 const MAGE_BOSS_SCENE := preload("res://actors/bosses/town/mage_boss.tscn")
 const EMPEROR_BOSS_SCENE := preload("res://actors/bosses/town/emperor_boss.tscn")
+const DEBUG_PANEL_SCENE := preload("res://ui/debug_panel.tscn")
 
 const PLAYER_SCENES := {
 	&"knight": KNIGHT_SCENE,
@@ -44,9 +45,11 @@ const ENEMY_SCENES := {
 @onready var debug_status: CanvasLayer = $CharacterDebugStatus
 @onready var help_label: Label = $DebugOverlay/Panel/Margin/HelpLabel
 @onready var camera: Camera2D = $Camera2D
+var debug_panel: CanvasLayer = null
 
 var player_character: Node2D = null
 var active_target: Node2D = null
+var current_encounter: Node = null
 var active_enemy_id: StringName = &"dummy"
 var active_enemy_elite: bool = false
 
@@ -63,6 +66,8 @@ func _ready() -> void:
 		enemy_select.visible = false
 	if debug_status != null:
 		debug_status.visible = false
+	_build_debug_overlay_controls()
+	_build_debug_panel()
 	_refresh_help_text()
 	if Music != null:
 		Music.play_profile(&"title", true)
@@ -73,6 +78,48 @@ func _ready() -> void:
 			call_deferred("_on_character_selected", StringName(pending["character_id"]))
 
 
+func _build_debug_overlay_controls() -> void:
+	if help_label == null:
+		return
+	var margin := help_label.get_parent()
+	if margin == null:
+		return
+	var control_row := HBoxContainer.new()
+	control_row.add_theme_constant_override("separation", 12)
+	control_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	margin.remove_child(help_label)
+	margin.add_child(control_row)
+	control_row.add_child(help_label)
+	help_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	help_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	var upgrade_button := Button.new()
+	upgrade_button.text = "升级"
+	upgrade_button.custom_minimum_size = Vector2(120.0, 34.0)
+	upgrade_button.tooltip_text = "打开升级面板"
+	upgrade_button.pressed.connect(_on_upgrade_requested)
+	control_row.add_child(upgrade_button)
+
+
+func _build_debug_panel() -> void:
+	if DEBUG_PANEL_SCENE == null:
+		return
+	debug_panel = DEBUG_PANEL_SCENE.instantiate() as CanvasLayer
+	if debug_panel == null:
+		return
+	debug_panel.name = "DebugPanel"
+	add_child(debug_panel)
+	if debug_panel.has_method("bind_world"):
+		debug_panel.bind_world(self)
+	debug_panel.visible = false
+
+
+func _on_upgrade_requested() -> void:
+	if debug_panel == null or not is_instance_valid(debug_panel):
+		return
+	if debug_panel.has_method("toggle"):
+		debug_panel.toggle()
+	else:
+		debug_panel.visible = not debug_panel.visible
 func _process(_delta: float) -> void:
 	_refresh_help_text()
 
@@ -123,8 +170,10 @@ func _spawn_debug_target(enemy_id: StringName, elite: bool) -> void:
 	if active_target != null and is_instance_valid(active_target):
 		active_target.queue_free()
 	active_target = null
+	current_encounter = null
 	var scene: PackedScene = ENEMY_SCENES.get(enemy_id, TRAINING_DUMMY_SCENE)
 	active_target = scene.instantiate() as Node2D
+	current_encounter = active_target
 	active_target.position = target_spawn.position
 	active_target.z_index = 3
 	if active_target.get("elite") != null:
@@ -138,6 +187,7 @@ func _spawn_debug_target(enemy_id: StringName, elite: bool) -> void:
 
 func _on_debug_target_defeated() -> void:
 	active_target = null
+	current_encounter = null
 	var timer := get_tree().create_timer(0.45)
 	timer.timeout.connect(func() -> void:
 		if is_instance_valid(self):
@@ -168,6 +218,7 @@ func _return_to_character_select() -> void:
 	if active_target != null and is_instance_valid(active_target):
 		active_target.queue_free()
 	active_target = null
+	current_encounter = null
 	if enemy_select != null and enemy_select.has_method("close"):
 		enemy_select.close()
 	if debug_status != null and debug_status.has_method("clear"):

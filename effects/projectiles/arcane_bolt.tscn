@@ -2,9 +2,8 @@
 
 [ext_resource type="Script" path="res://effects/projectiles/arcane_bolt.gd" id="1"]
 
-[sub_resource type="CapsuleShape2D" id="1"]
-radius = 6.0
-height = 28.0
+[sub_resource type="CircleShape2D" id="1"]
+radius = 18.0
 
 [node name="ArcaneBolt" type="Area2D"]
 script = ExtResource("1")
@@ -13,9 +12,8 @@ collision_mask = 1
 monitoring = true
 monitorable = false
 
-[node name="Bolt" type="Polygon2D" parent="."]
-color = Color(0.68, 0.86, 1, 1)
-polygon = PackedVector2Array(-14, -4, 10, -6, 18, 0, 10, 6, -14, 4, -6, 0)
+[node name="Bolt" type="Sprite2D" parent="."]
+texture_filter = 1
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 shape = SubResource("1")

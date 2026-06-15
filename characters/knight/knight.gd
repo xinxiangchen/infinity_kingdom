@@ -15,14 +15,14 @@ signal died
 
 @export_group("Core Stats")
 @export var max_hp: float = 100.0
-@export var max_inspiration: float = 20.0
+@export var max_inspiration: float = 30.0
 @export var defense: float = 100.0
 @export var max_defense: float = 100.0
 @export var move_speed: float = 226.0
 @export var attack_damage: float = 100.0
 @export var attack_interval: float = 0.68
 @export_range(0.0, 1.0, 0.01) var crit_rate: float = 0.2
-@export var inspiration_gain_on_attack_hit: float = 2.0
+@export var inspiration_gain_on_attack_hit: float = 5.0
 
 @export_group("Normal Attack Timing")
 @export var attack_windup: float = 0.24
@@ -37,6 +37,8 @@ signal died
 @export var dash_duration: float = 0.3
 @export var dash_speed: float = 750.0
 @export var dash_hit_radius: float = 48.0
+@export var skill1_post_dash_radius: float = 78.0
+@export var skill1_post_dash_damage: float = 90.0
 @export var skill1_instant_dash_upgrade: bool = false
 @export var skill1_armor_break_upgrade: bool = false
 @export var armor_break_multiplier: float = 1.25
@@ -57,6 +59,9 @@ signal died
 @export var skill3_cost: float = 20.0
 @export var skill3_cooldown: float = 20.0
 @export var skill3_duration: float = 0.4
+@export var skill3_move_speed_bonus: float = 0.2
+@export var skill3_attack_speed_bonus: float = 1.0
+@export var skill3_attack_damage_bonus: float = 1.0
 @export var buff_duration: float = 15.0
 @export var sanctuary_damage_multiplier: float = 1.1
 @export var sanctuary_damage_reduction: float = 0.2
@@ -93,6 +98,7 @@ const MELEE_UTILS := preload("res://combat/melee_utils.gd")
 const TEXTURE_LOADER := preload("res://combat/runtime_texture_loader.gd")
 const KNIGHT_WEAPON_TEXTURE_PATH := "res://art/final_materials/weapons/player_knight_sword_lv3.png"
 const KNIGHT_DEATH_TEXTURE_PATH := "res://art/final_materials/deaths/player_knight_dead.png"
+const SANCTUARY_BACK_TEXTURE_PATH := "C:/Users/Lee/Desktop/kindom/弹幕/技能特效法阵.png"
 const BASE_SPRITE_SCALE := Vector2(0.85, 0.85)
 
 var hp: float = 0.0
@@ -109,10 +115,13 @@ var cooldowns := {
 }
 var active_damage_multiplier: float = 1.0
 var active_damage_reduction: float = 0.0
+var active_attack_speed_multiplier: float = 0.0
+var active_move_speed_bonus: float = 0.0
 var guard_active: bool = false
 var buff_active: bool = false
 var guard_time_remaining: float = 0.0
 var sanctuary_time_remaining: float = 0.0
+var sanctuary_heal_tick_elapsed: float = 0.0
 var queued_skill: StringName = &""
 var queued_skill_payload: Dictionary = {}
 var dash_direction: Vector2 = Vector2.RIGHT
@@ -126,6 +135,7 @@ var dodge_active: bool = false
 var dodge_invincible: bool = false
 var weapon: Node2D = null
 var weapon_sprite: Sprite2D = null
+var sanctuary_back_sprite: Sprite2D = null
 var weapon_swing_rotation: float = 0.0
 var weapon_swing_tween: Tween = null
 var silenced_time_remaining: float = 0.0
@@ -148,6 +158,7 @@ func _ready() -> void:
 	add_to_group("player")
 	hurtbox.area_entered.connect(_on_hurtbox_area_entered)
 	_setup_weapon_visual()
+	_setup_sanctuary_back_visual()
 	_setup_visual_shapes()
 	_build_animations()
 	slash_arc.visible = false
@@ -274,6 +285,8 @@ func _find_upgrade_definition(upgrade_id: String) -> Dictionary:
 
 func on_attack_landed(attack_name: StringName, target: Node) -> void:
 	gain_inspiration(inspiration_gain_on_attack_hit)
+	if buff_active and skill3_restore_defense_upgrade:
+		restore_defense(max_defense * 0.1)
 	AccessoryManager.apply_on_hit_effects(self, attack_name, target)
 
 func sync_visuals() -> void:
@@ -283,6 +296,8 @@ func sync_visuals() -> void:
 	slash_arc.position = _attack_visual_offset()
 	if slash_arc.visible:
 		slash_arc.rotation = _attack_facing().angle()
+	if sanctuary_back_sprite != null:
+		sanctuary_back_sprite.visible = buff_active and hp > 0.0
 	if hp <= 0.0:
 		modulate = Color(0.35, 0.35, 0.35, 1.0)
 	elif dodge_invincible:
@@ -387,7 +402,9 @@ func consume_queued_skill() -> StringName:
 	return skill_name
 
 func start_attack() -> void:
-	cooldowns["attack"] = attack_interval
+	var attack_speed := get_attack_speed_multiplier()
+	animation_player.speed_scale = attack_speed
+	cooldowns["attack"] = attack_interval / attack_speed
 	current_attack_targets.clear()
 	current_attack_name = &"attack"
 	attack_started.emit(current_attack_name)
@@ -395,9 +412,10 @@ func start_attack() -> void:
 	slash_arc.position = _attack_visual_offset()
 	slash_arc.rotation = _attack_facing().angle()
 	play_animation(&"attack")
-	_animate_weapon_swing(-34.0, 20.0, 0.12, 0.18)
+	_animate_weapon_swing(-34.0, 20.0, get_attack_windup_duration(), get_attack_recovery_duration())
 
 func finish_attack() -> void:
+	animation_player.speed_scale = 1.0
 	if current_attack_name != &"":
 		attack_finished.emit(current_attack_name)
 	slash_arc.visible = false
@@ -462,6 +480,8 @@ func try_hit_dash_targets_along_segment(start_position: Vector2, end_position: V
 
 func finish_dash() -> void:
 	velocity = Vector2.ZERO
+	var burst_targets: Array[Node] = []
+	apply_damage_to_targets(get_scaled_damage(skill1_post_dash_damage), skill1_post_dash_radius, &"skill1_burst", burst_targets)
 	if current_attack_name != &"":
 		attack_finished.emit(current_attack_name)
 	current_attack_name = &""
@@ -500,7 +520,7 @@ func _distance_to_segment(point: Vector2, start_position: Vector2, end_position:
 	return point.distance_to(closest_point)
 
 func trigger_normal_attack_hit() -> void:
-	apply_damage_to_targets_in_arc(attack_damage, attack_range, attack_arc_degrees, &"attack")
+	apply_damage_to_targets_in_arc(get_scaled_damage(attack_damage), attack_range, attack_arc_degrees, &"attack")
 	_show_melee_slash_effect(attack_range, attack_arc_degrees)
 	_flash_melee_impact()
 
@@ -539,7 +559,7 @@ func trigger_shockwave() -> void:
 	var payload := {}
 	if skill2_knock_up_upgrade:
 		payload["knock_up_duration"] = knock_up_duration
-	apply_damage_to_targets(skill2_damage, shockwave_radius, &"skill2", shockwave_targets, payload)
+	apply_damage_to_targets(get_scaled_damage(skill2_damage + 150.0), shockwave_radius, &"skill2", shockwave_targets, payload)
 	if skill2_shield_upgrade:
 		activate_guard()
 	attack_finished.emit(&"skill2")
@@ -565,19 +585,21 @@ func end_guard() -> void:
 	shield_changed.emit(shield)
 
 func apply_sanctuary() -> void:
-	if skill3_heal_upgrade:
-		heal((max_hp - hp) * 0.1)
+	heal(max_hp * 0.5)
 	if skill3_restore_defense_upgrade:
 		if health_component.has_method("restore_defense_full"):
 			health_component.restore_defense_full()
 		else:
 			health_component.defense = health_component.max_defense
 			health_component.defense_changed.emit(health_component.defense, health_component.max_defense)
-	active_damage_multiplier = sanctuary_damage_multiplier
+	active_damage_multiplier = 1.0 + skill3_attack_damage_bonus
+	active_attack_speed_multiplier = skill3_attack_speed_bonus
+	active_move_speed_bonus = skill3_move_speed_bonus
 	active_damage_reduction = sanctuary_damage_reduction
 	health_component.set_damage_reduction(active_damage_reduction)
 	buff_active = true
 	sanctuary_time_remaining = buff_duration
+	sanctuary_heal_tick_elapsed = 0.0
 	attack_started.emit(&"skill3")
 	_show_sanctuary_activation()
 	attack_finished.emit(&"skill3")
@@ -586,10 +608,15 @@ func clear_sanctuary() -> void:
 	if not buff_active and sanctuary_time_remaining <= 0.0:
 		return
 	active_damage_multiplier = 1.0
+	active_attack_speed_multiplier = 0.0
+	active_move_speed_bonus = 0.0
 	active_damage_reduction = 0.0
+	sanctuary_heal_tick_elapsed = 0.0
 	health_component.set_damage_reduction(0.0)
 	buff_active = false
 	sanctuary_time_remaining = 0.0
+	if sanctuary_back_sprite != null:
+		sanctuary_back_sprite.visible = false
 	sanctuary_ring.visible = false
 	sanctuary_ring.rotation = 0.0
 	sanctuary_ring.scale = Vector2.ONE
@@ -602,11 +629,32 @@ func cast_skill3() -> void:
 func heal(amount: float) -> void:
 	health_component.heal(amount)
 
+func restore_defense(amount: float) -> void:
+	if amount <= 0.0 or hp <= 0.0:
+		return
+	var previous_defense: float = float(health_component.defense)
+	health_component.defense = minf(health_component.defense + amount, health_component.max_defense)
+	health_component.defense_regen_timer = 0.0
+	if not is_equal_approx(previous_defense, health_component.defense):
+		health_component.defense_changed.emit(health_component.defense, health_component.max_defense)
+
 func get_scaled_damage(base_damage: float) -> float:
 	return base_damage * active_damage_multiplier
 
+func get_attack_speed_multiplier() -> float:
+	return 1.0 + active_attack_speed_multiplier
+
+func get_attack_windup_duration() -> float:
+	return attack_windup / get_attack_speed_multiplier()
+
+func get_attack_hit_frame_duration() -> float:
+	return attack_hit_frame / get_attack_speed_multiplier()
+
+func get_attack_recovery_duration() -> float:
+	return attack_recovery / get_attack_speed_multiplier()
+
 func get_current_move_speed() -> float:
-	return move_speed * slow_factor
+	return move_speed * (1.0 + active_move_speed_bonus) * slow_factor
 
 func get_effective_move_speed() -> float:
 	return get_current_move_speed()
@@ -781,6 +829,19 @@ func _setup_weapon_visual() -> void:
 	weapon_sprite.position = Vector2(27.0, 0.0)
 	weapon.add_child(weapon_sprite)
 
+func _setup_sanctuary_back_visual() -> void:
+	sanctuary_back_sprite = Sprite2D.new()
+	sanctuary_back_sprite.texture = TEXTURE_LOADER.load_texture(SANCTUARY_BACK_TEXTURE_PATH)
+	sanctuary_back_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	sanctuary_back_sprite.centered = true
+	sanctuary_back_sprite.position = Vector2(0.0, -18.0)
+	sanctuary_back_sprite.scale = Vector2.ONE * 0.34
+	sanctuary_back_sprite.modulate = Color(1.0, 1.0, 1.0, 0.8)
+	sanctuary_back_sprite.visible = false
+	sanctuary_back_sprite.z_index = -1
+	sanctuary_back_sprite.show_behind_parent = true
+	add_child(sanctuary_back_sprite)
+
 func _sync_weapon_visual() -> void:
 	if weapon == null:
 		return
@@ -915,6 +976,11 @@ func _update_guard(delta: float) -> void:
 func _update_sanctuary(delta: float) -> void:
 	if not buff_active:
 		return
+	if skill3_heal_upgrade:
+		sanctuary_heal_tick_elapsed += delta
+		while sanctuary_heal_tick_elapsed >= 1.0:
+			sanctuary_heal_tick_elapsed -= 1.0
+			heal(max_hp * 0.05)
 	sanctuary_time_remaining = maxf(sanctuary_time_remaining - delta, 0.0)
 	_spawn_sanctuary_visual(delta)
 	if sanctuary_time_remaining <= 0.0:
@@ -922,6 +988,8 @@ func _update_sanctuary(delta: float) -> void:
 
 func _spawn_sanctuary_visual(delta: float) -> void:
 	sanctuary_ring.rotation += delta * 2.5
+	if sanctuary_back_sprite != null:
+		sanctuary_back_sprite.rotation += delta * 0.7
 
 func spawn_damage_number(amount: float, is_critical: bool, world_position: Vector2) -> void:
 	var damage_number := DAMAGE_NUMBER_SCENE.instantiate()

@@ -19,7 +19,8 @@ func enter() -> void:
 
 func physics_update(delta: float) -> void:
 	elapsed += delta
-	actor.velocity = actor.velocity.move_toward(Vector2.ZERO, actor.move_speed * delta * 14.0)
+	var move_speed: float = float(actor.get_current_move_speed()) if actor.has_method("get_current_move_speed") else float(actor.move_speed)
+	actor.velocity = actor.velocity.move_toward(Vector2.ZERO, move_speed * delta * 14.0)
 
 func evaluate_transitions() -> void:
 	if elapsed >= actor.hit_stun_duration:
