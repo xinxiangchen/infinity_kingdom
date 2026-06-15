@@ -23,8 +23,13 @@ const ENCOUNTER_SCENES := [
 	preload("res://actors/encounters/town_mob_encounter.tscn"),
 	preload("res://actors/encounters/town_mob_encounter.tscn"),
 	preload("res://actors/encounters/town_mob_encounter.tscn"),
+	preload("res://actors/encounters/empty_encounter.tscn"),
+	preload("res://actors/encounters/empty_encounter.tscn"),
+	preload("res://actors/encounters/empty_encounter.tscn"),
 	preload("res://actors/encounters/town_mob_encounter.tscn"),
 	preload("res://actors/bosses/town/judicator_boss.tscn"),
+	preload("res://actors/encounters/town_mob_encounter.tscn"),
+	preload("res://actors/encounters/town_mob_encounter.tscn"),
 	preload("res://actors/encounters/empty_encounter.tscn")
 ]
 const FINAL_BOSS_SCENES := [
@@ -32,7 +37,12 @@ const FINAL_BOSS_SCENES := [
 	RANGER_BOSS_SCENE,
 	MAGE_BOSS_SCENE
 ]
-const ENCOUNTER_ROOM_INDICES := [0, 1, 2, 3, 8, 9, 10, 11, 12]
+const ENCOUNTER_ROOM_INDICES := [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+const FUNCTION_ROOM_EVENTS := {
+	4: "rest",
+	5: "forge",
+	6: "shop"
+}
 const RELIC_REROLL_COST := 12
 const HIT_FEEDBACK_COOLDOWN_MSEC := 55
 const GATE_WALK_FINISH_DISTANCE := 10.0
@@ -76,6 +86,7 @@ var reward_pause_resume_pending: bool = false
 var last_attack_feedback_msec: int = 0
 var reward_rng := RandomNumberGenerator.new()
 var map_runtime: Node = null
+var active_map_room_index: int = -1
 var gate_walk_active: bool = false
 var gate_walk_target: Vector2 = Vector2.ZERO
 var gate_walk_callback: Callable = Callable()
@@ -215,6 +226,20 @@ func _walk_player_to_room_exit(callback: Callable) -> void:
 		exit_target = player_node.global_position + Vector2(90.0, 0.0)
 	_walk_player_to_target(exit_target, callback)
 
+func _walk_player_to_next_room_entry(next_encounter_index: int, callback: Callable) -> void:
+	if next_encounter_index >= _encounter_count():
+		if callback.is_valid():
+			callback.call()
+		return
+	_walk_player_to_target(_player_spawn_for_room(next_encounter_index), func() -> void:
+		if not is_instance_valid(self):
+			return
+		_activate_map_room(next_encounter_index, false)
+		_update_map_camera(true)
+		if callback.is_valid():
+			callback.call()
+	)
+
 func _walk_player_to_target(target_position: Vector2, callback: Callable) -> void:
 	if player_character == null or not is_instance_valid(player_character) or not (player_character is Node2D):
 		if callback.is_valid():
@@ -303,10 +328,12 @@ func _hide_legacy_arena() -> void:
 			if child is CanvasItem:
 				(child as CanvasItem).visible = false
 
-func _activate_map_room(room_index: int) -> void:
+func _activate_map_room(room_index: int, move_player: bool = true) -> void:
 	if map_runtime == null:
 		return
-	map_runtime.activate_room(_map_room_index_for_encounter(room_index), player_character)
+	var map_room_index := _map_room_index_for_encounter(room_index)
+	map_runtime.activate_room(map_room_index, player_character, move_player)
+	active_map_room_index = map_room_index
 
 func _player_spawn_for_room(room_index: int) -> Vector2:
 	if map_runtime == null:
@@ -498,14 +525,17 @@ func _start_next_encounter() -> void:
 		_complete_run_victory()
 		return
 	if encounter_index > 0:
-		_transition_through_room_door(encounter_index, Callable(self, "_begin_current_encounter"))
+		if active_map_room_index == _map_room_index_for_encounter(encounter_index):
+			_begin_current_encounter()
+		else:
+			_transition_through_room_door(encounter_index, Callable(self, "_begin_current_encounter"))
 		return
 	_begin_current_encounter()
 
 func _begin_current_encounter() -> void:
 	if LineageDirector != null:
 		LineageDirector.record_checkpoint(encounter_index)
-	_activate_map_room(encounter_index)
+	_activate_map_room(encounter_index, active_map_room_index < 0)
 	_play_audio_profile_for_encounter(encounter_index)
 	current_encounter = _encounter_scene_for_index(encounter_index).instantiate()
 	current_encounter.position = encounter_marker.position
@@ -525,28 +555,13 @@ func _transition_through_room_door(room_index: int, callback: Callable) -> void:
 		if callback.is_valid():
 			callback.call()
 		return
-	if door_transition_layer == null or door_transition_backdrop == null:
+	_walk_player_to_target(_player_spawn_for_room(room_index), func() -> void:
+		if not is_instance_valid(self):
+			return
+		_activate_map_room(room_index, false)
+		_update_map_camera(true)
 		if callback.is_valid():
 			callback.call()
-		return
-	door_transition_layer.visible = true
-	door_transition_backdrop.color = Color(0.01, 0.012, 0.018, 0.0)
-	var tween := create_tween()
-	tween.tween_property(door_transition_backdrop, "color:a", 0.86, 0.12)
-	tween.tween_callback(func() -> void:
-		if not is_instance_valid(self):
-			return
-		_activate_map_room(room_index)
-		if player_character is Node2D and is_instance_valid(player_character):
-			(player_character as Node2D).global_position = _room_entrance_target(room_index)
-		_update_map_camera(true)
-	)
-	tween.tween_property(door_transition_backdrop, "color:a", 0.0, 0.18)
-	tween.tween_callback(func() -> void:
-		if not is_instance_valid(self):
-			return
-		door_transition_layer.visible = false
-		_walk_player_to_target(_player_spawn_for_room(room_index), callback)
 	)
 
 func _toggle_inventory_panel() -> void:
@@ -573,6 +588,7 @@ func _on_encounter_defeated() -> void:
 	if skip_rewards:
 		if not active_encounter_prep.is_empty():
 			RunDirector.set_pending_encounter_prep(active_encounter_prep)
+		var function_event_kind := _function_event_kind_for_encounter(encounter_index)
 		current_encounter = null
 		active_encounter_prep.clear()
 		_refresh_battle_status(
@@ -583,10 +599,13 @@ func _on_encounter_defeated() -> void:
 		var empty_timer := get_tree().create_timer(0.35)
 		empty_timer.timeout.connect(func() -> void:
 			if is_instance_valid(self) and player_character != null and is_instance_valid(player_character) and float(player_character.hp) > 0.0:
-				_walk_player_to_room_exit(func() -> void:
-					if is_instance_valid(self):
-						_start_next_encounter()
-				)
+				if not function_event_kind.is_empty():
+					_offer_run_event_kind(function_event_kind)
+				else:
+					_walk_player_to_room_exit(func() -> void:
+						if is_instance_valid(self):
+							_start_next_encounter()
+					)
 		)
 		return
 	var reward := RunDirector.reward_encounter(encounter_index, player_character)
@@ -615,7 +634,15 @@ func _on_encounter_defeated() -> void:
 				if defeated_final_encounter:
 					_complete_run_victory()
 				else:
-					_offer_stage_clear_reward()
+					var next_encounter_index := encounter_index + 1
+					_walk_player_to_next_room_entry(next_encounter_index, func() -> void:
+						if not is_instance_valid(self) or player_character == null or not is_instance_valid(player_character) or float(player_character.hp) <= 0.0:
+							return
+						if not _function_event_kind_for_encounter(next_encounter_index).is_empty():
+							_start_next_encounter()
+						else:
+							_offer_stage_clear_reward()
+					)
 			)
 	)
 
@@ -702,6 +729,25 @@ func _offer_accessory(reason: String, source: String = "route") -> void:
 			_ui_text("Current", "当前", "當前"),
 			String(AccessoryManager.get_equipped_accessory().get("name", _ui_text("No Accessory", "无饰品", "無飾品")))
 		])
+	)
+
+func _function_event_kind_for_encounter(index: int) -> String:
+	var room_index := _map_room_index_for_encounter(index)
+	return String(FUNCTION_ROOM_EVENTS.get(room_index, ""))
+
+func _offer_run_event_kind(kind: String) -> void:
+	if kind == "relic" or run_event_panel == null or not run_event_panel.has_method("open"):
+		_offer_accessory(_ui_text("Victory Relic", "Victory Relic", "Victory Relic"), "victory")
+		return
+	if kind == "rest" or kind == "forge" or kind == "shop":
+		RunDirector.mark_town_services_consumed()
+	_play_intermission_audio()
+	active_run_event_kind = kind
+	run_event_panel.open(kind, int(RunDirector.gold))
+	_refresh_battle_status(
+		_ui_text("Run Event", "Run Event", "Run Event"),
+		_ui_text("Choose a reward before moving on.", "Choose a reward before moving on.", "Choose a reward before moving on."),
+		_localized_detail_text("%s: %d" % [_ui_text("Gold", "Gold", "Gold"), int(RunDirector.gold)])
 	)
 
 func _offer_next_run_event() -> void:

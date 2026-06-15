@@ -101,6 +101,7 @@ const GENERATED_PROP_MANIFEST_PATH := "res://assets/maps/stitched_demo/generated
 const RANDOM_PROP_MIN_PER_ROOM := 2
 const RANDOM_PROP_MAX_PER_ROOM := 4
 const RANDOM_PROP_PLACEMENT_ATTEMPTS := 56
+const RANDOM_PROP_WORLD_SCALE := 0.70
 const RANDOM_PROP_MIN_WIDTH_RATIO := 0.045
 const RANDOM_PROP_MIN_HEIGHT_RATIO := 0.050
 const RANDOM_PROP_MIN_AREA_RATIO := 0.0040
@@ -667,6 +668,7 @@ func _try_add_random_cover_prop(parent: Node, room_index: int, candidate: Dictio
 	var source_width := maxf(1.0, float(source_size[0]))
 	var source_height := maxf(1.0, float(source_size[1]))
 	var texture_to_room_scale := Vector2(room_rect.size.x / source_width, room_rect.size.y / source_height)
+	texture_to_room_scale *= RANDOM_PROP_WORLD_SCALE
 	var prop_size := Vector2(float(texture.get_width()) * texture_to_room_scale.x, float(texture.get_height()) * texture_to_room_scale.y)
 	if not is_generated_prop_size_usable(prop_size, room_rect.size):
 		return false

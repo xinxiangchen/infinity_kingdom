@@ -229,7 +229,7 @@ func _run() -> void:
 	world.current_encounter = first_room_stub
 	world.player_character.global_position = world._room_exit_target(0)
 	world._on_encounter_defeated()
-	await create_timer(0.9).timeout
+	await create_timer(2.8).timeout
 	await process_frame
 	if world.stage_reward_panel == null or not world.stage_reward_panel.visible:
 		push_error("Stage reward panel did not open after the first map encounter")
