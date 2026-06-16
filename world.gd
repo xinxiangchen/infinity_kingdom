@@ -87,6 +87,8 @@ var last_attack_feedback_msec: int = 0
 var reward_rng := RandomNumberGenerator.new()
 var map_runtime: Node = null
 var active_map_room_index: int = -1
+var function_room_choice_pending: bool = false
+var selected_function_room_index: int = -1
 var gate_walk_active: bool = false
 var gate_walk_target: Vector2 = Vector2.ZERO
 var gate_walk_callback: Callable = Callable()
@@ -169,6 +171,7 @@ func _ready() -> void:
 
 func _process(_delta: float) -> void:
 	_process_gate_walk()
+	_process_function_room_choice()
 	_apply_cheat_safety()
 	_sync_audio_hint_state()
 	_update_map_camera()
@@ -213,6 +216,9 @@ func _process_gate_walk() -> void:
 
 func _finish_gate_walk() -> void:
 	var callback := gate_walk_callback
+	if player_character is Node2D and is_instance_valid(player_character):
+		(player_character as Node2D).global_position = gate_walk_target
+		(player_character as CanvasItem).visible = true
 	_clear_player_auto_walk()
 	if callback.is_valid():
 		callback.call()
@@ -268,6 +274,20 @@ func _clear_player_auto_walk() -> void:
 	gate_walk_last_distance = INF
 	if player_character != null and is_instance_valid(player_character) and player_character.has_method("set_auto_walk_direction"):
 		player_character.set_auto_walk_direction(Vector2.ZERO)
+
+
+func _process_function_room_choice() -> void:
+	if not function_room_choice_pending or gate_walk_active:
+		return
+	if map_runtime == null or player_character == null or not is_instance_valid(player_character) or not (player_character is Node2D):
+		return
+	var room_index := int(map_runtime.function_room_choice_for_position((player_character as Node2D).global_position))
+	if room_index < 0 or not map_runtime.select_function_room(room_index):
+		return
+	function_room_choice_pending = false
+	selected_function_room_index = room_index
+	encounter_index = room_index - 1
+	_start_next_encounter()
 
 func _prepare_map_runtime() -> void:
 	_hide_legacy_arena()
@@ -472,6 +492,10 @@ func _on_character_selected(character_id: StringName) -> void:
 		if inventory_panel.has_method("reset_run"):
 			inventory_panel.reset_run()
 	active_encounter_prep.clear()
+	function_room_choice_pending = false
+	selected_function_room_index = -1
+	if map_runtime != null and map_runtime.has_method("reset_function_room_selection"):
+		map_runtime.reset_function_room_selection()
 	if player_character != null and is_instance_valid(player_character):
 		player_character.queue_free()
 	if current_encounter != null and is_instance_valid(current_encounter):
@@ -521,7 +545,7 @@ func _start_next_encounter() -> void:
 	return_pause_after_audio_panel = false
 	return_pause_after_settings_panel = false
 	active_encounter_prep = RunDirector.consume_pending_encounter_prep()
-	encounter_index += 1
+	encounter_index = _next_encounter_index(encounter_index)
 	if encounter_index >= _encounter_count():
 		active_encounter_prep.clear()
 		_complete_run_victory()
@@ -533,6 +557,12 @@ func _start_next_encounter() -> void:
 			_transition_through_room_door(encounter_index, Callable(self, "_begin_current_encounter"))
 		return
 	_begin_current_encounter()
+
+
+func _next_encounter_index(current_index: int) -> int:
+	if current_index in [4, 5, 6]:
+		return 7
+	return current_index + 1
 
 func _begin_current_encounter() -> void:
 	if LineageDirector != null:
@@ -636,7 +666,10 @@ func _on_encounter_defeated() -> void:
 				if defeated_final_encounter:
 					_complete_run_victory()
 				else:
-					var next_encounter_index := encounter_index + 1
+					var next_encounter_index := _next_encounter_index(encounter_index)
+					if next_encounter_index in [4, 5, 6] and selected_function_room_index < 0:
+						_offer_stage_clear_reward()
+						return
 					_walk_player_to_next_room_entry(next_encounter_index, func() -> void:
 						if not is_instance_valid(self) or player_character == null or not is_instance_valid(player_character) or float(player_character.hp) <= 0.0:
 							return
@@ -819,6 +852,15 @@ func _on_stage_reward_chosen(choice: Dictionary) -> void:
 	if stage_reward_panel != null and stage_reward_panel.has_method("close") and stage_reward_panel.visible:
 		stage_reward_panel.close()
 	_apply_stage_reward_choice(choice)
+	var next_encounter_index := _next_encounter_index(encounter_index)
+	if next_encounter_index in [4, 5, 6] and selected_function_room_index < 0:
+		function_room_choice_pending = true
+		_refresh_battle_status(
+			_ui_text("Three-Way Gate", "三岔门", "三岔門"),
+			_ui_text("Church / Armory / Shop", "教堂 / 军械库 / 商店", "教堂 / 軍械庫 / 商店"),
+			_localized_detail_text("")
+		)
+		return
 	_start_next_encounter()
 
 func _on_stage_reward_pause_requested() -> void:
@@ -978,6 +1020,8 @@ func _on_run_event_choice_made(choice_id: String) -> void:
 	if EndingDirector != null and applied and _is_church_baptism_choice(choice_id):
 		EndingDirector.record_church_baptism()
 	active_run_event_kind = ""
+	if player_character is CanvasItem and is_instance_valid(player_character):
+		(player_character as CanvasItem).visible = true
 	if choice_id == "shop_relic" and applied:
 		_offer_accessory(_ui_text("Purchased Relic", "购买饰品", "購買飾品"), "shop")
 	else:

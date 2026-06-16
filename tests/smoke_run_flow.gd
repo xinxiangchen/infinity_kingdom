@@ -251,6 +251,18 @@ func _run() -> void:
 		push_error("Second map encounter did not begin after first map reward")
 		quit(1)
 		return
+	if world._next_encounter_index(4) != 7 or world._next_encounter_index(5) != 7 or world._next_encounter_index(6) != 7:
+		push_error("Function-room route did not converge on the inner gate")
+		quit(1)
+		return
+	var visible_recovery_position: Vector2 = (world.player_character as Node2D).global_position + Vector2(8.0, 0.0)
+	world.gate_walk_target = visible_recovery_position
+	world.player_character.visible = false
+	world._finish_gate_walk()
+	if not world.player_character.visible or world.player_character.global_position != visible_recovery_position:
+		push_error("Door transition did not recover the player position and visibility")
+		quit(1)
+		return
 
 	# The final chamber is an extra encounter slot backed by FINAL_BOSS_SCENES.
 	world.encounter_index = world._encounter_count() - 1
