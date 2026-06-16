@@ -102,6 +102,24 @@ const RANDOM_PROP_MIN_PER_ROOM := 2
 const RANDOM_PROP_MAX_PER_ROOM := 4
 const RANDOM_PROP_PLACEMENT_ATTEMPTS := 56
 const RANDOM_PROP_WORLD_SCALE := 0.70
+const GENERATED_PROP_SCALE_MULTIPLIERS := {
+	"0:Room01Prop01": 0.50,
+	"0:Room01Prop03": 0.50,
+	"0:Room01Prop07": 0.50,
+	"1:Room02Prop13": 0.50,
+	"1:Room02Prop15": 0.50,
+	"3:Room04Prop01": 1.20,
+	"3:Room04Prop02": 1.20
+}
+const GENERATED_PROP_WALKABLE := {
+	"3:Room04Prop35": true,
+	"3:Room04Prop36": true,
+	"3:Room04Prop37": true
+}
+const GENERATED_PROP_FOOTPRINTS := {
+	"3:Room04Prop01": Rect2(0.08, 0.70, 0.84, 0.24),
+	"3:Room04Prop02": Rect2(0.08, 0.70, 0.84, 0.24)
+}
 const RANDOM_PROP_MIN_WIDTH_RATIO := 0.045
 const RANDOM_PROP_MIN_HEIGHT_RATIO := 0.050
 const RANDOM_PROP_MIN_AREA_RATIO := 0.0040
@@ -114,10 +132,10 @@ const RANDOM_PROP_DOOR_LANE_WIDTH_RATIO := 0.22
 const RANDOM_PROP_SAFE_RADIUS := 92.0
 
 const WALKABLE_AREAS := [
-	Rect2(0.06, 0.16, 0.88, 0.68),
-	Rect2(0.06, 0.16, 0.88, 0.68),
-	Rect2(0.06, 0.15, 0.88, 0.70),
-	Rect2(0.06, 0.16, 0.84, 0.70),
+	Rect2(0.06, 0.16, 0.88, 0.59),
+	Rect2(0.06, 0.16, 0.88, 0.60),
+	Rect2(0.06, 0.15, 0.88, 0.61),
+	Rect2(0.06, 0.16, 0.84, 0.60),
 	Rect2(0.06, 0.16, 0.88, 0.68),
 	Rect2(0.06, 0.16, 0.88, 0.68),
 	Rect2(0.06, 0.16, 0.88, 0.68),
@@ -132,7 +150,7 @@ const WALKABLE_AREAS := [
 const ROOM_WALL_COLLISIONS := [
 	[
 		Rect2(0.00, 0.00, 1.00, 0.16),
-		Rect2(0.00, 0.84, 1.00, 0.16),
+		Rect2(0.00, 0.75, 1.00, 0.25),
 		Rect2(0.00, 0.00, 0.055, 0.42),
 		Rect2(0.00, 0.58, 0.055, 0.42),
 		Rect2(0.94, 0.00, 0.06, 0.42),
@@ -140,7 +158,7 @@ const ROOM_WALL_COLLISIONS := [
 	],
 	[
 		Rect2(0.00, 0.00, 1.00, 0.16),
-		Rect2(0.00, 0.84, 1.00, 0.16),
+		Rect2(0.00, 0.76, 1.00, 0.24),
 		Rect2(0.00, 0.00, 0.055, 0.42),
 		Rect2(0.00, 0.58, 0.055, 0.42),
 		Rect2(0.94, 0.00, 0.06, 0.42),
@@ -148,7 +166,7 @@ const ROOM_WALL_COLLISIONS := [
 	],
 	[
 		Rect2(0.00, 0.00, 1.00, 0.16),
-		Rect2(0.00, 0.84, 1.00, 0.16),
+		Rect2(0.00, 0.76, 1.00, 0.24),
 		Rect2(0.00, 0.00, 0.055, 0.42),
 		Rect2(0.00, 0.58, 0.055, 0.42),
 		Rect2(0.94, 0.00, 0.06, 0.42),
@@ -158,7 +176,7 @@ const ROOM_WALL_COLLISIONS := [
 		Rect2(0.00, 0.00, 0.08, 0.42),
 		Rect2(0.00, 0.58, 0.08, 0.42),
 		Rect2(0.08, 0.00, 0.76, 0.16),
-		Rect2(0.08, 0.84, 0.76, 0.16),
+		Rect2(0.08, 0.76, 0.76, 0.24),
 		Rect2(0.88, 0.00, 0.06, 0.32),
 		Rect2(0.88, 0.68, 0.06, 0.32)
 	],
@@ -276,6 +294,12 @@ const ROOM_WALL_COLLISIONS := [
 		Rect2(0.71, 0.62, 0.055, 0.075)
 	]
 ]
+
+const ROOM_CIRCLE_COLLISIONS := {
+	3: [
+		{"center": Vector2(0.455, 0.49), "radius": 0.105}
+	]
+}
 
 const PROP_CANDIDATES := []
 
@@ -598,6 +622,9 @@ func _add_collision_boxes(parent: Node) -> void:
 		var wall_rects := get_room_wall_rects(index, room_rect)
 		for wall_index in range(wall_rects.size()):
 			_add_blocker(collision_root, "Room%02dWall%02d" % [index + 1, wall_index + 1], wall_rects[wall_index])
+		var circle_collisions := get_room_circle_collisions(index, room_rect)
+		for circle_index in range(circle_collisions.size()):
+			_add_circle_blocker(collision_root, "Room%02dCircle%02d" % [index + 1, circle_index + 1], circle_collisions[circle_index])
 
 func _add_blocker(parent: Node, blocker_name: String, rect: Rect2) -> void:
 	if rect.size.x <= 0.0 or rect.size.y <= 0.0:
@@ -628,6 +655,22 @@ func _add_blocker(parent: Node, blocker_name: String, rect: Rect2) -> void:
 			Vector2(-rect.size.x * 0.5, rect.size.y * 0.5)
 		])
 		body.add_child(visual)
+
+func _add_circle_blocker(parent: Node, blocker_name: String, data: Dictionary) -> void:
+	var radius := float(data.get("radius", 0.0))
+	if radius <= 0.0:
+		return
+	var body := StaticBody2D.new()
+	body.name = blocker_name
+	body.collision_layer = 1
+	body.collision_mask = 2
+	body.position = data.get("center", Vector2.ZERO) as Vector2
+	parent.add_child(body)
+	var shape := CollisionShape2D.new()
+	var circle := CircleShape2D.new()
+	circle.radius = radius
+	shape.shape = circle
+	body.add_child(shape)
 
 func _add_random_cover_props(parent: Node) -> void:
 	var prop_root := Node2D.new()
@@ -668,7 +711,7 @@ func _try_add_random_cover_prop(parent: Node, room_index: int, candidate: Dictio
 	var source_width := maxf(1.0, float(source_size[0]))
 	var source_height := maxf(1.0, float(source_size[1]))
 	var texture_to_room_scale := Vector2(room_rect.size.x / source_width, room_rect.size.y / source_height)
-	texture_to_room_scale *= RANDOM_PROP_WORLD_SCALE
+	texture_to_room_scale *= RANDOM_PROP_WORLD_SCALE * generated_prop_scale_multiplier(candidate)
 	var prop_size := Vector2(float(texture.get_width()) * texture_to_room_scale.x, float(texture.get_height()) * texture_to_room_scale.y)
 	if not is_generated_prop_size_usable(prop_size, room_rect.size):
 		return false
@@ -700,10 +743,17 @@ func _add_generated_cover_prop(parent: Node, candidate: Dictionary, texture: Tex
 	body.name = "%sCover" % String(candidate.get("name", "GeneratedProp"))
 	body.collision_layer = 1
 	body.collision_mask = 2
-	body.add_to_group("projectile_blocker")
+	var walkable_prop := generated_prop_is_walkable(candidate)
+	if walkable_prop:
+		body.collision_layer = 0
+		body.collision_mask = 0
+	else:
+		body.add_to_group("projectile_blocker")
 	body.position = world_position
 	body.set_meta("room_index", int(candidate.get("room", -1)))
+	body.set_meta("prop_key", generated_prop_key(candidate))
 	body.set_meta("prop_size", Vector2(float(texture.get_width()) * texture_to_room_scale.x, float(texture.get_height()) * texture_to_room_scale.y))
+	body.set_meta("walkable_prop", walkable_prop)
 	parent.add_child(body)
 
 	var sprite := Sprite2D.new()
@@ -714,7 +764,7 @@ func _add_generated_cover_prop(parent: Node, candidate: Dictionary, texture: Tex
 	sprite.z_index = 1
 	body.add_child(sprite)
 
-	var polygons := build_alpha_collision_polygons(texture, texture_to_room_scale)
+	var polygons := build_generated_prop_collision_polygons(candidate, texture, texture_to_room_scale)
 	for index in range(polygons.size()):
 		var collision := CollisionPolygon2D.new()
 		collision.name = "AlphaCollision%02d" % [index + 1]
@@ -804,6 +854,44 @@ static func get_room_wall_rects(room_index: int, room_rect: Rect2) -> Array[Rect
 			Vector2(room_rect.size.x * rect_ratio.size.x, room_rect.size.y * rect_ratio.size.y)
 		))
 	return result
+
+static func get_room_circle_collisions(room_index: int, room_rect: Rect2) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	var definitions := ROOM_CIRCLE_COLLISIONS.get(room_index, []) as Array
+	for raw_definition in definitions:
+		var definition := raw_definition as Dictionary
+		var center_ratio := definition.get("center", Vector2.ZERO) as Vector2
+		result.append({
+			"center": room_rect.position + Vector2(room_rect.size.x * center_ratio.x, room_rect.size.y * center_ratio.y),
+			"radius": minf(room_rect.size.x, room_rect.size.y) * float(definition.get("radius", 0.0))
+		})
+	return result
+
+static func generated_prop_key(candidate: Dictionary) -> String:
+	return "%d:%s" % [int(candidate.get("room", -1)), String(candidate.get("name", ""))]
+
+static func generated_prop_scale_multiplier(candidate: Dictionary) -> float:
+	return float(GENERATED_PROP_SCALE_MULTIPLIERS.get(generated_prop_key(candidate), 1.0))
+
+static func generated_prop_is_walkable(candidate: Dictionary) -> bool:
+	return bool(GENERATED_PROP_WALKABLE.get(generated_prop_key(candidate), false))
+
+static func build_generated_prop_collision_polygons(candidate: Dictionary, texture: Texture2D, texture_to_room_scale: Vector2) -> Array[PackedVector2Array]:
+	if generated_prop_is_walkable(candidate):
+		return []
+	var footprint = GENERATED_PROP_FOOTPRINTS.get(generated_prop_key(candidate), null)
+	if footprint is Rect2 and texture != null:
+		var ratio := footprint as Rect2
+		var texture_size := Vector2(float(texture.get_width()), float(texture.get_height()))
+		var top_left := (texture_size * ratio.position - texture_size * 0.5) * texture_to_room_scale
+		var bottom_right := (texture_size * ratio.end - texture_size * 0.5) * texture_to_room_scale
+		return [PackedVector2Array([
+			top_left,
+			Vector2(bottom_right.x, top_left.y),
+			bottom_right,
+			Vector2(top_left.x, bottom_right.y)
+		])]
+	return build_alpha_collision_polygons(texture, texture_to_room_scale)
 
 static func load_generated_prop_manifest() -> Dictionary:
 	if not FileAccess.file_exists(GENERATED_PROP_MANIFEST_PATH):

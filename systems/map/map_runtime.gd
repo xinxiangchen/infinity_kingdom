@@ -9,6 +9,9 @@ const DOOR_WIDTH := 42.0
 const DOOR_HEIGHT := 132.0
 const DOOR_GLOW_COLOR := Color(0.66, 1.0, 0.84, 0.92)
 const DOOR_FRAME_COLOR := Color(0.18, 0.22, 0.28, 0.98)
+const FUNCTION_ROOM_INDICES := [4, 5, 6]
+const FUNCTION_CHOICE_SOURCE_ROOM_INDEX := 3
+const FUNCTION_CHOICE_Y_RATIOS := [0.28, 0.50, 0.72]
 
 var world_root: Node2D = null
 var spawn_marker: Marker2D = null
@@ -19,6 +22,7 @@ var map_camera: Camera2D = null
 var map_cover_root: Node2D = null
 var map_room_rects: Array[Rect2] = []
 var map_walkable_rects: Array[Rect2] = []
+var selected_function_room_index: int = -1
 
 
 func setup(p_world_root: Node2D, p_spawn_marker: Marker2D, p_encounter_marker: Marker2D, p_rng: RandomNumberGenerator) -> void:
@@ -106,26 +110,84 @@ func _build_runtime_map_rooms() -> void:
 	map_room_rects.clear()
 	map_walkable_rects.clear()
 	var x_cursor := 0.0
+	var function_room_x := -1.0
 	for index in range(MapBrowserDemo.ROOM_PATHS.size()):
 		var texture := RuntimeTextureLoader.load_texture(String(MapBrowserDemo.ROOM_PATHS[index]))
 		if texture == null:
 			push_warning("Missing map texture: %s" % MapBrowserDemo.ROOM_PATHS[index])
 			continue
-		var sprite := Sprite2D.new()
-		sprite.name = "MapRoom%02d" % [index + 1]
-		sprite.texture = texture
-		sprite.centered = false
-		sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
-		sprite.position = Vector2(x_cursor, 0.0)
-		map_root.add_child(sprite)
-		var room_rect := Rect2(sprite.position, Vector2(float(texture.get_width()), float(texture.get_height())))
+		if index == FUNCTION_ROOM_INDICES[0]:
+			function_room_x = x_cursor
+		var room_x := function_room_x if index in FUNCTION_ROOM_INDICES else x_cursor
+		var room_rect := Rect2(Vector2(room_x, 0.0), Vector2(float(texture.get_width()), float(texture.get_height())))
 		var walk_rect := _map_walkable_rect(index, room_rect)
 		map_room_rects.append(room_rect)
 		map_walkable_rects.append(walk_rect)
-		_add_runtime_room_walls(index, room_rect)
-		_add_runtime_room_doors(index, room_rect, walk_rect)
-		x_cursor += room_rect.size.x
+		if index not in FUNCTION_ROOM_INDICES:
+			_add_runtime_room_visual(index, texture, room_rect)
+			_add_runtime_room_walls(index, room_rect)
+			_add_runtime_room_doors(index, room_rect, walk_rect)
+		if index == FUNCTION_ROOM_INDICES[FUNCTION_ROOM_INDICES.size() - 1]:
+			x_cursor = function_room_x + room_rect.size.x
+		elif index not in FUNCTION_ROOM_INDICES:
+			x_cursor += room_rect.size.x
 	_add_runtime_room_props()
+
+
+func _add_runtime_room_visual(index: int, texture: Texture2D, room_rect: Rect2) -> void:
+	var sprite := Sprite2D.new()
+	sprite.name = "MapRoom%02d" % [index + 1]
+	sprite.texture = texture
+	sprite.centered = false
+	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	sprite.position = room_rect.position
+	sprite.set_meta("room_index", index)
+	map_root.add_child(sprite)
+
+
+func select_function_room(room_index: int) -> bool:
+	if selected_function_room_index >= 0 or room_index not in FUNCTION_ROOM_INDICES:
+		return false
+	var texture := RuntimeTextureLoader.load_texture(String(MapBrowserDemo.ROOM_PATHS[room_index]))
+	if texture == null:
+		return false
+	selected_function_room_index = room_index
+	_add_runtime_room_visual(room_index, texture, map_room_rects[room_index])
+	_add_runtime_room_walls(room_index, map_room_rects[room_index])
+	_add_runtime_room_doors(room_index, map_room_rects[room_index], map_walkable_rects[room_index])
+	_add_random_props_for_room(room_index)
+	return true
+
+
+func reset_function_room_selection() -> void:
+	selected_function_room_index = -1
+	if map_root != null:
+		for child in map_root.get_children():
+			var child_name := String(child.name)
+			if child_name.begins_with("MapRoom05") or child_name.begins_with("MapRoom06") or child_name.begins_with("MapRoom07") or child_name.begins_with("Room05") or child_name.begins_with("Room06") or child_name.begins_with("Room07"):
+				child.queue_free()
+	if map_cover_root != null:
+		for child in map_cover_root.get_children():
+			if int(child.get_meta("room_index", -1)) in FUNCTION_ROOM_INDICES:
+				child.queue_free()
+
+
+func function_room_choice_for_position(world_position: Vector2) -> int:
+	if selected_function_room_index >= 0 or map_room_rects.size() <= FUNCTION_CHOICE_SOURCE_ROOM_INDEX:
+		return selected_function_room_index
+	var source_rect := map_room_rects[FUNCTION_CHOICE_SOURCE_ROOM_INDEX]
+	if world_position.x < source_rect.end.x - 46.0:
+		return -1
+	var walk_rect := map_walkable_rects[FUNCTION_CHOICE_SOURCE_ROOM_INDEX]
+	var best_index := 0
+	var best_distance := INF
+	for choice_index in range(FUNCTION_CHOICE_Y_RATIOS.size()):
+		var choice_y := walk_rect.position.y + walk_rect.size.y * float(FUNCTION_CHOICE_Y_RATIOS[choice_index])
+		var distance := absf(world_position.y - choice_y)
+		if distance < best_distance:
+			best_distance = distance
+			best_index = choice_index
+	return int(FUNCTION_ROOM_INDICES[best_index])
 
 
 func _map_walkable_rect(index: int, room_rect: Rect2) -> Rect2:
@@ -140,6 +202,9 @@ func _add_runtime_room_walls(index: int, room_rect: Rect2) -> void:
 	var wall_rects := MapBrowserDemo.get_room_wall_rects(index, room_rect)
 	for wall_index in range(wall_rects.size()):
 		_add_runtime_wall("Room%02dWall%02d" % [index + 1, wall_index + 1], wall_rects[wall_index])
+	var circle_collisions := MapBrowserDemo.get_room_circle_collisions(index, room_rect)
+	for circle_index in range(circle_collisions.size()):
+		_add_runtime_circle_wall("Room%02dCircle%02d" % [index + 1, circle_index + 1], circle_collisions[circle_index])
 
 
 func _add_runtime_wall(wall_name: String, rect: Rect2) -> void:
@@ -158,6 +223,25 @@ func _add_runtime_wall(wall_name: String, rect: Rect2) -> void:
 	shape.shape = rectangle
 	body.add_child(shape)
 
+func _add_runtime_circle_wall(wall_name: String, data: Dictionary) -> void:
+	if map_root == null:
+		return
+	var radius := float(data.get("radius", 0.0))
+	if radius <= 0.0:
+		return
+	var body := StaticBody2D.new()
+	body.name = wall_name
+	body.collision_layer = 1
+	body.collision_mask = 2
+	body.add_to_group("projectile_blocker")
+	body.position = data.get("center", Vector2.ZERO) as Vector2
+	map_root.add_child(body)
+	var shape := CollisionShape2D.new()
+	var circle := CircleShape2D.new()
+	circle.radius = radius
+	shape.shape = circle
+	body.add_child(shape)
+
 
 func _add_runtime_room_doors(room_index: int, room_rect: Rect2, walk_rect: Rect2) -> void:
 	if map_root == null:
@@ -166,7 +250,11 @@ func _add_runtime_room_doors(room_index: int, room_rect: Rect2, walk_rect: Rect2
 	var exit_center := Vector2(room_rect.end.x - 10.0, walk_rect.get_center().y)
 	if room_index > 0:
 		_add_door_marker("Room%02dEntrance" % [room_index + 1], entrance_center, true)
-	if room_index < MapBrowserDemo.ROOM_PATHS.size() - 1:
+	if room_index == FUNCTION_CHOICE_SOURCE_ROOM_INDEX:
+		for choice_index in range(FUNCTION_CHOICE_Y_RATIOS.size()):
+			var choice_center := Vector2(exit_center.x, walk_rect.position.y + walk_rect.size.y * float(FUNCTION_CHOICE_Y_RATIOS[choice_index]))
+			_add_door_marker("FunctionChoice%02d" % [choice_index + 1], choice_center, false)
+	elif room_index < MapBrowserDemo.ROOM_PATHS.size() - 1:
 		_add_door_marker("Room%02dExit" % [room_index + 1], exit_center, false)
 
 
@@ -224,20 +312,26 @@ func _add_runtime_room_props() -> void:
 	map_cover_root.name = "RuntimeRoomProps"
 	map_cover_root.z_index = 6
 	map_root.add_child(map_cover_root)
-	var manifest := MapBrowserDemo.load_generated_prop_manifest()
 	for room_index in range(map_room_rects.size()):
-		var candidates := MapBrowserDemo.get_generated_prop_candidates(manifest, room_index)
-		if candidates.is_empty():
+		if room_index in FUNCTION_ROOM_INDICES:
 			continue
-		candidates.shuffle()
-		var count: int = min(reward_rng.randi_range(MapBrowserDemo.RANDOM_PROP_MIN_PER_ROOM, MapBrowserDemo.RANDOM_PROP_MAX_PER_ROOM), candidates.size())
-		var placed_rects: Array[Rect2] = []
-		var placed := 0
-		for candidate in candidates:
-			if placed >= count:
-				break
-			if _try_add_generated_room_prop(room_index, candidate, placed_rects):
-				placed += 1
+		_add_random_props_for_room(room_index)
+
+
+func _add_random_props_for_room(room_index: int) -> void:
+	var manifest := MapBrowserDemo.load_generated_prop_manifest()
+	var candidates := MapBrowserDemo.get_generated_prop_candidates(manifest, room_index)
+	if candidates.is_empty():
+		return
+	candidates.shuffle()
+	var count: int = min(reward_rng.randi_range(MapBrowserDemo.RANDOM_PROP_MIN_PER_ROOM, MapBrowserDemo.RANDOM_PROP_MAX_PER_ROOM), candidates.size())
+	var placed_rects: Array[Rect2] = []
+	var placed := 0
+	for candidate in candidates:
+		if placed >= count:
+			break
+		if _try_add_generated_room_prop(room_index, candidate, placed_rects):
+			placed += 1
 
 
 func _room_prop_candidates(room_index: int) -> Array[Dictionary]:
@@ -263,7 +357,7 @@ func _try_add_generated_room_prop(room_index: int, candidate: Dictionary, placed
 	var source_width := maxf(1.0, float(source_size[0]))
 	var source_height := maxf(1.0, float(source_size[1]))
 	var texture_to_room_scale := Vector2(room_rect.size.x / source_width, room_rect.size.y / source_height)
-	texture_to_room_scale *= MapBrowserDemo.RANDOM_PROP_WORLD_SCALE
+	texture_to_room_scale *= MapBrowserDemo.RANDOM_PROP_WORLD_SCALE * MapBrowserDemo.generated_prop_scale_multiplier(candidate)
 	var prop_size := Vector2(float(texture.get_width()) * texture_to_room_scale.x, float(texture.get_height()) * texture_to_room_scale.y)
 	if not MapBrowserDemo.is_generated_prop_size_usable(prop_size, room_rect.size):
 		return false
@@ -284,10 +378,17 @@ func _add_generated_room_prop(room_index: int, candidate: Dictionary, texture: T
 	body.name = "Room%02d%sProp" % [room_index + 1, String(candidate.get("name", "Generated")).replace(" ", "")]
 	body.collision_layer = 1
 	body.collision_mask = 2
-	body.add_to_group("projectile_blocker")
+	var walkable_prop := MapBrowserDemo.generated_prop_is_walkable(candidate)
+	if walkable_prop:
+		body.collision_layer = 0
+		body.collision_mask = 0
+	else:
+		body.add_to_group("projectile_blocker")
 	body.position = world_position
 	body.set_meta("room_index", room_index)
+	body.set_meta("prop_key", MapBrowserDemo.generated_prop_key(candidate))
 	body.set_meta("prop_size", Vector2(float(texture.get_width()) * texture_to_room_scale.x, float(texture.get_height()) * texture_to_room_scale.y))
+	body.set_meta("walkable_prop", walkable_prop)
 	map_cover_root.add_child(body)
 
 	var sprite := Sprite2D.new()
@@ -298,7 +399,7 @@ func _add_generated_room_prop(room_index: int, candidate: Dictionary, texture: T
 	sprite.centered = true
 	body.add_child(sprite)
 
-	var polygons := MapBrowserDemo.build_alpha_collision_polygons(texture, texture_to_room_scale)
+	var polygons := MapBrowserDemo.build_generated_prop_collision_polygons(candidate, texture, texture_to_room_scale)
 	for index in range(polygons.size()):
 		var shape := CollisionPolygon2D.new()
 		shape.name = "AlphaCollision%02d" % [index + 1]
