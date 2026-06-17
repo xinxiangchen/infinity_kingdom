@@ -36,7 +36,7 @@ func start_or_resume_from_slot(slot: Dictionary, selected_family_id: String = ""
 	reincarnation_index = int(slot.get("reincarnation_index", 1))
 	generation_index = int(slot.get("generation_index", 1))
 	seeds_left = int(slot.get("seeds_left", MAX_SEEDS))
-	current_encounter_index = int(slot.get("current_encounter_index", 0))
+	current_encounter_index = 0
 	current_aptitude = {
 		"strength": int(slot.get("strength", 3)),
 		"agility": int(slot.get("agility", 3)),
@@ -107,7 +107,7 @@ func begin_reincarnation_family(selected_family_id: String) -> void:
 	_emit_state()
 
 func record_checkpoint(encounter_index: int) -> void:
-	current_encounter_index = maxi(encounter_index, 0)
+	current_encounter_index = 0
 	if SaveManager != null and SaveManager.active_slot_index >= 0:
 		SaveManager.update_active_slot_patch({"current_encounter_index": current_encounter_index})
 	_emit_state()
@@ -397,6 +397,8 @@ func complete_reincarnation() -> Dictionary:
 			"generation_index": generation_index,
 			"seeds_left": seeds_left,
 			"current_encounter_index": current_encounter_index,
+			"emperor_max_hp": 5000.0,
+			"emperor_remaining_hp": 5000.0,
 			"strength": current_aptitude["strength"],
 			"agility": current_aptitude["agility"],
 			"focus": current_aptitude["focus"],

@@ -22,7 +22,7 @@ const SUPPORTED_EXTENSIONS := [
 ]
 
 const BUS_DEFAULT_VOLUMES := {
-	BUS_MUSIC: -10.5,
+	BUS_MUSIC: -4.0,
 	BUS_AMBIENCE: -15.5,
 	BUS_SFX: -0.8,
 	BUS_UI: -4.0
@@ -39,7 +39,7 @@ const CUE_LIBRARY := {
 	},
 	"town_battle": {
 		"file": "music_town_battle_loop",
-		"volume_db": -2.8,
+		"volume_db": 0.0,
 		"loop": true,
 		"fade": 0.9,
 		"preview_from": 4.8,
@@ -55,7 +55,7 @@ const CUE_LIBRARY := {
 	},
 	"palace_explore": {
 		"file": "music_palace_explore_loop",
-		"volume_db": -2.2,
+		"volume_db": 0.0,
 		"loop": true,
 		"fade": 0.8,
 		"preview_from": 5.0,
@@ -79,7 +79,7 @@ const CUE_LIBRARY := {
 	},
 	"church_intermission": {
 		"file": "music_church_intermission_loop",
-		"volume_db": -3.0,
+		"volume_db": -1.0,
 		"loop": true,
 		"fade": 0.9,
 		"preview_from": 6.0,
@@ -195,10 +195,12 @@ var duck_tween: Tween = null
 var audio_runtime_available: bool = true
 
 func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	_ensure_bus_layout()
 	_ensure_master_bus_state()
 	_initialize_bus_state()
 	load_bus_settings()
+	_ensure_runtime_music_audible()
 	audio_runtime_available = DisplayServer.get_name() != "headless"
 	if not audio_runtime_available:
 		return
@@ -534,12 +536,23 @@ func load_bus_settings() -> void:
 			bus_muted_state[bus_name] = false
 			set_bus_volume(StringName(bus_name), volume_db, false)
 
+func _ensure_runtime_music_audible() -> void:
+	if is_master_muted():
+		set_master_muted(false, false)
+	if get_master_volume() <= -30.0:
+		set_master_volume(MASTER_DEFAULT_VOLUME_DB, false)
+	if is_bus_muted(StringName(BUS_MUSIC)):
+		set_bus_muted(StringName(BUS_MUSIC), false, false)
+	if get_bus_volume(StringName(BUS_MUSIC)) <= -30.0:
+		set_bus_volume(StringName(BUS_MUSIC), float(BUS_DEFAULT_VOLUMES[BUS_MUSIC]), false)
+
 func _build_players() -> void:
 	if not players.is_empty():
 		return
 	for index in range(2):
 		var player := AudioStreamPlayer.new()
 		player.name = "MusicPlayer%d" % index
+		player.process_mode = Node.PROCESS_MODE_ALWAYS
 		player.bus = BUS_MUSIC
 		player.finished.connect(_on_player_finished.bind(index))
 		add_child(player)
@@ -551,6 +564,7 @@ func _build_ambience_players() -> void:
 	for index in range(2):
 		var player := AudioStreamPlayer.new()
 		player.name = "AmbiencePlayer%d" % index
+		player.process_mode = Node.PROCESS_MODE_ALWAYS
 		player.bus = BUS_AMBIENCE
 		player.finished.connect(_on_ambience_player_finished.bind(index))
 		add_child(player)
@@ -562,6 +576,7 @@ func _build_preview_players() -> void:
 	for bus_name in [BUS_MUSIC, BUS_AMBIENCE]:
 		var player := AudioStreamPlayer.new()
 		player.name = "%sPreviewPlayer" % bus_name
+		player.process_mode = Node.PROCESS_MODE_ALWAYS
 		player.bus = bus_name
 		add_child(player)
 		preview_players[bus_name] = player

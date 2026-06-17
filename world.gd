@@ -14,6 +14,8 @@ const CONSUMABLE_BAR_SCRIPT := preload("res://ui/consumable_bar.gd")
 const STAGE_REWARD_PANEL_SCRIPT := preload("res://ui/stage_reward_panel.gd")
 const LINEAGE_HUD_SCRIPT := preload("res://ui/lineage_hud.gd")
 const HEIR_SELECT_PANEL_SCRIPT := preload("res://ui/heir_select_panel.gd")
+const CROWN_DROP_TEXTURE_PATH := "res://assets/effects/pickups/crown_drop_cutout.png"
+const BROKEN_CROWN_DROP_TEXTURE_PATH := "res://assets/effects/pickups/crown_broken_cutout.png"
 const RANGER_BOSS_SCENE := preload("res://actors/bosses/town/ranger_boss.tscn")
 const MAGE_BOSS_SCENE := preload("res://actors/bosses/town/mage_boss.tscn")
 const EMPEROR_BOSS_SCENE := preload("res://actors/bosses/town/emperor_boss.tscn")
@@ -26,11 +28,11 @@ const ENCOUNTER_SCENES := [
 	preload("res://actors/encounters/empty_encounter.tscn"),
 	preload("res://actors/encounters/empty_encounter.tscn"),
 	preload("res://actors/encounters/empty_encounter.tscn"),
-	preload("res://actors/encounters/town_mob_encounter.tscn"),
 	preload("res://actors/bosses/town/judicator_boss.tscn"),
 	preload("res://actors/encounters/town_mob_encounter.tscn"),
 	preload("res://actors/encounters/town_mob_encounter.tscn"),
-	preload("res://actors/encounters/empty_encounter.tscn")
+	preload("res://actors/encounters/town_mob_encounter.tscn"),
+	preload("res://actors/encounters/town_mob_encounter.tscn")
 ]
 const FINAL_BOSS_SCENES := [
 	EMPEROR_BOSS_SCENE,
@@ -38,6 +40,7 @@ const FINAL_BOSS_SCENES := [
 	MAGE_BOSS_SCENE
 ]
 const ENCOUNTER_ROOM_INDICES := [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+const FUNCTION_ROOM_EXIT_ENCOUNTER_INDEX := 7
 const FUNCTION_ROOM_EVENTS := {
 	4: "rest",
 	5: "forge",
@@ -49,6 +52,9 @@ const GATE_WALK_FINISH_DISTANCE := 10.0
 const GATE_WALK_TIMEOUT_SECONDS := 4.0
 const GATE_WALK_STUCK_SECONDS := 0.75
 const GATE_WALK_PROGRESS_EPSILON := 1.5
+const CROWN_PICKUP_RANGE := 180.0
+const CROWN_ESCAPE_SECONDS := 60.0
+const CROWN_WORLD_SCALE := 0.11
 const LEVEL_UP_FLASH_COLOR := Color(1.0, 0.92, 0.62, 1.0)
 const XP_FLASH_COLOR := Color(0.68, 0.86, 1.0, 1.0)
 const GOLD_FLASH_COLOR := Color(1.0, 0.88, 0.52, 1.0)
@@ -103,7 +109,31 @@ var stage_reward_panel: CanvasLayer = null
 var lineage_hud: CanvasLayer = null
 var heir_select_panel: CanvasLayer = null
 var pending_lineage_respawn: Dictionary = {}
+var pending_stage_reward_next_encounter_index: int = -1
+var pending_function_room_exit_next_encounter_index: int = -1
 var active_character_id: StringName = &""
+var crown_drop_node: Node2D = null
+var crown_awaiting_choice: bool = false
+var crown_choice_timer: float = 0.0
+var crown_pending_result_kind: String = ""
+
+func _route_log(message: String) -> void:
+	var player_position := Vector2.ZERO
+	if player_character is Node2D and is_instance_valid(player_character):
+		player_position = (player_character as Node2D).global_position
+	var camera_position := Vector2.ZERO
+	if map_runtime != null and map_runtime.has_method("debug_camera_position"):
+		camera_position = map_runtime.debug_camera_position()
+	print("[ROUTE] %s | encounter=%d active_room=%d selected_function=%d pending_stage=%d pending_function_exit=%d player=%s camera=%s" % [
+		message,
+		encounter_index,
+		active_map_room_index,
+		selected_function_room_index,
+		pending_stage_reward_next_encounter_index,
+		pending_function_room_exit_next_encounter_index,
+		str(player_position),
+		str(camera_position)
+	])
 
 func _ready() -> void:
 	reward_rng.randomize()
@@ -172,6 +202,7 @@ func _ready() -> void:
 func _process(_delta: float) -> void:
 	_process_gate_walk()
 	_process_function_room_choice()
+	_process_crown_choice(_delta)
 	_apply_cheat_safety()
 	_sync_audio_hint_state()
 	_update_map_camera()
@@ -239,14 +270,9 @@ func _walk_player_to_next_room_entry(next_encounter_index: int, callback: Callab
 		if callback.is_valid():
 			callback.call()
 		return
-	_walk_player_to_target(_player_spawn_for_room(next_encounter_index), func() -> void:
-		if not is_instance_valid(self):
-			return
-		_activate_map_room(next_encounter_index, false)
-		_update_map_camera(true)
-		if callback.is_valid():
-			callback.call()
-	)
+	_snap_player_to_room_entry(next_encounter_index)
+	if callback.is_valid():
+		callback.call()
 
 func _walk_player_to_target(target_position: Vector2, callback: Callable) -> void:
 	if player_character == null or not is_instance_valid(player_character) or not (player_character is Node2D):
@@ -286,8 +312,8 @@ func _process_function_room_choice() -> void:
 		return
 	function_room_choice_pending = false
 	selected_function_room_index = room_index
-	encounter_index = room_index - 1
-	_start_next_encounter()
+	_route_log("function room selected room=%d" % room_index)
+	_enter_encounter_index(room_index)
 
 func _prepare_map_runtime() -> void:
 	_hide_legacy_arena()
@@ -356,6 +382,12 @@ func _activate_map_room(room_index: int, move_player: bool = true) -> void:
 	var map_room_index := _map_room_index_for_encounter(room_index)
 	map_runtime.activate_room(map_room_index, player_character, move_player)
 	active_map_room_index = map_room_index
+	_route_log("map activated requested=%d map_room=%d texture=%s move=%s" % [
+		room_index,
+		map_room_index,
+		MapRuntime.room_path_for_index(map_room_index),
+		str(move_player)
+	])
 
 func _player_spawn_for_room(room_index: int) -> Vector2:
 	if map_runtime == null:
@@ -376,6 +408,15 @@ func _room_entrance_target(room_index: int) -> Vector2:
 	if map_runtime != null and map_runtime.has_method("room_entrance_target"):
 		return map_runtime.room_entrance_target(_map_room_index_for_encounter(room_index))
 	return _player_spawn_for_room(room_index) - Vector2(48.0, 0.0)
+
+func _throne_crown_position() -> Vector2:
+	var final_room_index := _map_room_index_for_encounter(_encounter_count() - 1)
+	if map_runtime != null and _has_property(map_runtime, "map_room_rects"):
+		var room_rects: Array = map_runtime.get("map_room_rects")
+		if final_room_index >= 0 and final_room_index < room_rects.size():
+			var room_rect: Rect2 = room_rects[final_room_index]
+			return room_rect.position + Vector2(room_rect.size.x * 0.885, room_rect.size.y * 0.455)
+	return _encounter_spawn_for_room(maxi(0, _encounter_count() - 1))
 
 func _update_map_camera(force: bool = false) -> void:
 	if map_runtime == null:
@@ -404,6 +445,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			if audio_settings_panel != null and audio_settings_panel.has_method("toggle_panel"):
 				audio_settings_panel.toggle_panel()
 				_sync_audio_hint_state()
+				get_viewport().set_input_as_handled()
+			return
+		if event.keycode == KEY_F and crown_awaiting_choice:
+			if _try_pickup_crown():
 				get_viewport().set_input_as_handled()
 			return
 		if event.keycode == KEY_ESCAPE:
@@ -492,6 +537,9 @@ func _on_character_selected(character_id: StringName) -> void:
 		if inventory_panel.has_method("reset_run"):
 			inventory_panel.reset_run()
 	active_encounter_prep.clear()
+	pending_stage_reward_next_encounter_index = -1
+	pending_function_room_exit_next_encounter_index = -1
+	_clear_crown_choice()
 	function_room_choice_pending = false
 	selected_function_room_index = -1
 	if map_runtime != null and map_runtime.has_method("reset_function_room_selection"):
@@ -537,6 +585,11 @@ func _consume_startup_context() -> void:
 	_on_character_selected(character_id)
 
 func _start_next_encounter() -> void:
+	_route_log("start_next requested")
+	_enter_encounter_index(_next_encounter_index(encounter_index))
+
+func _enter_encounter_index(next_index: int) -> void:
+	_route_log("enter requested next=%d" % next_index)
 	_clear_player_auto_walk()
 	waiting_for_accessory_choice = false
 	active_accessory_reason = ""
@@ -545,7 +598,12 @@ func _start_next_encounter() -> void:
 	return_pause_after_audio_panel = false
 	return_pause_after_settings_panel = false
 	active_encounter_prep = RunDirector.consume_pending_encounter_prep()
-	encounter_index = _next_encounter_index(encounter_index)
+	encounter_index = next_index
+	if encounter_index in [4, 5, 6]:
+		pending_function_room_exit_next_encounter_index = _next_encounter_index(encounter_index)
+	elif encounter_index != 7:
+		pending_function_room_exit_next_encounter_index = -1
+	_route_log("enter committed")
 	if encounter_index >= _encounter_count():
 		active_encounter_prep.clear()
 		_complete_run_victory()
@@ -561,7 +619,7 @@ func _start_next_encounter() -> void:
 
 func _next_encounter_index(current_index: int) -> int:
 	if current_index in [4, 5, 6]:
-		return 7
+		return FUNCTION_ROOM_EXIT_ENCOUNTER_INDEX
 	return current_index + 1
 
 func _begin_current_encounter() -> void:
@@ -572,6 +630,9 @@ func _begin_current_encounter() -> void:
 	current_encounter = _encounter_scene_for_index(encounter_index).instantiate()
 	current_encounter.position = encounter_marker.position
 	encounter_root.add_child(current_encounter)
+	if _is_final_boss_encounter(encounter_index):
+		_apply_persistent_final_boss_hp(current_encounter)
+		_bind_persistent_final_boss_hp(current_encounter)
 	if not active_encounter_prep.is_empty():
 		RunEffects.activate_encounter_prep(player_character, active_encounter_prep)
 	if current_encounter.has_method("bind_player"):
@@ -587,14 +648,20 @@ func _transition_through_room_door(room_index: int, callback: Callable) -> void:
 		if callback.is_valid():
 			callback.call()
 		return
-	_walk_player_to_target(_player_spawn_for_room(room_index), func() -> void:
-		if not is_instance_valid(self):
-			return
-		_activate_map_room(room_index, false)
-		_update_map_camera(true)
-		if callback.is_valid():
-			callback.call()
-	)
+	_snap_player_to_room_entry(room_index)
+	if callback.is_valid():
+		callback.call()
+
+func _snap_player_to_room_entry(room_index: int) -> void:
+	_clear_player_auto_walk()
+	if player_character == null or not is_instance_valid(player_character) or not (player_character is Node2D):
+		return
+	_activate_map_room(room_index, false)
+	(player_character as Node2D).global_position = _player_spawn_for_room(room_index)
+	if player_character is CanvasItem:
+		(player_character as CanvasItem).visible = true
+	_update_map_camera(true)
+	_route_log("snap to room entry room=%d spawn=%s" % [room_index, str((player_character as Node2D).global_position)])
 
 func _toggle_inventory_panel() -> void:
 	if inventory_panel == null:
@@ -616,6 +683,7 @@ func _toggle_inventory_panel() -> void:
 	_refresh_battle_status()
 
 func _on_encounter_defeated() -> void:
+	_clear_enemy_projectiles()
 	var skip_rewards := current_encounter != null and is_instance_valid(current_encounter) and _has_property(current_encounter, "skip_rewards") and bool(current_encounter.get("skip_rewards"))
 	if skip_rewards:
 		if not active_encounter_prep.is_empty():
@@ -657,28 +725,21 @@ func _on_encounter_defeated() -> void:
 		_ui_text("+%d gold earned.", "获得 +%d 金币。", "獲得 +%d 金幣。") % reward,
 		_localized_detail_text("%s: %d" % [_ui_text("Gold", "金币", "金幣"), int(RunDirector.gold)])
 	)
+	var defeated_encounter_index := encounter_index
 	var timer := get_tree().create_timer(0.65)
 	timer.timeout.connect(func() -> void:
 		if is_instance_valid(self) and player_character != null and is_instance_valid(player_character) and float(player_character.hp) > 0.0:
-			_walk_player_to_room_exit(func() -> void:
-				if not is_instance_valid(self) or player_character == null or not is_instance_valid(player_character) or float(player_character.hp) <= 0.0:
-					return
-				if defeated_final_encounter:
-					_complete_run_victory()
-				else:
-					var next_encounter_index := _next_encounter_index(encounter_index)
-					if next_encounter_index in [4, 5, 6] and selected_function_room_index < 0:
-						_offer_stage_clear_reward()
+			if encounter_index != defeated_encounter_index:
+				return
+			if defeated_final_encounter:
+				_walk_player_to_room_exit(func() -> void:
+					if not is_instance_valid(self) or player_character == null or not is_instance_valid(player_character) or float(player_character.hp) <= 0.0:
 						return
-					_walk_player_to_next_room_entry(next_encounter_index, func() -> void:
-						if not is_instance_valid(self) or player_character == null or not is_instance_valid(player_character) or float(player_character.hp) <= 0.0:
-							return
-						if not _function_event_kind_for_encounter(next_encounter_index).is_empty():
-							_start_next_encounter()
-						else:
-							_offer_stage_clear_reward()
-					)
-			)
+					_complete_run_victory()
+				)
+			else:
+				var next_encounter_index := _next_encounter_index(encounter_index)
+				_offer_stage_clear_reward(next_encounter_index)
 	)
 
 func _on_player_died() -> void:
@@ -799,10 +860,12 @@ func _offer_next_run_event() -> void:
 		_localized_detail_text("%s: %d" % [_ui_text("Gold", "金币", "金幣"), int(RunDirector.gold)])
 	)
 
-func _offer_stage_clear_reward() -> void:
+func _offer_stage_clear_reward(next_encounter_index: int = -1) -> void:
+	if next_encounter_index >= 0:
+		pending_stage_reward_next_encounter_index = next_encounter_index
+	_route_log("stage reward offered next=%d" % next_encounter_index)
 	var choices := _build_stage_reward_choices()
 	if stage_reward_panel != null and stage_reward_panel.has_method("open"):
-		_play_intermission_audio()
 		stage_reward_panel.open(choices)
 		_refresh_battle_status(
 			_ui_text("Field Reward", "关间奖励", "關間獎勵"),
@@ -812,7 +875,12 @@ func _offer_stage_clear_reward() -> void:
 		return
 	if not choices.is_empty():
 		_apply_stage_reward_choice(choices[0])
-	_start_next_encounter()
+	var fallback_next := pending_stage_reward_next_encounter_index
+	pending_stage_reward_next_encounter_index = -1
+	if fallback_next >= 0:
+		_enter_encounter_index(fallback_next)
+	else:
+		_start_next_encounter()
 
 func _build_stage_reward_choices() -> Array[Dictionary]:
 	var choices: Array[Dictionary] = []
@@ -852,7 +920,11 @@ func _on_stage_reward_chosen(choice: Dictionary) -> void:
 	if stage_reward_panel != null and stage_reward_panel.has_method("close") and stage_reward_panel.visible:
 		stage_reward_panel.close()
 	_apply_stage_reward_choice(choice)
-	var next_encounter_index := _next_encounter_index(encounter_index)
+	var next_encounter_index := pending_stage_reward_next_encounter_index
+	pending_stage_reward_next_encounter_index = -1
+	if next_encounter_index < 0:
+		next_encounter_index = _next_encounter_index(encounter_index)
+	_route_log("stage reward chosen next=%d choice=%s" % [next_encounter_index, String(choice.get("type", ""))])
 	if next_encounter_index in [4, 5, 6] and selected_function_room_index < 0:
 		function_room_choice_pending = true
 		_refresh_battle_status(
@@ -861,7 +933,7 @@ func _on_stage_reward_chosen(choice: Dictionary) -> void:
 			_localized_detail_text("")
 		)
 		return
-	_start_next_encounter()
+	_enter_encounter_index(next_encounter_index)
 
 func _on_stage_reward_pause_requested() -> void:
 	if pause_menu == null or not pause_menu.has_method("open"):
@@ -969,7 +1041,10 @@ func _on_accessory_choice_made(_accessory_id: String, kept_current: bool) -> voi
 		accessory_name,
 		_localized_detail_text(_ui_text("The next encounter begins now.", "下一场遭遇即将开始。", "下一場遭遇即將開始。"))
 	)
-	_start_next_encounter()
+	if pending_function_room_exit_next_encounter_index >= 0:
+		_continue_after_function_room_event()
+	else:
+		_start_next_encounter()
 
 func _on_accessory_reroll_requested() -> void:
 	if not waiting_for_accessory_choice:
@@ -994,6 +1069,7 @@ func _on_accessory_reroll_requested() -> void:
 	)
 
 func _on_run_event_choice_made(choice_id: String) -> void:
+	_route_log("run event choice=%s" % choice_id)
 	var applied := _apply_run_event_choice(choice_id)
 	if Sfx != null:
 		_play_ui_feedback(applied)
@@ -1024,6 +1100,17 @@ func _on_run_event_choice_made(choice_id: String) -> void:
 		(player_character as CanvasItem).visible = true
 	if choice_id == "shop_relic" and applied:
 		_offer_accessory(_ui_text("Purchased Relic", "购买饰品", "購買飾品"), "shop")
+	else:
+		_continue_after_function_room_event()
+
+func _continue_after_function_room_event() -> void:
+	var next_encounter_index := pending_function_room_exit_next_encounter_index
+	pending_function_room_exit_next_encounter_index = -1
+	if next_encounter_index < 0 and (encounter_index in [4, 5, 6] or selected_function_room_index in [4, 5, 6]):
+		next_encounter_index = FUNCTION_ROOM_EXIT_ENCOUNTER_INDEX
+	_route_log("function room exit next=%d" % next_encounter_index)
+	if next_encounter_index >= 0:
+		_enter_encounter_index(next_encounter_index)
 	else:
 		_start_next_encounter()
 
@@ -1131,13 +1218,16 @@ func _play_ui_feedback(success: bool) -> void:
 	Sfx.play_event(&"ui_confirm", null, -7.0, 0.86, "UI")
 
 func _complete_run_victory() -> void:
+	_clear_enemy_projectiles()
 	if EndingDirector != null:
 		EndingDirector.record_final_boss_defeated()
 	var ending_kind := _victory_result_kind()
 	if ending_kind == "victory" and LineageDirector != null:
-		LineageDirector.complete_reincarnation()
-	elif _is_final_ending_kind(ending_kind):
+		_begin_crown_choice(ending_kind)
+		return
+	if _is_final_ending_kind(ending_kind):
 		_seal_final_ending(ending_kind)
+	_spawn_crown_drop(ending_kind, false)
 	if Music != null:
 		Music.play_profile(&"victory")
 	_schedule_title_music(2.8)
@@ -1170,6 +1260,135 @@ func _bind_actor_audio(actor: Node) -> void:
 		actor.took_damage.connect(_on_actor_took_damage.bind(actor))
 	if actor.has_signal("died") and not actor.died.is_connected(_on_actor_died):
 		actor.died.connect(_on_actor_died.bind(actor))
+
+func _clear_enemy_projectiles() -> void:
+	for projectile in get_tree().get_nodes_in_group("enemy_projectile"):
+		if projectile != null and is_instance_valid(projectile):
+			projectile.queue_free()
+
+func _begin_crown_choice(ending_kind: String) -> void:
+	crown_pending_result_kind = ending_kind
+	crown_choice_timer = CROWN_ESCAPE_SECONDS
+	crown_awaiting_choice = true
+	_spawn_crown_drop(ending_kind, true)
+	if Music != null:
+		Music.play_profile(&"victory")
+	_cancel_scheduled_title_music()
+	_refresh_battle_status(
+		_ui_text("Crown Fallen", "王冠坠地", "王冠墜地"),
+		_ui_text("Press F near the crown to inherit the next cycle.", "靠近王冠按 F 拾取，进入下一轮轮回。", "靠近王冠按 F 拾取，進入下一輪輪迴。"),
+		_localized_detail_text(_ui_text("Leave it for 60 seconds to run toward freedom.", "60 秒内不拾取，将触发奔向自由结局。", "60 秒內不拾取，將觸發奔向自由結局。"))
+	)
+	if character_select != null:
+		character_select.visible = false
+	_update_screen_layers()
+
+func _process_crown_choice(delta: float) -> void:
+	if not crown_awaiting_choice:
+		return
+	crown_choice_timer = maxf(crown_choice_timer - delta, 0.0)
+	_refresh_battle_status(
+		_ui_text("Crown Fallen", "王冠坠地", "王冠墜地"),
+		_ui_text("Press F near the crown to claim it.", "靠近王冠按 F 拾取。", "靠近王冠按 F 拾取。"),
+		_localized_detail_text(_ui_text("Freedom ending in %ds.", "%d 秒后奔向自由。", "%d 秒後奔向自由。") % int(ceil(crown_choice_timer)))
+	)
+	if crown_choice_timer <= 0.0:
+		_resolve_crown_escape()
+
+func _try_pickup_crown() -> bool:
+	if not crown_awaiting_choice or crown_drop_node == null or not is_instance_valid(crown_drop_node):
+		return false
+	if not (player_character is Node2D) or not is_instance_valid(player_character):
+		return false
+	var distance := (player_character as Node2D).global_position.distance_to(crown_drop_node.global_position)
+	if distance > CROWN_PICKUP_RANGE:
+		_push_hud_feed(_ui_text("Move closer to the crown", "再靠近王冠一点", "再靠近王冠一點"), GOLD_FLASH_COLOR, 1.02)
+		return false
+	_resolve_crown_pickup()
+	return true
+
+func _resolve_crown_pickup() -> void:
+	if not crown_awaiting_choice:
+		return
+	crown_awaiting_choice = false
+	if crown_drop_node != null and is_instance_valid(crown_drop_node):
+		crown_drop_node.queue_free()
+	crown_drop_node = null
+	if LineageDirector != null:
+		LineageDirector.complete_reincarnation()
+	_show_victory_result(crown_pending_result_kind)
+
+func _resolve_crown_escape() -> void:
+	if not crown_awaiting_choice:
+		return
+	crown_awaiting_choice = false
+	if crown_drop_node != null and is_instance_valid(crown_drop_node):
+		crown_drop_node.queue_free()
+	crown_drop_node = null
+	if SaveManager != null and SaveManager.has_method("seal_active_ending"):
+		SaveManager.seal_active_ending("escape")
+	_show_victory_result("escape")
+
+func _clear_crown_choice() -> void:
+	crown_awaiting_choice = false
+	crown_choice_timer = 0.0
+	crown_pending_result_kind = ""
+	if crown_drop_node != null and is_instance_valid(crown_drop_node):
+		crown_drop_node.queue_free()
+	crown_drop_node = null
+
+func _show_victory_result(ending_kind: String) -> void:
+	if Music != null:
+		Music.play_profile(&"victory")
+	_schedule_title_music(2.8)
+	_refresh_battle_status(
+		_ui_text("Stage Cleared", "阶段通关", "階段通關"),
+		_victory_result_subtitle(ending_kind),
+		_localized_detail_text(_victory_result_detail(ending_kind))
+	)
+	if character_select != null:
+		character_select.visible = false
+	_update_screen_layers()
+	if result_screen != null and result_screen.has_method("show_result"):
+		result_screen.show_result(
+			ending_kind,
+			_victory_result_title(ending_kind),
+			_victory_result_subtitle(ending_kind),
+			_victory_result_detail(ending_kind),
+			_build_result_summary()
+		)
+	_refresh_battle_status()
+
+func _spawn_crown_drop(ending_kind: String, interactive: bool = false) -> void:
+	var texture_path := BROKEN_CROWN_DROP_TEXTURE_PATH if ending_kind == "true_ending" else CROWN_DROP_TEXTURE_PATH
+	var texture := load(texture_path) as Texture2D
+	if texture == null:
+		return
+	for child in get_children():
+		if String(child.name) == "VictoryCrownDrop":
+			child.queue_free()
+	var crown_root := Node2D.new()
+	crown_root.name = "VictoryCrownDrop"
+	crown_root.z_index = 30
+	var crown := Sprite2D.new()
+	crown.name = "VictoryCrownDrop"
+	crown.texture = texture
+	crown.centered = true
+	crown.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	crown.scale = Vector2.ONE * CROWN_WORLD_SCALE
+	crown_root.add_child(crown)
+	crown_root.global_position = _throne_crown_position()
+	if interactive:
+		var prompt := Label.new()
+		prompt.name = "PickupPrompt"
+		prompt.text = _ui_text("F  PICK UP", "F  拾取", "F  拾取")
+		prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		prompt.position = Vector2(-80.0, -92.0)
+		prompt.size = Vector2(160.0, 30.0)
+		prompt.add_theme_color_override("font_color", Color(1.0, 0.92, 0.58, 1.0))
+		crown_root.add_child(prompt)
+	add_child(crown_root)
+	crown_drop_node = crown_root
 
 func _on_actor_attack_started(attack_name: StringName, actor: Node) -> void:
 	if actor == null or not actor.has_method("get_character_name"):
@@ -1502,6 +1721,64 @@ func _health_component(actor: Node) -> Node:
 	if _has_property(actor, "health_component"):
 		return actor.get("health_component") as Node
 	return actor.get_node_or_null("HealthComponent")
+
+func _is_final_boss_encounter(index: int) -> bool:
+	return index >= _encounter_count() - 1 and not FINAL_BOSS_SCENES.is_empty()
+
+func _apply_persistent_final_boss_hp(actor: Node) -> void:
+	if actor == null or not is_instance_valid(actor) or SaveManager == null:
+		return
+	var health_component := _health_component(actor)
+	if health_component == null:
+		return
+	var boss_max_hp := _actor_configured_max_hp(actor)
+	var slot := SaveManager.get_active_slot()
+	var saved_max_hp := float(slot.get("emperor_max_hp", 0.0))
+	var saved_remaining_hp := float(slot.get("emperor_remaining_hp", 0.0))
+	if boss_max_hp <= 0.0:
+		return
+	if saved_max_hp <= 0.0 or absf(saved_max_hp - boss_max_hp) > 1.0 or saved_remaining_hp <= 0.0:
+		saved_max_hp = boss_max_hp
+		saved_remaining_hp = boss_max_hp
+		SaveManager.update_active_slot_patch({
+			"emperor_max_hp": saved_max_hp,
+			"emperor_remaining_hp": saved_remaining_hp
+		})
+	var restored_hp := clampf(saved_remaining_hp, 1.0, boss_max_hp)
+	if _has_property(health_component, "max_hp"):
+		health_component.set("max_hp", boss_max_hp)
+	if _has_property(health_component, "hp"):
+		health_component.set("hp", restored_hp)
+	if _has_property(actor, "max_hp"):
+		actor.set("max_hp", boss_max_hp)
+	if _has_property(actor, "max_hp_value"):
+		actor.set("max_hp_value", boss_max_hp)
+	if _has_property(actor, "hp"):
+		actor.set("hp", restored_hp)
+
+func _bind_persistent_final_boss_hp(actor: Node) -> void:
+	var health_component := _health_component(actor)
+	if health_component == null or not health_component.has_signal("damaged"):
+		return
+	if not health_component.damaged.is_connected(_on_persistent_final_boss_damaged):
+		health_component.damaged.connect(_on_persistent_final_boss_damaged)
+
+func _on_persistent_final_boss_damaged(_amount: float, remaining_hp: float, _source: Node) -> void:
+	if SaveManager == null or SaveManager.active_slot_index < 0:
+		return
+	SaveManager.update_active_slot_patch({
+		"emperor_remaining_hp": maxf(remaining_hp, 0.0)
+	})
+
+func _actor_configured_max_hp(actor: Node) -> float:
+	if _has_property(actor, "max_hp_value"):
+		return float(actor.get("max_hp_value"))
+	if _has_property(actor, "max_hp"):
+		return float(actor.get("max_hp"))
+	var health_component := _health_component(actor)
+	if health_component != null and _has_property(health_component, "max_hp"):
+		return float(health_component.get("max_hp"))
+	return 0.0
 
 func _heal_actor(actor: Node, amount: float) -> void:
 	if actor == null or not is_instance_valid(actor) or amount <= 0.0:
@@ -2147,6 +2424,8 @@ func _current_reincarnation_index() -> int:
 func _victory_result_title(kind: String) -> String:
 	if kind == "developer_room":
 		return _ui_text("Developer Room", "开发者房间", "開發者房間")
+	if kind == "escape":
+		return _ui_text("Open Road", "奔向自由", "奔向自由")
 	if kind == "true_ending":
 		return _ui_text("Crown Breaker", "王冠坠地", "王冠墜地")
 	if kind == "crown_bad":
@@ -2156,6 +2435,8 @@ func _victory_result_title(kind: String) -> String:
 func _victory_result_subtitle(kind: String) -> String:
 	if kind == "developer_room":
 		return _ui_text("Three forbidden arts answer beneath the throne.", "三道禁术在王座下回应。", "三道禁術在王座下回應。")
+	if kind == "escape":
+		return _ui_text("No one claims the crown before the road opens.", "王冠无人拾取，远方的路打开了。", "王冠無人拾取，遠方的路打開了。")
 	if kind == "true_ending":
 		return _ui_text("The crown can be broken because the bloodline remained unscarred.", "血脉未被玷污，王冠终于可以被击碎。", "血脈未被玷污，王冠終於可以被擊碎。")
 	if kind == "crown_bad":
@@ -2165,6 +2446,8 @@ func _victory_result_subtitle(kind: String) -> String:
 func _victory_result_detail(kind: String) -> String:
 	if kind == "developer_room":
 		return _ui_text("Cheat mode rewrites the throne-room exit into a hidden development chamber.", "作弊模式已把王座出口改写为隐藏开发房间。", "作弊模式已把王座出口改寫為隱藏開發房間。")
+	if kind == "escape":
+		return _ui_text("The heir leaves the crown on the floor and walks away from the loop.", "继承者没有拾起王冠，而是离开王座与轮回。", "繼承者沒有拾起王冠，而是離開王座與輪迴。")
 	if kind == "true_ending":
 		return _ui_text("The heir raises a weapon, not to inherit, but to shatter the crown and end the loop.", "继承者举起武器，不为继位，只为打碎王冠并终止轮回。", "繼承者舉起武器，不為繼位，只為打碎王冠並終止輪迴。")
 	if kind == "crown_bad":
@@ -2290,7 +2573,7 @@ func _respawn_lineage_heir() -> void:
 	if player_character != null and is_instance_valid(player_character):
 		player_character.queue_free()
 	player_character = _scene_for_character_id(active_character_id).instantiate()
-	player_character.position = _player_spawn_for_room(maxi(encounter_index, 0))
+	player_character.position = _player_spawn_for_room(0)
 	add_child(player_character)
 	player_character.z_index = 3
 	if character_select != null:
@@ -2304,6 +2587,9 @@ func _respawn_lineage_heir() -> void:
 	RunDirector.reset_run()
 	if EndingDirector != null:
 		EndingDirector.reset_run()
+	pending_stage_reward_next_encounter_index = -1
+	pending_function_room_exit_next_encounter_index = -1
+	_clear_crown_choice()
 	AccessoryManager.apply_to_actor(player_character)
 	RunEffects.refresh_persistent_modifiers(player_character)
 	LineageDirector.apply_aptitude_to_actor(player_character)
@@ -2311,8 +2597,7 @@ func _respawn_lineage_heir() -> void:
 	if player_character.has_signal("died"):
 		player_character.died.connect(_on_player_died)
 	_apply_cheat_safety()
-	var restart_index := maxi(int(LineageDirector.get_state().get("current_encounter_index", 0)), 0)
-	encounter_index = restart_index - 1
+	encounter_index = -1
 	_start_next_encounter()
 
 func _reset_to_character_select() -> void:
@@ -2335,6 +2620,9 @@ func _reset_to_character_select() -> void:
 	active_accessory_source = ""
 	active_run_event_kind = ""
 	active_encounter_prep.clear()
+	pending_stage_reward_next_encounter_index = -1
+	pending_function_room_exit_next_encounter_index = -1
+	_clear_crown_choice()
 	return_pause_after_audio_panel = false
 	return_pause_after_settings_panel = false
 	AccessoryManager.reset_run()
