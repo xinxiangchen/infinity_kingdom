@@ -98,7 +98,7 @@ const MELEE_UTILS := preload("res://combat/melee_utils.gd")
 const TEXTURE_LOADER := preload("res://combat/runtime_texture_loader.gd")
 const KNIGHT_WEAPON_TEXTURE_PATH := "res://art/final_materials/weapons/player_knight_sword_lv3.png"
 const KNIGHT_DEATH_TEXTURE_PATH := "res://art/final_materials/deaths/player_knight_dead.png"
-const SANCTUARY_BACK_TEXTURE_PATH := "C:/Users/Lee/Desktop/kindom/弹幕/技能特效法阵.png"
+const SANCTUARY_BACK_TEXTURE_PATH := "res://assets/effects/vfx/magic_circle.webp"
 const BASE_SPRITE_SCALE := Vector2(0.85, 0.85)
 
 var hp: float = 0.0

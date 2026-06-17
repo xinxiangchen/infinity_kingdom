@@ -113,7 +113,7 @@ func _run() -> void:
 		quit(1)
 		return
 
-	var expected_bottom_ratios := [0.75, 0.76, 0.76, 0.76]
+	var expected_bottom_ratios := [0.90, 0.76, 0.76, 0.76]
 	for room_index in range(expected_bottom_ratios.size()):
 		var room_rect := room_rects[room_index] as Rect2
 		var expected_top := room_rect.position.y + room_rect.size.y * float(expected_bottom_ratios[room_index])

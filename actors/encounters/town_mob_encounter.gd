@@ -52,7 +52,7 @@ var wave_pool := [
 			{"scene": SHIELD_SCENE, "spawn": 2},
 			{"scene": SHIELD_SCENE, "spawn": 3},
 			{"scene": ARCHER_SCENE, "spawn": 4},
-			{"scene": ARCHER_SCENE, "spawn": 5},
+			{"scene": ARCANIST_SCENE, "spawn": 5},
 			{"scene": APPRENTICE_SCENE, "spawn": 8}
 		]
 	},
@@ -74,7 +74,7 @@ var wave_pool := [
 			{"scene": SHIELD_SCENE, "spawn": 2},
 			{"scene": HUNTER_SCENE, "spawn": 6},
 			{"scene": HUNTER_SCENE, "spawn": 7},
-			{"scene": APPRENTICE_SCENE, "spawn": 4},
+			{"scene": ARCANIST_SCENE, "spawn": 4},
 			{"scene": APPRENTICE_SCENE, "spawn": 5}
 		]
 	}

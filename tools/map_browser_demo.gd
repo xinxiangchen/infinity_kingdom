@@ -16,6 +16,11 @@ const ROOM_PATHS := [
 	"res://assets/maps/stitched_demo/room_13_throne_room.png"
 ]
 
+static func room_path_for_index(index: int) -> String:
+	if index < 0 or index >= ROOM_PATHS.size():
+		return ""
+	return String(ROOM_PATHS[index])
+
 const ROOM_TITLES := [
 	"01 Outer Entrance",
 	"02 Street Battle 1",
@@ -132,7 +137,7 @@ const RANDOM_PROP_DOOR_LANE_WIDTH_RATIO := 0.22
 const RANDOM_PROP_SAFE_RADIUS := 92.0
 
 const WALKABLE_AREAS := [
-	Rect2(0.06, 0.16, 0.88, 0.59),
+	Rect2(0.035, 0.08, 0.93, 0.82),
 	Rect2(0.06, 0.16, 0.88, 0.60),
 	Rect2(0.06, 0.15, 0.88, 0.61),
 	Rect2(0.06, 0.16, 0.84, 0.60),
@@ -149,12 +154,12 @@ const WALKABLE_AREAS := [
 
 const ROOM_WALL_COLLISIONS := [
 	[
-		Rect2(0.00, 0.00, 1.00, 0.16),
-		Rect2(0.00, 0.75, 1.00, 0.25),
-		Rect2(0.00, 0.00, 0.055, 0.42),
-		Rect2(0.00, 0.58, 0.055, 0.42),
-		Rect2(0.94, 0.00, 0.06, 0.42),
-		Rect2(0.94, 0.58, 0.06, 0.42)
+		Rect2(0.00, 0.00, 1.00, 0.08),
+		Rect2(0.00, 0.90, 1.00, 0.10),
+		Rect2(0.00, 0.00, 0.035, 0.42),
+		Rect2(0.00, 0.58, 0.035, 0.42),
+		Rect2(0.965, 0.00, 0.035, 0.42),
+		Rect2(0.965, 0.58, 0.035, 0.42)
 	],
 	[
 		Rect2(0.00, 0.00, 1.00, 0.16),

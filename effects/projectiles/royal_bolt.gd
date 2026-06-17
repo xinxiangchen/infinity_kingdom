@@ -19,6 +19,7 @@ var pulse_time: float = 0.0
 var trail_timer: float = 0.0
 
 func _ready() -> void:
+	add_to_group("enemy_projectile")
 	_setup_texture_visual(BOSS_YELLOW_TEXTURE_PATH)
 	_setup_collision_shape()
 	body_entered.connect(_on_body_entered)
@@ -61,6 +62,8 @@ func _try_hit(target: Variant) -> void:
 		_expire_on_blocker()
 		return
 	target = _resolve_damage_target(target)
+	if source != null and not is_instance_valid(source):
+		source = null
 	if target == null or target == source:
 		return
 	if not target.has_method("receive_hit"):

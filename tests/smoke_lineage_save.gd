@@ -57,6 +57,10 @@ func _run() -> void:
 		quit(1)
 		return
 	lineage.start_or_resume_from_slot(updated, "knight")
+	if int(lineage.get_state().get("current_encounter_index", -1)) != 0:
+		push_error("LineageDirector should always restart a generation from the first encounter")
+		quit(1)
+		return
 	var payload: Dictionary = lineage.consume_death({
 		"cleared_encounters": 4,
 		"total_encounters": 9,
@@ -67,6 +71,10 @@ func _run() -> void:
 	var state := payload.get("lineage", {}) as Dictionary
 	if int(state.get("generation_index", 0)) != 4 or int(state.get("seeds_left", 0)) != 1:
 		push_error("LineageDirector did not consume death into the next generation")
+		quit(1)
+		return
+	if int(state.get("current_encounter_index", -1)) != 0:
+		push_error("LineageDirector kept a mid-run checkpoint after death")
 		quit(1)
 		return
 	var next_aptitude := state.get("aptitude", {}) as Dictionary
@@ -108,6 +116,15 @@ func _run() -> void:
 		return
 	if bool(lineage.can_select_family("knight")) or not bool(lineage.can_select_family("ranger")):
 		push_error("LineageDirector family availability rules are wrong after first clear")
+		quit(1)
+		return
+	var saved_after_clear: Dictionary = save_manager.read_slot(2)
+	if int(saved_after_clear.get("current_encounter_index", -1)) != 0:
+		push_error("LineageDirector did not clear route progress after reincarnation completion")
+		quit(1)
+		return
+	if int(saved_after_clear.get("emperor_remaining_hp", 0)) != 5000:
+		push_error("LineageDirector did not reset the next emperor hp after a completed cycle")
 		quit(1)
 		return
 	lineage.begin_reincarnation_family("ranger")

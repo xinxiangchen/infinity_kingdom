@@ -8,6 +8,8 @@ const UISkin := preload("res://ui/ui_skin.gd")
 const PANEL_MIN_SIZE := Vector2(320, 320)
 const PANEL_MAX_SIZE := Vector2(720, 560)
 const OPEN_ENDING_IDLE_SECONDS := 1800.0
+const CROWN_DROP_TEXTURE_PATH := "res://assets/effects/pickups/crown_drop_cutout.png"
+const BROKEN_CROWN_DROP_TEXTURE_PATH := "res://assets/effects/pickups/crown_broken_cutout.png"
 
 @onready var backdrop: TextureRect = $Backdrop
 @onready var dimmer: ColorRect = $Dimmer
@@ -60,30 +62,40 @@ func _ready() -> void:
 func show_result(kind: String, title: String, subtitle: String, detail: String, summary: Dictionary = {}) -> void:
 	var accent := Color(0.92, 0.88, 0.64)
 	var badge_text := UIText.text("result_badge")
-	var backdrop_path := "res://assets/ui/background/result_success_bg.png"
+	var backdrop_path := "res://assets/ui/background/ending_stage_clear_bg.png"
+	decoration.texture = null
 	if kind == "defeat":
 		accent = Color(0.98, 0.70, 0.64)
 		badge_text = UIText.text("result_defeat_badge")
-		backdrop_path = "res://assets/ui/background/result_failure_bg.png"
+		backdrop_path = "res://assets/ui/background/ending_ember_extinguished_bg.png"
 	elif kind == "relic":
 		accent = Color(0.82, 0.94, 0.76)
 		badge_text = UIText.text("result_relic_badge")
-		backdrop_path = "res://assets/ui/background/result_reincarnation_bg.png"
+		backdrop_path = "res://assets/ui/background/ending_stage_clear_bg.png"
 	elif kind == "true_ending":
 		accent = Color(1.0, 0.90, 0.50)
 		badge_text = "CROWN BROKEN"
+		backdrop_path = "res://assets/ui/background/ending_break_crown_bg.png"
+		decoration.texture = load(BROKEN_CROWN_DROP_TEXTURE_PATH) as Texture2D
 	elif kind == "crown_bad":
 		accent = Color(0.92, 0.62, 0.48)
 		badge_text = "CROWN TAKEN"
+		backdrop_path = "res://assets/ui/background/ending_crown_bad_bg.png"
+		decoration.texture = load(CROWN_DROP_TEXTURE_PATH) as Texture2D
+	elif kind == "escape":
+		accent = Color(0.72, 0.94, 0.76)
+		badge_text = "OPEN ROAD"
+		backdrop_path = "res://assets/ui/background/ending_escape_bg.png"
+		decoration.texture = load(CROWN_DROP_TEXTURE_PATH) as Texture2D
 	elif kind == "developer_room":
 		accent = Color(0.56, 0.94, 1.0)
 		badge_text = "DEBUG DOOR"
 	else:
 		badge_text = UIText.text("result_victory_badge")
+		decoration.texture = load(CROWN_DROP_TEXTURE_PATH) as Texture2D
 	panel.add_theme_stylebox_override("panel", UISkin.menu_panel_style())
 	backdrop.texture = load(backdrop_path) as Texture2D
 	backdrop.modulate = Color(1.0, 1.0, 1.0, 0.78)
-	decoration.texture = null
 	decoration.modulate = Color.WHITE
 	decoration.tooltip_text = ""
 	title_label.text = title
@@ -94,7 +106,7 @@ func show_result(kind: String, title: String, subtitle: String, detail: String, 
 	_refresh_copy()
 	idle_seconds = 0.0
 	open_ending_triggered = false
-	open_ending_allowed = kind == "victory"
+	open_ending_allowed = false
 	visible = true
 	get_tree().paused = true
 	continue_button.grab_focus()
@@ -163,9 +175,12 @@ func _set_decoration_badge(text_value: String, accent: Color) -> void:
 	badge_panel.offset_top = 0.0
 	badge_panel.offset_right = 0.0
 	badge_panel.offset_bottom = 0.0
+	var fill_color := accent.darkened(0.82)
+	if decoration.texture != null:
+		fill_color.a = 0.24
 	badge_panel.add_theme_stylebox_override(
 		"panel",
-		UISkin.flat_style(accent.darkened(0.82), accent, 1, 3, Vector4(12, 10, 12, 10))
+		UISkin.flat_style(fill_color, accent, 1, 3, Vector4(12, 10, 12, 10))
 	)
 	decoration.add_child(badge_panel)
 	var badge_label := Label.new()

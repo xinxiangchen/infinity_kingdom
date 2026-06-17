@@ -81,7 +81,7 @@ const BODY_BASE_SCALE := Vector2(0.78, 0.78)
 @export var hit_stun_duration: float = 0.22
 @export var hit_threshold: float = 1.0
 @export var hit_invulnerability_duration: float = 0.32
-@export var attack_range: float = 78.0
+@export var attack_range: float = 118.0
 @export var attack_arc_degrees: float = 92.0
 
 @onready var state_machine: Node = $StateMachine

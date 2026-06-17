@@ -12,6 +12,26 @@ const DOOR_FRAME_COLOR := Color(0.18, 0.22, 0.28, 0.98)
 const FUNCTION_ROOM_INDICES := [4, 5, 6]
 const FUNCTION_CHOICE_SOURCE_ROOM_INDEX := 3
 const FUNCTION_CHOICE_Y_RATIOS := [0.28, 0.50, 0.72]
+const FUNCTION_ROOM_MARKERS := {
+	4: {
+		"title": "CHURCH",
+		"subtitle": "Rest and recover",
+		"icon": "res://assets/ui/icon/ui_church.png",
+		"color": Color(0.68, 0.96, 0.78, 0.96)
+	},
+	5: {
+		"title": "ARMORY",
+		"subtitle": "Quartermaster",
+		"icon": "res://assets/ui/icon/ui_shield.png",
+		"color": Color(0.64, 0.78, 1.0, 0.96)
+	},
+	6: {
+		"title": "SHOP",
+		"subtitle": "Merchant",
+		"icon": "res://assets/ui/icon/ui_shop.png",
+		"color": Color(1.0, 0.82, 0.42, 0.96)
+	}
+}
 
 var world_root: Node2D = null
 var spawn_marker: Marker2D = null
@@ -23,6 +43,9 @@ var map_cover_root: Node2D = null
 var map_room_rects: Array[Rect2] = []
 var map_walkable_rects: Array[Rect2] = []
 var selected_function_room_index: int = -1
+
+static func room_path_for_index(index: int) -> String:
+	return MapBrowserDemo.room_path_for_index(index)
 
 
 func setup(p_world_root: Node2D, p_spawn_marker: Marker2D, p_encounter_marker: Marker2D, p_rng: RandomNumberGenerator) -> void:
@@ -76,6 +99,9 @@ func update_camera(room_index: int, player_character: Node, force: bool = false)
 		map_camera.position_smoothing_enabled = true
 	else:
 		map_camera.global_position = target
+
+func debug_camera_position() -> Vector2:
+	return map_camera.global_position if map_camera != null else Vector2.ZERO
 
 
 func player_spawn_for_room(room_index: int) -> Vector2:
@@ -155,6 +181,7 @@ func select_function_room(room_index: int) -> bool:
 	_add_runtime_room_visual(room_index, texture, map_room_rects[room_index])
 	_add_runtime_room_walls(room_index, map_room_rects[room_index])
 	_add_runtime_room_doors(room_index, map_room_rects[room_index], map_walkable_rects[room_index])
+	_add_function_room_marker(room_index)
 	_add_random_props_for_room(room_index)
 	return true
 
@@ -304,6 +331,63 @@ func _add_door_marker(marker_name: String, center: Vector2, left_side: bool) -> 
 		Vector2(-20.0, 4.0)
 	])
 	marker.add_child(cap)
+
+func _add_function_room_marker(room_index: int) -> void:
+	if map_root == null or room_index not in FUNCTION_ROOM_MARKERS or room_index >= map_walkable_rects.size():
+		return
+	var marker_data := FUNCTION_ROOM_MARKERS[room_index] as Dictionary
+	var walk_rect := map_walkable_rects[room_index]
+	var marker := Node2D.new()
+	marker.name = "FunctionRoomMarker%02d" % [room_index + 1]
+	marker.position = walk_rect.position + Vector2(walk_rect.size.x * 0.50, walk_rect.size.y * 0.40)
+	marker.z_index = 10
+	marker.set_meta("room_index", room_index)
+	map_root.add_child(marker)
+
+	var glow := Polygon2D.new()
+	glow.color = (marker_data.get("color", Color.WHITE) as Color).darkened(0.55)
+	glow.polygon = PackedVector2Array([
+		Vector2(-92.0, -52.0),
+		Vector2(92.0, -52.0),
+		Vector2(108.0, 0.0),
+		Vector2(92.0, 52.0),
+		Vector2(-92.0, 52.0),
+		Vector2(-108.0, 0.0)
+	])
+	marker.add_child(glow)
+
+	var icon_texture := RuntimeTextureLoader.load_texture(String(marker_data.get("icon", "")))
+	if icon_texture != null:
+		var icon := Sprite2D.new()
+		icon.name = "Icon"
+		icon.texture = icon_texture
+		icon.centered = true
+		icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		icon.scale = Vector2.ONE * 2.4
+		icon.position = Vector2(0.0, -12.0)
+		marker.add_child(icon)
+
+	var title := Label.new()
+	title.name = "Title"
+	title.text = String(marker_data.get("title", "ROOM"))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 18)
+	title.add_theme_color_override("font_color", Color(0.98, 0.94, 0.82))
+	title.size = Vector2(210.0, 32.0)
+	title.position = Vector2(-105.0, 34.0)
+	marker.add_child(title)
+
+	var subtitle := Label.new()
+	subtitle.name = "Subtitle"
+	subtitle.text = String(marker_data.get("subtitle", ""))
+	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	subtitle.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	subtitle.add_theme_font_size_override("font_size", 12)
+	subtitle.add_theme_color_override("font_color", Color(0.82, 0.88, 0.94))
+	subtitle.size = Vector2(210.0, 24.0)
+	subtitle.position = Vector2(-105.0, 62.0)
+	marker.add_child(subtitle)
 
 func _add_runtime_room_props() -> void:
 	if map_root == null:
