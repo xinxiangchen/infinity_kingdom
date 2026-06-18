@@ -1300,6 +1300,7 @@ func _begin_crown_choice(ending_kind: String) -> void:
 	if character_select != null:
 		character_select.visible = false
 	_update_screen_layers()
+	_show_victory_result(ending_kind)
 
 func _process_crown_choice(delta: float) -> void:
 	if not crown_awaiting_choice:
