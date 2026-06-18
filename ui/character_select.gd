@@ -1369,40 +1369,6 @@ func _gallery_entries() -> Array[Dictionary]:
 			}
 		},
 		{
-			"id": "gallery_boss_guards",
-			"icon": "res://assets/ui/icon/ui_church.png",
-			"title": {
-				"en": "Royal Guard Formation",
-				"zh_Hans": "王庭卫阵",
-				"zh_Hant": "王庭衛陣"
-			},
-			"subtitle": {
-				"en": "Boss Intel",
-				"zh_Hans": "首领情报",
-				"zh_Hant": "首領情報"
-			},
-			"meta": {
-				"en": "Immune shell, lane pressure, collapse condition.",
-				"zh_Hans": "免疫外壳、边线压迫、拆阵条件。",
-				"zh_Hant": "免疫外殼、邊線壓迫、拆陣條件。"
-			},
-			"detail_title": {
-				"en": "Royal Guard Formation",
-				"zh_Hans": "王庭卫阵",
-				"zh_Hant": "王庭衛陣"
-			},
-			"detail_role": {
-				"en": "Boss Intel | Formation encounter",
-				"zh_Hans": "首领情报 | 阵型关卡",
-				"zh_Hant": "首領情報 | 陣型關卡"
-			},
-			"detail_desc": {
-				"en": "The formation starts immune, then opens once coverage fully unfolds. The fight asks you to read the whole board, not only the nearest guard. Clear pressure without losing the center.",
-				"zh_Hans": "这场战斗的重点是读整体阵型，不是只盯最近的小兵。护阵阶段先处理边线压力，等覆盖完全展开以后再抓住中场空档，一口气把阵型拆穿。",
-				"zh_Hant": "這場戰鬥的重點是讀整體陣型，不是只盯最近的小兵。護陣階段先處理邊線壓力，等覆蓋完全展開以後再抓住中場空檔，一口氣把陣型拆穿。"
-			}
-		},
-		{
 			"id": "gallery_boss_princes",
 			"icon": "res://assets/ui/icon/ui_ember_seed.png",
 			"title": {

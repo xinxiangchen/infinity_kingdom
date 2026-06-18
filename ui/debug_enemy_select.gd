@@ -69,6 +69,7 @@ func _build_ui() -> void:
 	content.add_child(hint)
 
 	elite_check = CheckBox.new()
+	elite_check.focus_mode = Control.FOCUS_NONE
 	elite_check.text = "小怪使用精英版"
 	content.add_child(elite_check)
 
@@ -76,6 +77,7 @@ func _build_ui() -> void:
 		var button := Button.new()
 		button.text = String(option["label"])
 		button.custom_minimum_size = Vector2(260.0, 36.0)
+		button.focus_mode = Control.FOCUS_NONE
 		var enemy_id: StringName = option["id"]
 		button.pressed.connect(func() -> void:
 			enemy_selected.emit(enemy_id, elite_check.button_pressed)

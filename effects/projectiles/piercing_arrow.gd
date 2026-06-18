@@ -61,16 +61,17 @@ func _try_hit(target: Variant) -> void:
 		_expire_on_blocker()
 		return
 	target = _resolve_damage_target(target)
-	if target == null or target == source:
+	var safe_source: Node = source if source != null and is_instance_valid(source) else null
+	if target == null or target == safe_source:
 		return
 	if hit_targets.has(target):
 		return
 	if not target.has_method("receive_hit"):
 		return
 	hit_targets.append(target)
-	target.receive_hit(AccessoryManager.build_hit_payload(source, attack_name, damage, crit_rate))
-	if source != null and source.has_method("on_attack_landed"):
-		source.on_attack_landed(attack_name, target)
+	target.receive_hit(AccessoryManager.build_hit_payload(safe_source, attack_name, damage, crit_rate))
+	if safe_source != null and safe_source.has_method("on_attack_landed"):
+		safe_source.on_attack_landed(attack_name, target)
 	_spawn_hit_flash()
 
 func _expire_on_blocker() -> void:

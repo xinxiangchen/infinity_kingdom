@@ -73,6 +73,78 @@ const EVENT_PROFILES := {
 		"duck_music_db": -2.5,
 		"duck_hold": 0.14
 	},
+	"player_knight_attack": {
+		"volume_db": -2.0,
+		"pitch_min": 0.96,
+		"pitch_max": 1.03
+	},
+	"player_knight_skill1_dash": {
+		"volume_db": -1.0,
+		"pitch_min": 0.97,
+		"pitch_max": 1.02
+	},
+	"player_knight_skill2_shockwave": {
+		"volume_db": -3.5,
+		"pitch_min": 0.96,
+		"pitch_max": 1.02,
+		"duck_music_db": -4.5,
+		"duck_hold": 0.2
+	},
+	"player_knight_skill3_sanctuary": {
+		"volume_db": -4.5,
+		"pitch_min": 0.98,
+		"pitch_max": 1.02,
+		"duck_music_db": -3.0,
+		"duck_hold": 0.18
+	},
+	"player_ranger_attack": {
+		"volume_db": -3.0,
+		"pitch_min": 1.0,
+		"pitch_max": 1.06
+	},
+	"player_ranger_skill1_arrow": {
+		"volume_db": -2.0,
+		"pitch_min": 0.98,
+		"pitch_max": 1.04
+	},
+	"player_ranger_skill2_shadow": {
+		"volume_db": -5.0,
+		"pitch_min": 0.98,
+		"pitch_max": 1.03,
+		"duck_music_db": -2.4,
+		"duck_hold": 0.12
+	},
+	"player_ranger_skill3_assassinate": {
+		"volume_db": -1.5,
+		"pitch_min": 0.98,
+		"pitch_max": 1.03,
+		"duck_music_db": -3.0,
+		"duck_hold": 0.16
+	},
+	"player_mage_attack": {
+		"volume_db": -7.0,
+		"pitch_min": 0.99,
+		"pitch_max": 1.04
+	},
+	"player_mage_skill1_blades": {
+		"volume_db": -2.5,
+		"pitch_min": 0.98,
+		"pitch_max": 1.04
+	},
+	"player_mage_skill2_burst": {
+		"volume_db": -5.0,
+		"pitch_min": 0.96,
+		"pitch_max": 1.02,
+		"duck_music_db": -4.5,
+		"duck_hold": 0.18
+	},
+	"player_mage_skill3_thunder": {
+		"volume_db": -4.0,
+		"pitch_min": 0.96,
+		"pitch_max": 1.02,
+		"duck_music_db": -3.2,
+		"duck_hold": 0.16
+	},
 	"boss_judicator_attack": {
 		"duck_music_db": -3.2,
 		"duck_hold": 0.16

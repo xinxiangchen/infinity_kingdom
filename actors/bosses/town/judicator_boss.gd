@@ -13,7 +13,7 @@ const JUDICATOR_WEAPON_TEXTURE_PATH := "res://art/final_materials/weapons/boss_w
 @export var move_speed: float = 96.0
 @export var attack_damage: float = 50.0
 @export var attack_range: float = 92.0
-@export var attack_interval: float = 2.0
+@export var attack_interval: float = 2.6
 @export var skill1_damage: float = 30.0
 @export var skill1_cooldown: float = 6.0
 @export var skill1_jump_start_duration: float = 0.45
@@ -92,13 +92,13 @@ func bind_player(player: Node2D) -> void:
 	target = player
 
 func get_status_title() -> String:
-	return _locale_text("Judicator", "审判官", "審判官")
+	return _locale_text("Judicator", "审判者", "審判者")
 
 func get_status_text() -> String:
 	return _locale_text("HP %d / %d%s\nState: %s", "生命 %d / %d%s\n状态：%s", "生命 %d / %d%s\n狀態：%s") % [
 		int(round(hp)),
 		int(round(max_hp)),
-		_locale_text("  ENRAGED", "  暴怒", "  暴怒") if enraged else "",
+		_locale_text("  ENRAGED", "  狂暴", "  狂暴") if enraged else "",
 		_localized_state_name(String(state))
 	]
 
@@ -120,19 +120,19 @@ func _locale_text(en_text: String, zh_hans_text: String, zh_hant_text: String) -
 func _localized_state_name(state_name: String) -> String:
 	match state_name:
 		"idle":
-			return _locale_text("Idle", "待机", "待機")
+			return _locale_text("Idle", "寰呮満", "寰呮")
 		"basic_attack":
-			return _locale_text("Basic Attack", "普攻", "普攻")
+			return _locale_text("Basic Attack", "鏅敾", "鏅敾")
 		"skill_1_jump_start":
-			return _locale_text("Leap Windup", "跃击蓄势", "躍擊蓄勢")
+			return _locale_text("Leap Windup", "璺冨嚮钃勫娍", "韬嶆搳钃勫嫝")
 		"skill_1_slam":
-			return _locale_text("Leap Slam", "跃击重砸", "躍擊重砸")
+			return _locale_text("Leap Slam", "璺冨嚮閲嶇牳", "韬嶆搳閲嶇牳")
 		"skill_2_charge":
-			return _locale_text("Line Verdict", "裁决冲锋", "裁決衝鋒")
+			return _locale_text("Line Verdict", "瑁佸喅鍐查攱", "瑁佹焙琛濋嫆")
 		"recover":
-			return _locale_text("Recover", "恢复", "恢復")
+			return _locale_text("Recover", "鎭㈠", "鎭㈠京")
 		"dead":
-			return _locale_text("Defeated", "倒下", "倒下")
+			return _locale_text("Defeated", "鍊掍笅", "鍊掍笅")
 		_:
 			return state_name.capitalize()
 
@@ -232,10 +232,10 @@ func _start_basic_attack() -> void:
 	Sfx.play_event(&"boss_judicator_attack", global_position)
 
 func _process_basic_attack() -> void:
-	if not action_committed and state_time >= 0.45:
+	if not action_committed and state_time >= 1.0:
 		action_committed = true
 		_hit_target_in_radius(attack_range, attack_damage, false)
-	if state_time >= 0.9:
+	if state_time >= 1.45:
 		_enter_recover(0.45)
 
 func _start_skill1() -> void:
@@ -539,9 +539,11 @@ func _spawn_damage_number(amount: float, is_critical: bool) -> void:
 
 func _show_intent_text(label_text: String, color_value: Color, world_position: Vector2, scale_value: float = 0.86) -> void:
 	var popup := DAMAGE_NUMBER_SCENE.instantiate()
-	popup.position = to_local(world_position) + Vector2(-42.0, -54.0)
+	popup.position = to_local(world_position) + Vector2(-42.0, -96.0)
 	if popup.has_method("setup_text"):
 		popup.setup_text(label_text, color_value, scale_value)
+	if popup is CanvasItem:
+		(popup as CanvasItem).z_index = 60
 	effects_layer.add_child(popup)
 
 func _on_damaged(_amount: float, remaining_hp: float, _source: Node) -> void:

@@ -1,4 +1,4 @@
-extends Node2D
+﻿extends Node2D
 
 signal defeated
 
@@ -23,7 +23,7 @@ const BARRAGE_WAVE_OFFSETS := [
 @export var defense_value: float = 220.0
 @export var move_speed: float = 235.0
 @export var basic_attack_damage: float = 50.0
-@export var basic_attack_interval: float = 2.0
+@export var basic_attack_interval: float = 2.8
 @export var basic_attack_recover: float = 1.0
 @export var basic_attack_range: float = 90.0
 @export var teleport_interval: float = 5.0
@@ -238,15 +238,15 @@ func _start_basic_attack() -> void:
 	state_time = 0.0
 	action_committed = false
 	attack_cooldown = basic_attack_interval
-	_show_intent_text("Slash", Color(1.0, 0.84, 0.62, 1.0), global_position, 0.8)
+	_show_intent_text("!", Color(1.0, 0.95, 0.56, 1.0), global_position, 0.92)
 
 func _process_basic_attack() -> void:
-	if not action_committed and state_time >= 0.24:
+	if not action_committed and state_time >= 1.0:
 		action_committed = true
 		_hit_target_in_arc(basic_attack_range, 110.0, basic_attack_damage)
 		_spawn_melee_slash_effect(basic_attack_range, Color(1.0, 0.84, 0.62, 0.92))
 		normal_attack_counter += 1
-	if state_time >= basic_attack_recover:
+	if state_time >= 1.0 + basic_attack_recover:
 		_enter_recover(0.18)
 
 func _start_teleport_attack() -> void:
@@ -597,9 +597,11 @@ func _spawn_damage_number(amount: float, is_critical: bool) -> void:
 
 func _show_intent_text(label_text: String, color_value: Color, world_position: Vector2, scale_value: float = 0.84) -> void:
 	var popup := DAMAGE_NUMBER_SCENE.instantiate()
-	popup.position = to_local(world_position) + Vector2(-40.0, -56.0)
+	popup.position = to_local(world_position) + Vector2(-40.0, -100.0)
 	if popup.has_method("setup_text"):
 		popup.setup_text(label_text, color_value, scale_value)
+	if popup is CanvasItem:
+		(popup as CanvasItem).z_index = 60
 	effects_layer.add_child(popup)
 
 func _spawn_melee_slash_effect(radius: float, color: Color) -> void:
@@ -709,3 +711,5 @@ func _on_died() -> void:
 			defeated.emit()
 			queue_free()
 	)
+
+

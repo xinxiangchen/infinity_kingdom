@@ -1,5 +1,7 @@
 extends CanvasLayer
 
+signal skill_tree_requested
+
 const RunEffects := preload("res://systems/run/run_effects.gd")
 const UISkin := preload("res://ui/ui_skin.gd")
 const CooldownSkillIcon := preload("res://ui/cooldown_skill_icon.gd")
@@ -52,6 +54,8 @@ var shield_label: Label
 var state_label: Label
 var level_label: Label
 var xp_label: Label
+var skill_points_label: Label
+var skill_tree_button: Button
 var status_grid: GridContainer
 var control_label: Label
 var combat_feed_label: Label
@@ -230,12 +234,24 @@ func _build_ui() -> void:
 	state_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	level_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	xp_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	skill_points_label = _make_label(_locale_text("Points 0 / 6", "技能点 0 / 6", "技能點 0 / 6"), 13, Color(0.92, 0.80, 1.0))
+	skill_points_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	skill_tree_button = Button.new()
+	skill_tree_button.text = _locale_text("Skills", "技能树", "技能樹")
+	skill_tree_button.custom_minimum_size = Vector2(0.0, 30.0)
+	skill_tree_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	UISkin.button_styles(skill_tree_button, "thin")
+	skill_tree_button.pressed.connect(func() -> void:
+		skill_tree_requested.emit()
+	)
 	state_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	xp_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	status_grid.add_child(shield_label)
 	status_grid.add_child(state_label)
 	status_grid.add_child(level_label)
 	status_grid.add_child(xp_label)
+	status_grid.add_child(skill_points_label)
+	status_grid.add_child(skill_tree_button)
 
 	status_panel_root = PanelContainer.new()
 	status_panel_root.add_theme_stylebox_override("panel", _hud_panel_style(Color(0.84, 0.90, 0.98)))
@@ -575,7 +591,10 @@ func _refresh_section_emphasis() -> void:
 		if not current_run_state.is_empty():
 			var reward_flat_bonus := int(current_run_state.get("reward_flat_bonus", 0))
 			var reward_multiplier := float(current_run_state.get("reward_multiplier", 1.0))
-			var pending_prep := current_run_state.get("pending_encounter_prep", {}) as Dictionary
+			var pending_prep: Dictionary = {}
+			var pending_prep_value: Variant = current_run_state.get("pending_encounter_prep", {})
+			if pending_prep_value is Dictionary:
+				pending_prep = pending_prep_value
 			if reward_flat_bonus > 0 or reward_multiplier > 1.001:
 				run_emphasis = true
 				run_accent = Color(0.98, 0.86, 0.58)
@@ -696,7 +715,10 @@ func _refresh_run_state_label(state: Dictionary) -> void:
 	var next_label := RunDirector.describe_event_kind(next_kind) if RunDirector != null and not next_kind.is_empty() else _locale_text("Victory", "胜利结算", "勝利結算")
 	var reward_flat_bonus := int(state.get("reward_flat_bonus", 0))
 	var reward_multiplier := float(state.get("reward_multiplier", 1.0))
-	var pending_prep := state.get("pending_encounter_prep", {}) as Dictionary
+	var pending_prep: Dictionary = {}
+	var pending_prep_value: Variant = state.get("pending_encounter_prep", {})
+	if pending_prep_value is Dictionary:
+		pending_prep = pending_prep_value
 	var hero_level := int(state.get("hero_level", 1))
 	var hero_xp := int(state.get("hero_xp", 0))
 	var hero_xp_to_next := int(state.get("hero_xp_to_next", 45))
@@ -820,7 +842,9 @@ func _skill_total_cooldown(key: String) -> float:
 func _prep_run_text(current_scene: Node, pending_prep: Dictionary) -> String:
 	var active_prep: Dictionary = {}
 	if current_scene != null:
-		active_prep = current_scene.get("active_encounter_prep") as Dictionary
+		var active_prep_value: Variant = current_scene.get("active_encounter_prep")
+		if active_prep_value is Dictionary:
+			active_prep = active_prep_value
 	if not active_prep.is_empty():
 		return _locale_text("  |  Prep %s", "  |  备战 %s", "  |  備戰 %s") % RunEffects.prep_title(active_prep)
 	if not pending_prep.is_empty():

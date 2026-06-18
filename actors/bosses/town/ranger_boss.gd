@@ -16,27 +16,41 @@ const MELEE_EFFECT_TEXTURE_PATH := "res://assets/effects/vfx/magic_circle.webp"
 @export var attack_damage: float = 42.0
 @export var attack_range: float = 92.0
 @export var attack_arc_degrees: float = 112.0
-@export var attack_interval: float = 0.82
-@export var skill1_damage: float = 68.0
-@export var skill1_cooldown: float = 5.8
-@export var skill1_cast_duration: float = 0.26
-@export var shadow_step_duration: float = 1.18
+@export var attack_interval: float = 1.35
+@export var skill_cycle_interval: float = 7.0
+@export var skill_cycle_initial_delay: float = 3.0
+
+@export var cloud_arrow_damage: float = 60.0
+@export var cloud_arrow_charge_duration: float = 0.75
+@export var cloud_arrow_spread_degrees: float = 11.0
+@export var cloud_arrow_wave_delay: float = 0.22
+@export var cloud_arrow_fan_count: int = 5
+@export var cloud_arrow_speed: float = 560.0
+
+@export var shadow_step_duration: float = 2.8
+@export var shadow_step_damage_reduction: float = 0.9
+@export var shadow_step_orbit_duration: float = 2.2
 @export var shadow_step_speed: float = 370.0
-@export var shadow_step_slash_damage: float = 58.0
-@export var shadow_step_heal: float = 120.0
-@export var shadow_step_attack_speed_gain: float = 0.28
-@export var shadow_step_speed_gain: float = 0.22
-@export var shadow_step_buff_duration: float = 5.0
-@export var skill2_cooldown: float = 8.4
-@export var assassination_range: float = 340.0
-@export var assassination_dash_speed: float = 980.0
-@export var assassination_stop_distance: float = 48.0
-@export var assassination_damage: float = 96.0
-@export var assassination_strike_duration: float = 0.26
-@export var bleed_damage_per_second: float = 18.0
-@export var bleed_duration: float = 4.0
-@export var execute_health_threshold: float = 0.12
-@export var skill3_cooldown: float = 9.6
+@export var shadow_step_orbit_radius: float = 300.0
+@export var shadow_shockwave_charge_duration: float = 0.85
+@export var shadow_shockwave_radius: float = 170.0
+@export var shadow_shockwave_damage: float = 50.0
+@export var shadow_burst_interval: float = 0.48
+@export var shadow_burst_projectiles: int = 8
+@export var shadow_burst_damage: float = 26.0
+@export var shadow_burst_speed: float = 330.0
+
+@export var assassination_damage: float = 46.0
+@export var assassination_first_charge_duration: float = 1.0
+@export var assassination_followup_charge_duration: float = 0.3
+@export var assassination_first_lock_time: float = 0.55
+@export var assassination_dash_speed: float = 1120.0
+@export var assassination_dash_width: float = 38.0
+@export var assassination_dash_overshoot: float = 150.0
+@export var assassination_reappear_distance: float = 200.0
+@export var assassination_pentagram_charge_duration: float = 0.8
+@export var assassination_pentagram_radius: float = 150.0
+@export var assassination_pentagram_dash_total_duration: float = 0.8
 
 @onready var body: Polygon2D = $Body
 @onready var weapon: Node2D = $Weapon
@@ -52,19 +66,15 @@ var state: StringName = &"idle"
 var state_time: float = 0.0
 var recover_duration: float = 0.0
 var attack_cooldown: float = 0.0
-var skill1_cooldown_remaining: float = 1.8
-var skill2_cooldown_remaining: float = 4.0
-var skill3_cooldown_remaining: float = 6.0
+var skill_cycle_remaining: float = 0.0
 var action_committed: bool = false
 var invulnerable: bool = false
 var line_direction: Vector2 = Vector2.RIGHT
 var shadow_orbit_direction: float = 1.0
 var shadow_afterimage_timer: float = 0.0
-var shadow_step_buff_time_remaining: float = 0.0
-var current_attack_speed_bonus: float = 0.0
-var current_speed_bonus: float = 0.0
+var shadow_burst_next_time: float = 0.0
+var shadow_damage_reduction_time_remaining: float = 0.0
 var active_skill_target: Node2D = null
-var damage_applied: bool = false
 var silenced_time_remaining: float = 0.0
 var root_time_remaining: float = 0.0
 var slow_time_remaining: float = 0.0
@@ -75,20 +85,45 @@ var weapon_angle_offset: float = 0.0
 var melee_texture: Texture2D = null
 var visual_last_position: Vector2 = Vector2.ZERO
 var visual_bob_time: float = 0.0
+var skill_rng: RandomNumberGenerator = RandomNumberGenerator.new()
+
+var cloud_arrow_wave_count: int = 0
+var cloud_arrow_waves_fired: int = 0
+var cloud_arrow_next_wave_time: float = 0.0
+var cloud_arrow_locked_direction: Vector2 = Vector2.RIGHT
+var cloud_arrow_left_marker: Line2D = null
+var cloud_arrow_right_marker: Line2D = null
+var cloud_arrow_pending_relock: bool = false
+
+var assassination_anchor_position: Vector2 = Vector2.ZERO
+var assassination_locked_position: Vector2 = Vector2.ZERO
+var assassination_lock_captured: bool = false
+var assassination_dash_index: int = 0
+var assassination_dash_total: int = 0
+var assassination_dash_start: Vector2 = Vector2.ZERO
+var assassination_dash_end: Vector2 = Vector2.ZERO
+var assassination_dash_duration: float = 0.0
+var assassination_dash_hit_targets: Array[Node] = []
+var assassination_path_points: Array[Vector2] = []
+var assassination_followup_target_position: Vector2 = Vector2.ZERO
+var assassination_pentagram_repeat_index: int = 0
+var assassination_pentagram_repeat_total: int = 3
 
 func _ready() -> void:
 	add_to_group("damageable")
+	skill_rng.randomize()
 	health_component.setup(max_hp, defense_value)
 	health_component.damaged.connect(_on_damaged)
 	health_component.healed.connect(_on_healed)
 	health_component.died.connect(_on_died)
 	hp = max_hp
+	skill_cycle_remaining = skill_cycle_initial_delay
 	visual_last_position = global_position
 	melee_texture = TEXTURE_LOADER.load_texture(MELEE_EFFECT_TEXTURE_PATH)
 	_setup_body_visual()
 	_setup_weapon_visual()
-	aim_ring.visible = false
-	assassination_mark.visible = false
+	_setup_cloud_arrow_markers()
+	_hide_skill_markers()
 	_update_visuals()
 
 func bind_player(player: Node2D) -> void:
@@ -98,12 +133,12 @@ func get_status_title() -> String:
 	return "Shadow Huntress"
 
 func get_status_text() -> String:
-	var buff_text := " | Buffed" if shadow_step_buff_time_remaining > 0.0 else ""
-	return "HP %d / %d\nATK %.2fs%s\nState: %s" % [
+	var shadow_text := " | Shadow DR" if shadow_damage_reduction_time_remaining > 0.0 else ""
+	return "HP %d / %d\nSkill %.1fs%s\nState: %s" % [
 		int(round(hp)),
 		int(round(max_hp)),
-		_get_attack_interval(),
-		buff_text,
+		skill_cycle_remaining,
+		shadow_text,
 		String(state)
 	]
 
@@ -113,15 +148,9 @@ func _physics_process(delta: float) -> void:
 	if target == null or not _is_targetable_player(target):
 		_find_target()
 	_update_status_timers(delta)
+	_update_shadow_damage_reduction(delta)
 	attack_cooldown = maxf(attack_cooldown - delta, 0.0)
-	skill1_cooldown_remaining = maxf(skill1_cooldown_remaining - delta, 0.0)
-	skill2_cooldown_remaining = maxf(skill2_cooldown_remaining - delta, 0.0)
-	skill3_cooldown_remaining = maxf(skill3_cooldown_remaining - delta, 0.0)
-	if shadow_step_buff_time_remaining > 0.0:
-		shadow_step_buff_time_remaining = maxf(shadow_step_buff_time_remaining - delta, 0.0)
-		if shadow_step_buff_time_remaining <= 0.0:
-			current_attack_speed_bonus = 0.0
-			current_speed_bonus = 0.0
+	skill_cycle_remaining = maxf(skill_cycle_remaining - delta, 0.0)
 	state_time += delta
 	_update_state(delta)
 	_update_visuals()
@@ -170,20 +199,35 @@ func _update_status_timers(delta: float) -> void:
 	else:
 		slow_factor = 1.0
 
+func _update_shadow_damage_reduction(delta: float) -> void:
+	if shadow_damage_reduction_time_remaining <= 0.0:
+		return
+	shadow_damage_reduction_time_remaining = maxf(shadow_damage_reduction_time_remaining - delta, 0.0)
+	if shadow_damage_reduction_time_remaining <= 0.0:
+		health_component.set_damage_reduction(0.0)
+
 func _update_state(delta: float) -> void:
 	match state:
 		&"idle":
 			_process_idle(delta)
 		&"basic_attack":
 			_process_basic_attack()
-		&"skill1_cast":
-			_process_skill1_cast()
+		&"skill1_charge":
+			_process_skill1_charge()
+		&"skill1_fire":
+			_process_skill1_fire()
 		&"skill2_shadow":
 			_process_skill2_shadow(delta)
+		&"skill2_shockwave_charge":
+			_process_skill2_shockwave_charge()
+		&"skill3_charge":
+			_process_skill3_charge()
 		&"skill3_dash":
-			_process_skill3_dash(delta)
-		&"skill3_strike":
-			_process_skill3_strike()
+			_process_skill3_dash()
+		&"skill3_pentagram_charge":
+			_process_skill3_pentagram_charge()
+		&"skill3_pentagram_dash":
+			_process_skill3_pentagram_dash()
 		&"recover":
 			_process_recover()
 
@@ -194,21 +238,15 @@ func _process_idle(delta: float) -> void:
 	var distance := to_target.length()
 	if to_target != Vector2.ZERO:
 		line_direction = to_target.normalized()
-	if _can_use_skills() and skill3_cooldown_remaining <= 0.0 and distance <= assassination_range:
-		_start_skill3()
-		return
-	if _can_use_skills() and skill2_cooldown_remaining <= 0.0 and distance <= 220.0:
-		_start_skill2()
-		return
-	if _can_use_skills() and skill1_cooldown_remaining <= 0.0 and distance >= 110.0:
-		_start_skill1()
+	if _can_use_skills() and skill_cycle_remaining <= 0.0:
+		_start_random_skill()
 		return
 	if attack_cooldown <= 0.0 and distance <= attack_range:
 		_start_basic_attack()
 		return
 	if root_time_remaining > 0.0:
 		return
-	var speed := move_speed * (1.0 + current_speed_bonus) * slow_factor
+	var speed := move_speed * slow_factor
 	var tangent := Vector2(-line_direction.y, line_direction.x) * shadow_orbit_direction
 	if distance > attack_range * 0.86:
 		global_position += (line_direction + tangent * 0.22).normalized() * speed * delta
@@ -230,161 +268,287 @@ func _start_basic_attack() -> void:
 	Sfx.play_event(&"ranger_attack", global_position)
 
 func _process_basic_attack() -> void:
-	if not action_committed and state_time >= 0.18:
+	if not action_committed and state_time >= 1.0:
 		action_committed = true
 		_hit_target_in_arc(attack_range, attack_damage, attack_arc_degrees)
 		_spawn_slash_effect(attack_range, Color(0.88, 1.0, 0.76, 0.92))
-	if state_time >= 0.42:
+	if state_time >= 1.24:
 		_enter_recover(0.16)
+func _start_random_skill() -> void:
+	skill_cycle_remaining = skill_cycle_interval
+	match skill_rng.randi_range(0, 2):
+		0:
+			_start_skill1()
+		1:
+			_start_skill2()
+		_:
+			_start_skill3()
 
 func _start_skill1() -> void:
-	state = &"skill1_cast"
+	state = &"skill1_charge"
 	state_time = 0.0
 	action_committed = false
-	skill1_cooldown_remaining = skill1_cooldown
-	aim_ring.visible = true
-	aim_ring.scale = Vector2.ONE * 0.42
-	aim_ring.modulate = Color(0.72, 1.0, 0.86, 0.88)
-	_animate_weapon_swing(-28.0, 10.0, skill1_cast_duration)
+	cloud_arrow_wave_count = 3 if _is_half_health() else 1
+	cloud_arrow_waves_fired = 0
+	cloud_arrow_next_wave_time = 0.0
+	cloud_arrow_pending_relock = false
+	_update_line_direction_to_target()
+	cloud_arrow_locked_direction = line_direction if line_direction.length_squared() > 0.0001 else Vector2.RIGHT
+	_show_cloud_arrow_markers(cloud_arrow_locked_direction)
+	_animate_weapon_swing(-28.0, 10.0, cloud_arrow_charge_duration)
 
-func _process_skill1_cast() -> void:
-	if not action_committed and state_time >= skill1_cast_duration * 0.65:
-		action_committed = true
-		_fire_piercing_arrow_combo()
-	if state_time >= skill1_cast_duration + 0.18:
-		aim_ring.visible = false
-		_enter_recover(0.18)
+func _process_skill1_charge() -> void:
+	_show_cloud_arrow_markers(cloud_arrow_locked_direction)
+	if state_time < cloud_arrow_charge_duration:
+		return
+	state = &"skill1_fire"
+	state_time = 0.0
+	cloud_arrow_waves_fired = 0
+	cloud_arrow_next_wave_time = 0.0
+	_fire_cloud_arrow_wave()
+	cloud_arrow_waves_fired += 1
+	cloud_arrow_next_wave_time += cloud_arrow_wave_delay
 
-func _fire_piercing_arrow_combo() -> void:
-	var facing_direction := line_direction if line_direction != Vector2.ZERO else Vector2.RIGHT
-	_spawn_piercing_arrow(facing_direction, skill1_damage)
-	if hp <= max_hp * 0.6:
-		_spawn_piercing_arrow(facing_direction.rotated(deg_to_rad(-14.0)), skill1_damage * 0.6)
-		_spawn_piercing_arrow(facing_direction.rotated(deg_to_rad(14.0)), skill1_damage * 0.6)
-	if hp <= max_hp * 0.3:
-		var timer := get_tree().create_timer(0.12)
-		timer.timeout.connect(func() -> void:
-			if is_instance_valid(self) and state != &"dead":
-				_spawn_piercing_arrow(facing_direction, skill1_damage * 0.85)
-		)
+func _process_skill1_fire() -> void:
+	while cloud_arrow_waves_fired < cloud_arrow_wave_count and state_time >= cloud_arrow_next_wave_time:
+		if cloud_arrow_pending_relock:
+			_relock_cloud_arrow_direction_from_target()
+		cloud_arrow_pending_relock = false
+		_fire_cloud_arrow_wave()
+		cloud_arrow_waves_fired += 1
+		cloud_arrow_next_wave_time += cloud_arrow_wave_delay
+		cloud_arrow_pending_relock = cloud_arrow_waves_fired < cloud_arrow_wave_count
+	var final_wave_time := maxf(float(cloud_arrow_wave_count - 1) * cloud_arrow_wave_delay, 0.0)
+	if cloud_arrow_waves_fired >= cloud_arrow_wave_count and state_time >= final_wave_time + 0.16:
+		_hide_cloud_arrow_markers()
+		_enter_recover(0.16)
+
+func _fire_cloud_arrow_wave() -> void:
+	var base_direction := cloud_arrow_locked_direction if cloud_arrow_locked_direction != Vector2.ZERO else Vector2.RIGHT
+	var spread_step := deg_to_rad(cloud_arrow_spread_degrees)
+	var center_index := float(cloud_arrow_fan_count - 1) * 0.5
+	for index in range(cloud_arrow_fan_count):
+		var offset := (float(index) - center_index) * spread_step
+		_spawn_piercing_arrow(base_direction.rotated(offset), cloud_arrow_damage)
+	Sfx.play_event(&"ranger_skill1_arrow", projectile_spawner.global_position)
+
+func _relock_cloud_arrow_direction_from_target() -> void:
+	if target == null or not is_instance_valid(target):
+		return
+	var to_target := target.global_position - global_position
+	if to_target.length_squared() <= 0.0001:
+		return
+	cloud_arrow_locked_direction = to_target.normalized()
+	_show_cloud_arrow_markers(cloud_arrow_locked_direction)
 
 func _start_skill2() -> void:
 	state = &"skill2_shadow"
 	state_time = 0.0
 	action_committed = false
-	invulnerable = true
-	shadow_afterimage_timer = 0.0
-	skill2_cooldown_remaining = skill2_cooldown
 	shadow_orbit_direction *= -1.0
+	shadow_afterimage_timer = 0.0
+	shadow_burst_next_time = 0.22
+	shadow_damage_reduction_time_remaining = shadow_step_duration
+	health_component.set_damage_reduction(shadow_step_damage_reduction)
+	_hide_skill_markers()
 	Sfx.play_event(&"ranger_skill2_roll", global_position)
 
 func _process_skill2_shadow(delta: float) -> void:
-	if target == null or not is_instance_valid(target):
-		invulnerable = false
-		_enter_recover(0.12)
-		return
-	var progress := clampf(state_time / maxf(shadow_step_duration, 0.001), 0.0, 1.0)
-	var angle := lerpf(-1.1, 1.1, progress) * shadow_orbit_direction
-	var desired_position := target.global_position + Vector2.RIGHT.rotated(angle) * 126.0
-	global_position = global_position.move_toward(desired_position, shadow_step_speed * delta)
-	line_direction = (target.global_position - global_position).normalized()
-	if line_direction == Vector2.ZERO:
-		line_direction = Vector2.RIGHT
+	if target != null and is_instance_valid(target):
+		var elapsed := minf(state_time, shadow_step_orbit_duration)
+		var target_offset_angle := elapsed * 3.1 * shadow_orbit_direction
+		var desired_position := target.global_position + Vector2.RIGHT.rotated(target_offset_angle) * shadow_step_orbit_radius
+		global_position = global_position.move_toward(desired_position, shadow_step_speed * slow_factor * delta)
+		_update_line_direction_to_target()
 	shadow_afterimage_timer -= delta
 	if shadow_afterimage_timer <= 0.0:
-		shadow_afterimage_timer = 0.05
+		shadow_afterimage_timer = 0.055
 		_spawn_afterimage()
-	if not action_committed and state_time >= shadow_step_duration * 0.72:
-		action_committed = true
-		_hit_target_in_arc(114.0, shadow_step_slash_damage, 142.0)
-		_spawn_slash_effect(114.0, Color(0.76, 0.94, 1.0, 0.95))
+	while state_time >= shadow_burst_next_time:
+		_fire_shadow_burst()
+		shadow_burst_next_time += shadow_burst_interval
 	if state_time >= shadow_step_duration:
-		invulnerable = false
-		current_attack_speed_bonus = shadow_step_attack_speed_gain
-		current_speed_bonus = shadow_step_speed_gain
-		shadow_step_buff_time_remaining = shadow_step_buff_duration
-		health_component.heal(shadow_step_heal)
-		_enter_recover(0.12)
+		_start_shadow_shockwave_charge()
+
+func _start_shadow_shockwave_charge() -> void:
+	state = &"skill2_shockwave_charge"
+	state_time = 0.0
+	action_committed = false
+	_show_ring_marker(global_position, shadow_shockwave_radius, Color(0.76, 0.94, 1.0, 0.84))
+
+func _process_skill2_shockwave_charge() -> void:
+	_show_ring_marker(global_position, shadow_shockwave_radius, Color(0.76, 0.94, 1.0, 0.84))
+	if state_time < shadow_shockwave_charge_duration:
+		return
+	if not action_committed:
+		action_committed = true
+		assassination_mark.visible = false
+		_hit_targets_in_radius(global_position, shadow_shockwave_radius, shadow_shockwave_damage)
+		_spawn_radius_burst(global_position, shadow_shockwave_radius, Color(0.72, 0.92, 1.0, 0.9))
+		Sfx.play_event(&"ranger_skill2_roll", global_position)
+		_enter_recover(0.2)
 
 func _start_skill3() -> void:
+	active_skill_target = target
+	assassination_anchor_position = target.global_position if target != null and is_instance_valid(target) else global_position + line_direction * 160.0
+	assassination_followup_target_position = assassination_anchor_position
+	assassination_dash_index = 0
+	assassination_dash_hit_targets.clear()
+	_hide_skill_markers()
+	_animate_weapon_swing(-34.0, 12.0, 0.18)
+	Sfx.play_event(&"ranger_skill3_assassinate", global_position)
+	if _is_half_health():
+		_start_pentagram_assassination()
+	else:
+		assassination_dash_total = 3
+		assassination_lock_captured = false
+		assassination_locked_position = assassination_anchor_position
+		_start_assassination_charge()
+
+func _start_assassination_charge() -> void:
+	state = &"skill3_charge"
+	state_time = 0.0
+	action_committed = false
+	assassination_dash_hit_targets.clear()
+	if assassination_dash_index <= 0:
+		assassination_lock_captured = false
+		_update_line_direction_to_target()
+		_show_line_marker(global_position, global_position + line_direction * 260.0, 5.0, Color(1.0, 0.48, 0.42, 0.84))
+	else:
+		_prepare_followup_assassination_dash()
+
+func _process_skill3_charge() -> void:
+	var charge_duration := _current_assassination_charge_duration()
+	if assassination_dash_index <= 0:
+		if not assassination_lock_captured and state_time >= assassination_first_lock_time:
+			_capture_first_assassination_target()
+		elif not assassination_lock_captured:
+			_update_line_direction_to_target()
+			_show_line_marker(global_position, global_position + line_direction * 260.0, 5.0, Color(1.0, 0.48, 0.42, 0.84))
+	if state_time < charge_duration:
+		return
+	if assassination_dash_index <= 0 and not assassination_lock_captured:
+		_capture_first_assassination_target()
+	_begin_assassination_dash()
+
+func _capture_first_assassination_target() -> void:
+	assassination_locked_position = target.global_position if target != null and is_instance_valid(target) else assassination_anchor_position
+	assassination_anchor_position = assassination_locked_position
+	_prepare_first_assassination_dash(assassination_locked_position)
+	assassination_lock_captured = true
+
+func _prepare_first_assassination_dash(lock_position: Vector2) -> void:
+	var direction := lock_position - global_position
+	line_direction = direction.normalized() if direction.length_squared() > 0.0001 else Vector2.RIGHT
+	assassination_dash_start = global_position
+	assassination_dash_end = lock_position + line_direction * assassination_dash_overshoot
+	assassination_dash_duration = _dash_duration_between(assassination_dash_start, assassination_dash_end)
+	_show_line_marker(assassination_dash_start, assassination_dash_end, 5.0, Color(1.0, 0.48, 0.42, 0.9))
+
+func _prepare_followup_assassination_dash() -> void:
+	var old_position := global_position
+	var lock_position := assassination_followup_target_position
+	if lock_position == Vector2.ZERO:
+		lock_position = assassination_anchor_position
+	var spawn_direction := Vector2.RIGHT.rotated(TAU * skill_rng.randf())
+	global_position = lock_position + spawn_direction * assassination_reappear_distance
+	_spawn_afterimage_at(old_position)
+	_spawn_afterimage()
+	var facing := (lock_position - global_position).normalized() if lock_position.distance_squared_to(global_position) > 0.0001 else Vector2.RIGHT
+	line_direction = facing
+	assassination_dash_start = global_position
+	assassination_dash_end = lock_position + facing * assassination_dash_overshoot
+	assassination_dash_duration = _dash_duration_between(assassination_dash_start, assassination_dash_end)
+	_show_line_marker(assassination_dash_start, assassination_dash_end, 5.0, Color(1.0, 0.48, 0.42, 0.9))
+
+func _begin_assassination_dash() -> void:
 	state = &"skill3_dash"
 	state_time = 0.0
 	action_committed = false
-	damage_applied = false
-	active_skill_target = target
-	skill3_cooldown_remaining = skill3_cooldown
-	assassination_mark.visible = true
-	assassination_mark.scale = Vector2.ONE * 0.76
-	_animate_weapon_swing(-34.0, 12.0, 0.18)
-	Sfx.play_event(&"ranger_skill3_assassinate", global_position)
+	assassination_dash_hit_targets.clear()
+	aim_ring.visible = false
+	_spawn_dash_impact(assassination_dash_start, assassination_dash_end, assassination_dash_width, Color(1.0, 0.54, 0.44, 0.88))
 
-func _process_skill3_dash(delta: float) -> void:
-	if active_skill_target == null or not is_instance_valid(active_skill_target):
-		assassination_mark.visible = false
-		_enter_recover(0.12)
+func _process_skill3_dash() -> void:
+	var previous_position := global_position
+	var progress := clampf(state_time / maxf(assassination_dash_duration, 0.01), 0.0, 1.0)
+	global_position = assassination_dash_start.lerp(assassination_dash_end, progress)
+	line_direction = (assassination_dash_end - assassination_dash_start).normalized()
+	_hit_targets_between(previous_position, global_position, assassination_dash_width, assassination_damage)
+	if progress >= 1.0:
+		assassination_followup_target_position = target.global_position if target != null and is_instance_valid(target) else assassination_followup_target_position
+		assassination_dash_index += 1
+		if assassination_dash_index < assassination_dash_total:
+			_start_assassination_charge()
+		else:
+			_enter_recover(0.24)
+
+func _start_pentagram_assassination() -> void:
+	state = &"skill3_pentagram_charge"
+	state_time = 0.0
+	action_committed = false
+	assassination_dash_total = 5
+	assassination_dash_index = 0
+	assassination_pentagram_repeat_index = 0
+	assassination_followup_target_position = assassination_anchor_position
+	_build_pentagram_path(assassination_anchor_position, assassination_pentagram_radius * 1.5)
+	_show_pentagram_marker(assassination_anchor_position)
+
+func _process_skill3_pentagram_charge() -> void:
+	_show_pentagram_marker(assassination_anchor_position)
+	if state_time < assassination_pentagram_charge_duration:
 		return
-	var to_target := active_skill_target.global_position - global_position
-	var distance := to_target.length()
-	if distance <= assassination_stop_distance or state_time >= 0.42:
-		state = &"skill3_strike"
-		state_time = 0.0
-		damage_applied = false
+	assassination_mark.visible = false
+	_start_pentagram_dash_segment()
+
+func _start_pentagram_dash_segment() -> void:
+	if assassination_dash_index >= assassination_dash_total or assassination_path_points.size() < assassination_dash_index + 2:
+		_enter_recover(0.28)
 		return
-	line_direction = to_target.normalized()
-	if line_direction == Vector2.ZERO:
-		line_direction = Vector2.RIGHT
-	global_position += line_direction * assassination_dash_speed * delta
+	var old_position := global_position
+	assassination_dash_start = assassination_path_points[assassination_dash_index]
+	assassination_dash_end = assassination_path_points[assassination_dash_index + 1]
+	var direction := assassination_dash_end - assassination_dash_start
+	line_direction = direction.normalized() if direction.length_squared() > 0.0001 else Vector2.RIGHT
+	_spawn_afterimage_at(old_position)
+	global_position = assassination_dash_start
 	_spawn_afterimage()
+	assassination_dash_duration = assassination_pentagram_dash_total_duration / 5.0
+	assassination_dash_hit_targets.clear()
+	state = &"skill3_pentagram_dash"
+	state_time = 0.0
+	action_committed = false
+	_spawn_dash_impact(assassination_dash_start, assassination_dash_end, assassination_dash_width, Color(1.0, 0.58, 0.48, 0.9))
 
-func _process_skill3_strike() -> void:
-	if not damage_applied and state_time >= assassination_strike_duration * 0.42:
-		damage_applied = true
-		_apply_assassination_damage()
-		_spawn_slash_effect(124.0, Color(1.0, 0.74, 0.68, 0.96))
-	if state_time >= assassination_strike_duration:
-		active_skill_target = null
-		assassination_mark.visible = false
-		_enter_recover(0.18)
-
-func _apply_assassination_damage() -> void:
-	if active_skill_target == null or not is_instance_valid(active_skill_target):
-		return
-	var damage := assassination_damage
-	if _can_execute_target(active_skill_target):
-		damage = 999999.0
-	active_skill_target.receive_hit({
-		"source": self,
-		"damage": damage,
-		"crit_rate": 0.18
-	})
-	if damage < 999999.0:
-		_apply_bleed(active_skill_target)
-
-func _apply_bleed(target_node: Node) -> void:
-	var ticks := int(floor(bleed_duration))
-	for tick in range(ticks):
-		var timer := get_tree().create_timer(float(tick + 1))
-		timer.timeout.connect(func() -> void:
-			if is_instance_valid(self) and is_instance_valid(target_node) and target_node.has_method("receive_hit"):
-				target_node.receive_hit({
-					"source": self,
-					"damage": bleed_damage_per_second,
-					"crit_rate": 0.0
-				})
-		)
-
-func _can_execute_target(target_node: Node) -> bool:
-	if target_node == null:
-		return false
-	var target_hp := float(target_node.get("hp"))
-	var target_max_hp := float(target_node.get("max_hp"))
-	return target_max_hp > 0.0 and target_hp <= target_max_hp * execute_health_threshold
-
+func _process_skill3_pentagram_dash() -> void:
+	var previous_position := global_position
+	var progress := clampf(state_time / maxf(assassination_dash_duration, 0.01), 0.0, 1.0)
+	global_position = assassination_dash_start.lerp(assassination_dash_end, progress)
+	line_direction = (assassination_dash_end - assassination_dash_start).normalized()
+	_hit_targets_between(previous_position, global_position, assassination_dash_width, assassination_damage)
+	if progress >= 1.0:
+		assassination_dash_index += 1
+		if assassination_dash_index < assassination_dash_total:
+			_start_pentagram_dash_segment()
+		else:
+			assassination_pentagram_repeat_index += 1
+			if assassination_pentagram_repeat_index < assassination_pentagram_repeat_total:
+				assassination_dash_index = 0
+				assassination_anchor_position = target.global_position if target != null and is_instance_valid(target) else assassination_anchor_position
+				assassination_followup_target_position = assassination_anchor_position
+				_build_pentagram_path(assassination_anchor_position, assassination_pentagram_radius * 1.5)
+				state = &"skill3_pentagram_charge"
+				state_time = 0.0
+				action_committed = false
+				_show_pentagram_marker(assassination_anchor_position)
+			else:
+				_enter_recover(0.16)
 func _enter_recover(duration: float) -> void:
 	state = &"recover"
 	state_time = 0.0
 	recover_duration = duration
-	aim_ring.visible = false
+	active_skill_target = null
+	_hide_skill_markers()
 
 func _process_recover() -> void:
 	if state_time >= recover_duration:
@@ -395,7 +559,24 @@ func _can_use_skills() -> bool:
 	return silenced_time_remaining <= 0.0
 
 func _get_attack_interval() -> float:
-	return attack_interval / (1.0 + current_attack_speed_bonus)
+	return attack_interval
+
+func _is_half_health() -> bool:
+	return hp > 0.0 and hp <= max_hp * 0.5
+
+func _current_assassination_charge_duration() -> float:
+	if assassination_dash_index <= 0:
+		return assassination_first_charge_duration
+	if _is_half_health():
+		return assassination_pentagram_charge_duration
+	return assassination_followup_charge_duration
+
+func _update_line_direction_to_target() -> void:
+	if target == null or not is_instance_valid(target):
+		return
+	var to_target := target.global_position - global_position
+	if to_target.length_squared() > 0.0001:
+		line_direction = to_target.normalized()
 
 func _hit_target_in_arc(radius: float, damage: float, arc_degrees: float) -> void:
 	if target == null or not is_instance_valid(target):
@@ -408,11 +589,156 @@ func _hit_target_in_arc(radius: float, damage: float, arc_degrees: float) -> voi
 		"crit_rate": 0.12
 	})
 
+func _hit_targets_in_radius(center: Vector2, radius: float, damage: float) -> void:
+	for candidate in get_tree().get_nodes_in_group("player"):
+		if candidate == self or not (candidate is Node2D):
+			continue
+		if not candidate.has_method("receive_hit"):
+			continue
+		var node_2d: Node2D = candidate
+		if node_2d.global_position.distance_to(center) > radius:
+			continue
+		candidate.receive_hit({
+			"source": self,
+			"damage": damage,
+			"crit_rate": 0.0
+		})
+
+func _hit_targets_between(start_position: Vector2, end_position: Vector2, width: float, damage: float) -> void:
+	if start_position == end_position:
+		return
+	for candidate in get_tree().get_nodes_in_group("player"):
+		if candidate == self or not (candidate is Node2D):
+			continue
+		if assassination_dash_hit_targets.has(candidate):
+			continue
+		if not candidate.has_method("receive_hit"):
+			continue
+		var node_2d: Node2D = candidate
+		if _distance_to_segment(node_2d.global_position, start_position, end_position) > width:
+			continue
+		assassination_dash_hit_targets.append(candidate)
+		candidate.receive_hit({
+			"source": self,
+			"damage": damage,
+			"crit_rate": 0.0
+		})
+
 func _spawn_piercing_arrow(direction: Vector2, damage: float) -> void:
 	var arrow := PIERCING_ARROW_SCENE.instantiate()
 	arrow.global_position = projectile_spawner.global_position
 	get_tree().current_scene.add_child(arrow)
-	arrow.setup(self, direction, damage, 0.1)
+	arrow.setup(self, direction, damage, 0.0)
+	if "speed" in arrow:
+		arrow.speed = cloud_arrow_speed
+
+func _fire_shadow_burst() -> void:
+	for index in range(shadow_burst_projectiles):
+		var angle := TAU * float(index) / float(shadow_burst_projectiles) + state_time * 0.7 * shadow_orbit_direction
+		var direction := Vector2.RIGHT.rotated(angle)
+		var arrow := PIERCING_ARROW_SCENE.instantiate()
+		arrow.global_position = global_position + direction * 22.0
+		get_tree().current_scene.add_child(arrow)
+		arrow.setup(self, direction, shadow_burst_damage, 0.0)
+		if "speed" in arrow:
+			arrow.speed = shadow_burst_speed
+
+func _show_line_marker(start_position: Vector2, end_position: Vector2, width: float, color: Color) -> void:
+	var direction := end_position - start_position
+	var length := direction.length()
+	if length <= 0.001:
+		return
+	aim_ring.visible = true
+	aim_ring.closed = false
+	aim_ring.global_position = start_position
+	aim_ring.rotation = direction.angle()
+	aim_ring.width = width
+	aim_ring.default_color = color
+	aim_ring.points = PackedVector2Array([Vector2.ZERO, Vector2(length, 0.0)])
+
+func _setup_cloud_arrow_markers() -> void:
+	cloud_arrow_left_marker = _create_cloud_arrow_marker(Color(0.68, 1.0, 0.82, 0.7))
+	cloud_arrow_right_marker = _create_cloud_arrow_marker(Color(0.68, 1.0, 0.82, 0.7))
+	effects_layer.add_child(cloud_arrow_left_marker)
+	effects_layer.add_child(cloud_arrow_right_marker)
+
+func _create_cloud_arrow_marker(color: Color) -> Line2D:
+	var marker := Line2D.new()
+	marker.visible = false
+	marker.width = 3.0
+	marker.closed = false
+	marker.default_color = color
+	return marker
+
+func _show_cloud_arrow_markers(direction: Vector2) -> void:
+	var base_direction := direction.normalized() if direction.length_squared() > 0.0001 else Vector2.RIGHT
+	var spread := deg_to_rad(cloud_arrow_spread_degrees)
+	_show_line_marker(global_position, global_position + base_direction * 320.0, 4.0, Color(0.72, 1.0, 0.86, 0.82))
+	if cloud_arrow_left_marker != null:
+		cloud_arrow_left_marker.visible = true
+		cloud_arrow_left_marker.global_position = global_position
+		cloud_arrow_left_marker.rotation = (base_direction.rotated(-spread)).angle()
+		cloud_arrow_left_marker.points = PackedVector2Array([Vector2.ZERO, Vector2(320.0, 0.0)])
+	if cloud_arrow_right_marker != null:
+		cloud_arrow_right_marker.visible = true
+		cloud_arrow_right_marker.global_position = global_position
+		cloud_arrow_right_marker.rotation = (base_direction.rotated(spread)).angle()
+		cloud_arrow_right_marker.points = PackedVector2Array([Vector2.ZERO, Vector2(320.0, 0.0)])
+
+func _hide_cloud_arrow_markers() -> void:
+	aim_ring.visible = false
+	if cloud_arrow_left_marker != null:
+		cloud_arrow_left_marker.visible = false
+	if cloud_arrow_right_marker != null:
+		cloud_arrow_right_marker.visible = false
+
+func _show_ring_marker(center: Vector2, radius: float, color: Color) -> void:
+	assassination_mark.visible = true
+	assassination_mark.closed = true
+	assassination_mark.global_position = center
+	assassination_mark.rotation = 0.0
+	assassination_mark.width = 4.0
+	assassination_mark.default_color = color
+	assassination_mark.points = _build_ring_points(radius, 24)
+
+func _show_pentagram_marker(center: Vector2) -> void:
+	if assassination_path_points.is_empty():
+		return
+	var points := PackedVector2Array()
+	for point in assassination_path_points:
+		points.append(point - center)
+	assassination_mark.visible = true
+	assassination_mark.closed = false
+	assassination_mark.global_position = center
+	assassination_mark.rotation = 0.0
+	assassination_mark.width = 4.0
+	assassination_mark.default_color = Color(1.0, 0.5, 0.42, 0.9)
+	assassination_mark.points = points
+
+func _hide_skill_markers() -> void:
+	_hide_cloud_arrow_markers()
+	assassination_mark.visible = false
+
+func _build_pentagram_path(center: Vector2, radius: float) -> void:
+	assassination_path_points.clear()
+	var outer_points: Array[Vector2] = []
+	for index in range(5):
+		var angle := -PI * 0.5 + TAU * float(index) / 5.0
+		outer_points.append(center + Vector2.RIGHT.rotated(angle) * radius)
+	for point_index in [0, 2, 4, 1, 3, 0]:
+		assassination_path_points.append(outer_points[int(point_index)])
+
+func _dash_duration_between(start_position: Vector2, end_position: Vector2) -> float:
+	return maxf(start_position.distance_to(end_position) / maxf(assassination_dash_speed, 1.0), 0.08)
+
+func _distance_to_segment(point: Vector2, start_position: Vector2, end_position: Vector2) -> float:
+	var segment := end_position - start_position
+	var segment_length_squared := segment.length_squared()
+	if segment_length_squared <= 0.0001:
+		return point.distance_to(start_position)
+	var weight := clampf((point - start_position).dot(segment) / segment_length_squared, 0.0, 1.0)
+	var closest_point := start_position + segment * weight
+	return point.distance_to(closest_point)
 
 func _spawn_slash_effect(radius: float, color: Color) -> void:
 	if melee_texture != null:
@@ -448,15 +774,68 @@ func _spawn_slash_effect(radius: float, color: Color) -> void:
 	tween.parallel().tween_property(slash, "modulate:a", 0.0, 0.12)
 	tween.finished.connect(slash.queue_free)
 
+func _spawn_radius_burst(center: Vector2, radius: float, color: Color) -> void:
+	var scene_root := get_tree().current_scene
+	if scene_root == null:
+		return
+	var ring := Line2D.new()
+	ring.width = 6.0
+	ring.closed = true
+	ring.default_color = color
+	ring.points = _build_ring_points(radius, 24)
+	ring.global_position = center
+	scene_root.add_child(ring)
+	var tween := ring.create_tween()
+	tween.tween_property(ring, "scale", Vector2.ONE * 1.18, 0.18)
+	tween.parallel().tween_property(ring, "modulate:a", 0.0, 0.18)
+	tween.finished.connect(ring.queue_free)
+
+func _spawn_dash_impact(start_position: Vector2, end_position: Vector2, width: float, color: Color) -> void:
+	var scene_root := get_tree().current_scene
+	if scene_root == null:
+		return
+	var direction := end_position - start_position
+	var length := direction.length()
+	if length <= 0.001:
+		return
+	var slash := Polygon2D.new()
+	slash.color = color
+	slash.global_position = start_position
+	slash.rotation = direction.angle()
+	slash.polygon = PackedVector2Array([
+		Vector2(0.0, -width * 0.5),
+		Vector2(length, -width * 0.5),
+		Vector2(length, width * 0.5),
+		Vector2(0.0, width * 0.5)
+	])
+	scene_root.add_child(slash)
+	var tween := slash.create_tween()
+	tween.tween_property(slash, "modulate:a", 0.0, 0.16)
+	tween.parallel().tween_property(slash, "scale", Vector2(1.08, 1.04), 0.16)
+	tween.finished.connect(slash.queue_free)
+
+func _build_ring_points(radius: float, steps: int = 16) -> PackedVector2Array:
+	var points := PackedVector2Array()
+	for index in range(steps):
+		var angle := TAU * float(index) / float(steps)
+		points.append(Vector2.RIGHT.rotated(angle) * radius)
+	return points
+
 func _spawn_afterimage() -> void:
+	_spawn_afterimage_at(global_position)
+
+func _spawn_afterimage_at(world_position: Vector2) -> void:
+	var scene_root := get_tree().current_scene
+	if scene_root == null:
+		return
 	var ghost := Polygon2D.new()
 	ghost.polygon = body.polygon
 	ghost.color = Color(0.64, 1.0, 0.86, 0.18)
-	ghost.global_position = global_position
+	ghost.global_position = world_position
 	ghost.rotation = body.rotation
 	ghost.scale = body.scale
-	get_tree().current_scene.add_child(ghost)
-	var tween := create_tween()
+	scene_root.add_child(ghost)
+	var tween := ghost.create_tween()
 	tween.tween_property(ghost, "modulate:a", 0.0, 0.18)
 	tween.parallel().tween_property(ghost, "scale", body.scale * 0.92, 0.18)
 	tween.finished.connect(ghost.queue_free)
@@ -491,32 +870,41 @@ func _animate_weapon_swing(start_degrees: float, end_degrees: float, duration: f
 	tween.tween_property(self, "weapon_angle_offset", deg_to_rad(end_degrees), maxf(duration, 0.01))
 
 func _update_visuals() -> void:
-	if target != null and is_instance_valid(target):
+	if _should_face_target() and target != null and is_instance_valid(target):
 		var to_target := target.global_position - global_position
 		if to_target != Vector2.ZERO:
 			line_direction = to_target.normalized()
 	var body_tint := Color.WHITE
 	if silenced_time_remaining > 0.0:
 		body_tint = Color(0.9, 0.82, 1.0, 1.0)
-	elif shadow_step_buff_time_remaining > 0.0:
-		body_tint = Color(1.0, 0.94, 0.84, 1.0)
+	elif shadow_damage_reduction_time_remaining > 0.0:
+		body_tint = Color(0.76, 0.94, 1.0, 1.0)
 	_set_body_tint(body_tint)
 	body.modulate = Color(1.0, 1.0, 1.0, 0.36) if invulnerable else Color.WHITE
-	aim_ring.visible = state == &"skill1_cast"
 	if aim_ring.visible:
-		aim_ring.rotation = line_direction.angle()
-		aim_ring.scale = Vector2.ONE * (0.82 + 0.18 * minf(state_time / maxf(skill1_cast_duration, 0.01), 1.0))
-		aim_ring.modulate = Color(0.72, 1.0, 0.86, 0.78)
-	assassination_mark.visible = active_skill_target != null and is_instance_valid(active_skill_target) and state != &"dead"
+		var aim_pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.018)
+		aim_ring.width = 4.0 + aim_pulse * 1.4
+		aim_ring.modulate = Color(1.0, 1.0, 1.0, 0.78 + 0.12 * aim_pulse)
 	if assassination_mark.visible:
-		assassination_mark.global_position = active_skill_target.global_position
-		assassination_mark.rotation += 0.16
-	assassination_mark.modulate = Color(1.0, 0.48, 0.42, 0.9)
+		var mark_pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.014)
+		assassination_mark.width = 3.6 + mark_pulse * 1.2
+		assassination_mark.modulate = Color(1.0, 1.0, 1.0, 0.76 + 0.14 * mark_pulse)
 	weapon.position = line_direction * 18.0 + Vector2(0.0, -2.0)
 	weapon.rotation = _weapon_guard_rotation(line_direction, -38.0) + weapon_angle_offset
 	projectile_spawner.position = line_direction * 28.0
 	_apply_agile_body_motion()
 	visual_last_position = global_position
+
+func _should_face_target() -> bool:
+	return state in [
+		&"idle",
+		&"basic_attack",
+		&"skill1_charge",
+		&"skill1_fire",
+		&"skill2_shadow",
+		&"skill2_shockwave_charge",
+		&"recover"
+	]
 
 func _weapon_guard_rotation(direction: Vector2, guard_degrees: float) -> float:
 	var facing := direction.normalized() if direction.length_squared() > 0.0001 else Vector2.RIGHT
@@ -558,8 +946,9 @@ func _on_died() -> void:
 	hp = 0.0
 	invulnerable = true
 	state = &"dead"
-	aim_ring.visible = false
-	assassination_mark.visible = false
+	shadow_damage_reduction_time_remaining = 0.0
+	health_component.set_damage_reduction(0.0)
+	_hide_skill_markers()
 	weapon.visible = false
 	Sfx.play_event(&"boss_generic_dead", global_position)
 	var timer := get_tree().create_timer(0.5)

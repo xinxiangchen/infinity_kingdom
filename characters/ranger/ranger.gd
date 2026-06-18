@@ -392,6 +392,7 @@ func start_attack() -> void:
 	current_attack_targets.clear()
 	current_attack_name = &"attack"
 	attack_started.emit(current_attack_name)
+	Sfx.play_event(&"player_ranger_attack", global_position)
 	slash_arc.visible = true
 	slash_arc.position = _attack_visual_offset()
 	slash_arc.rotation = _attack_facing().angle()
@@ -426,6 +427,7 @@ func trigger_normal_attack_hit() -> void:
 
 func fire_piercing_arrow() -> void:
 	attack_started.emit(&"skill1")
+	Sfx.play_event(&"player_ranger_skill1_arrow", global_position)
 	_show_piercing_charge_burst()
 	_spawn_arrow(facing, skill1_damage)
 	if skill1_split_shot_upgrade:
@@ -479,6 +481,7 @@ func start_shadow_step() -> void:
 	shadow_step_marked_targets.clear()
 	roll_afterimage_timer = 0.0
 	attack_started.emit(&"skill2")
+	Sfx.play_event(&"player_ranger_skill2_shadow", global_position)
 	play_animation(&"skill2")
 	if weapon != null:
 		weapon.visible = false
@@ -530,6 +533,7 @@ func start_assassination_dash() -> void:
 	skill3_strike_elapsed = 0.0
 	active_skill_target = queued_skill_payload.get("target", null)
 	_show_assassination_mark()
+	Sfx.play_event(&"player_ranger_skill3_assassinate", global_position)
 	play_animation(&"skill3_dash")
 	_animate_weapon_swing(-42.0, 14.0, 0.18)
 

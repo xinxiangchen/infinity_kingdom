@@ -1,4 +1,4 @@
-extends CharacterBody2D
+﻿extends CharacterBody2D
 
 signal attack_started(attack_name: StringName)
 signal attack_hit(attack_name: StringName, target: Node)
@@ -21,59 +21,63 @@ const MAGE_DEATH_TEXTURE_PATH := "res://art/final_materials/deaths/player_mage_d
 const BODY_BASE_SCALE := Vector2(0.85, 0.85)
 
 @export_group("Core Stats")
-@export var max_hp: float = 70.0
-@export var max_inspiration: float = 80.0
+@export var max_hp: float = 60.0
+@export var max_inspiration: float = 30.0
 @export var defense: float = 60.0
 @export var max_defense: float = 60.0
 @export var move_speed: float = 232.0
-@export var attack_damage: float = 90.0
-@export var attack_interval: float = 0.98
+@export var attack_move_speed: float = 126.0
+@export var attack_damage: float = 40.0
+@export var attack_interval: float = 0.8
 @export_range(0.0, 1.0, 0.01) var crit_rate: float = 0.3
-@export var inspiration_gain_on_attack_hit: float = 8.0
+@export var inspiration_gain_on_attack_hit: float = 6.0
 
 @export_group("Normal Attack Timing")
 @export var attack_windup: float = 0.27
 @export var attack_hit_frame: float = 0.08
 @export var attack_recovery: float = 0.36
-@export var attack_targeting_range: float = 560.0
+@export var attack_targeting_range: float = 500.0
+@export var normal_attack_projectile_damage: float = 60.0
+@export var normal_attack_projectile_speed: float = 720.0
+@export var normal_attack_projectile_lifetime: float = 1.5
+@export var normal_attack_projectile_hit_radius: float = 20.0
 
 @export_group("Skill 1: Arcane Blades")
-@export var skill1_cost: float = 35.0
-@export var skill1_cooldown: float = 12.0
-@export var skill1_damage: float = 50.0
+@export var skill1_cost: float = 10.0
+@export var skill1_cooldown: float = 10.0
+@export var skill1_damage: float = 100.0
 @export var skill1_cast_duration: float = 0.35
 @export var blade_duration: float = 10.0
 @export var blade_radius: float = 90.0
 @export var blade_tick_interval: float = 1.0
-@export var skill1_shield_upgrade: bool = false
-@export var skill1_shield_value: float = 50.0
+@export var skill1_defense_upgrade: bool = false
+@export var skill1_defense_restore: float = 60.0
 @export var skill1_attack_blades_upgrade: bool = false
-@export var skill1_attack_blades_damage: float = 50.0
+@export var skill1_attack_blades_damage: float = 100.0
 @export var skill1_attack_blades_hits: int = 3
 
 @export_group("Skill 2: Arcane Burst")
-@export var skill2_cost: float = 40.0
-@export var skill2_cooldown: float = 0.0
-@export var skill2_damage: float = 100.0
+@export var skill2_cost: float = 15.0
+@export var skill2_cooldown: float = 0.5
+@export var skill2_damage: float = 200.0
 @export var skill2_cast_duration: float = 0.38
 @export var burst_radius: float = 120.0
-@export var burst_targeting_range: float = 540.0
+@export var burst_targeting_range: float = 640.0
 @export var skill2_range_upgrade: bool = false
 @export var skill2_extra_damage_upgrade: bool = false
-@export var skill2_bonus_damage: float = 20.0
+@export var skill2_bonus_damage: float = 100.0
 @export var skill2_chain_burst_upgrade: bool = false
-@export var skill2_chain_damage: float = 60.0
+@export var skill2_chain_damage: float = 180.0
 
-@export_group("Skill 3: Silence Decree")
-@export var skill3_cost: float = 25.0
+@export_group("Skill 3: Thunder Empowerment")
+@export var skill3_cost: float = 20.0
 @export var skill3_cooldown: float = 8.0
 @export var skill3_cast_duration: float = 0.28
-@export var silence_duration: float = 3.0
-@export var skill3_slow_upgrade: bool = false
-@export var slow_duration: float = 8.0
-@export var slow_multiplier: float = 0.5
-@export var skill3_root_upgrade: bool = false
-@export var root_duration: float = 3.0
+@export var skill3_duration: float = 20.0
+@export var skill3_echo_radius: float = 90.0
+@export var skill3_echo_damage_ratio: float = 0.5
+@export var skill3_damage_upgrade_small: bool = false
+@export var skill3_damage_upgrade_large: bool = false
 
 @export_group("Dodge")
 @export var dodge_cost: float = 5.0
@@ -118,7 +122,8 @@ var blades_active: bool = false
 var blade_time_remaining: float = 0.0
 var blade_hit_cooldowns: Dictionary = {}
 var attack_blade_bonus_hits_remaining: int = 0
-var enchant_active: bool = false
+var thunder_empowerment_active: bool = false
+var thunder_empowerment_remaining: float = 0.0
 var current_skill_target: Node2D = null
 var blade_nodes: Array[Polygon2D] = []
 var dodge_direction: Vector2 = Vector2.RIGHT
@@ -174,6 +179,7 @@ func _physics_process(delta: float) -> void:
 func _process(delta: float) -> void:
 	_update_control_effects(delta)
 	_update_blades(delta)
+	_update_thunder_empowerment(delta)
 	_update_targeting_visuals(delta)
 
 func emit_stat_signals() -> void:
@@ -190,15 +196,15 @@ func get_upgrade_sections() -> Array:
 			"title": "Skill 1: 法刃回旋",
 			"upgrades": [
 				{
-					"id": "skill1_shield",
-					"label": "护体",
-					"description": "生成临时护盾。",
-					"fields": ["skill1_shield_upgrade"]
+					"id": "skill1_defense",
+					"label": "固甲",
+					"description": "释放时回复 60 防御。",
+					"fields": ["skill1_defense_upgrade"]
 				},
 				{
 					"id": "skill1_attack_blades",
 					"label": "刃环",
-					"description": "前三次攻击附带法刃伤害。",
+					"description": "前三次普攻额外附加 100 法刃伤害。",
 					"fields": ["skill1_attack_blades_upgrade"]
 				}
 			]
@@ -209,31 +215,31 @@ func get_upgrade_sections() -> Array:
 				{
 					"id": "skill2_amp",
 					"label": "扩能",
-					"description": "同时提高爆炸范围与伤害。",
+					"description": "爆炸半径 +32，伤害 +100。",
 					"fields": ["skill2_range_upgrade", "skill2_extra_damage_upgrade"]
 				},
 				{
 					"id": "skill2_chain",
 					"label": "连爆",
-					"description": "第一次爆炸后追加一次小爆炸。",
+					"description": "0.18 秒后追加一次 70% 半径、180 伤害的小爆炸。",
 					"fields": ["skill2_chain_burst_upgrade"]
 				}
 			]
 		},
 		{
-			"title": "Skill 3: 沉默诏令",
+			"title": "Skill 3: 雷霆之力",
 			"upgrades": [
 				{
-					"id": "skill3_slow",
-					"label": "迟滞",
-					"description": "附加减速效果。",
-					"fields": ["skill3_slow_upgrade"]
+					"id": "skill3_damage_small",
+					"label": "雷涌",
+					"description": "技能生效期间造成的伤害提高 20%。",
+					"fields": ["skill3_damage_upgrade_small"]
 				},
 				{
-					"id": "skill3_root",
-					"label": "禁制",
-					"description": "附加禁锢效果。",
-					"fields": ["skill3_root_upgrade"]
+					"id": "skill3_damage_large",
+					"label": "天威",
+					"description": "技能生效期间造成的伤害提高 40%。",
+					"fields": ["skill3_damage_upgrade_large"]
 				}
 			]
 		}
@@ -283,17 +289,17 @@ func gain_inspiration(amount: float) -> void:
 
 func on_attack_landed(attack_name: StringName, target: Node) -> void:
 	gain_inspiration(inspiration_gain_on_attack_hit)
-	if enchant_active and target != null and target.has_method("apply_control_effects"):
-		target.apply_control_effects(_build_control_payload())
-		clear_skill3_enchant()
 	if skill1_attack_blades_upgrade and attack_blade_bonus_hits_remaining > 0 and target != null and target.has_method("receive_hit"):
 		attack_blade_bonus_hits_remaining -= 1
 		target.receive_hit(AccessoryManager.build_hit_payload(
 			self,
 			&"skill1_bonus",
-			skill1_attack_blades_damage,
-			crit_rate
+			_get_scaled_outgoing_damage(skill1_attack_blades_damage),
+			_get_current_crit_rate()
 		))
+		_emit_thunder_echo(target, skill1_attack_blades_damage)
+	if attack_name != &"skill3_echo":
+		_emit_thunder_echo(target, _infer_attack_damage_for_echo(attack_name))
 	AccessoryManager.apply_on_hit_effects(self, attack_name, target)
 
 func sync_visuals() -> void:
@@ -312,7 +318,7 @@ func sync_visuals() -> void:
 		modulate = Color(1.0, 0.7, 0.7, 1.0)
 	elif silenced_time_remaining > 0.0:
 		modulate = Color(0.84, 0.76, 1.0, 1.0)
-	elif enchant_active:
+	elif thunder_empowerment_active:
 		modulate = Color(1.0, 0.92, 0.72, 1.0)
 	elif blades_active:
 		modulate = Color(0.78, 0.88, 1.0, 1.0)
@@ -425,7 +431,16 @@ func finish_dodge() -> void:
 
 func trigger_normal_attack_hit() -> void:
 	var direction := _get_attack_direction()
-	_spawn_arcane_bolt(direction, attack_damage, _get_current_crit_rate(), &"attack")
+	Sfx.play_event(&"player_mage_attack", global_position)
+	_spawn_arcane_bolt(
+		direction,
+		_get_scaled_outgoing_damage(normal_attack_projectile_damage),
+		_get_current_crit_rate(),
+		&"attack",
+		normal_attack_projectile_speed,
+		normal_attack_projectile_lifetime,
+		normal_attack_projectile_hit_radius
+	)
 
 func finish_attack() -> void:
 	if current_attack_name != &"":
@@ -452,14 +467,19 @@ func start_skill1_cast() -> void:
 	_animate_weapon_swing(-10.0, 7.0, skill1_cast_duration)
 
 func cast_skill1_blades() -> void:
-	if skill1_shield_upgrade:
-		health_component.set_shield(skill1_shield_value)
+	if skill1_defense_upgrade:
+		var restored_defense := minf(defense + skill1_defense_restore, max_defense)
+		if health_component != null:
+			health_component.defense = restored_defense
+			health_component.defense_changed.emit(restored_defense, max_defense)
+		defense = restored_defense
+		defense_changed.emit(defense, max_defense)
 	attack_started.emit(&"skill1")
+	Sfx.play_event(&"player_mage_skill1_blades", global_position)
 	blades_active = true
 	blade_time_remaining = blade_duration
 	blade_hit_cooldowns.clear()
-	if skill1_attack_blades_upgrade:
-		attack_blade_bonus_hits_remaining = skill1_attack_blades_hits
+	attack_blade_bonus_hits_remaining = skill1_attack_blades_hits if skill1_attack_blades_upgrade else 0
 	blade_orbit.visible = true
 	attack_finished.emit(&"skill1")
 
@@ -472,6 +492,7 @@ func start_skill2_cast() -> void:
 
 func release_skill2_burst() -> void:
 	attack_started.emit(&"skill2")
+	Sfx.play_event(&"player_mage_skill2_burst", global_position)
 	var radius := burst_radius + (32.0 if skill2_range_upgrade else 0.0)
 	var damage := skill2_damage + (skill2_bonus_damage if skill2_extra_damage_upgrade else 0.0)
 	var burst_center := global_position + facing * 120.0
@@ -484,7 +505,7 @@ func release_skill2_burst() -> void:
 		timer.timeout.connect(func() -> void:
 			if is_instance_valid(self):
 				_show_burst_ring(burst_center, radius * 0.7)
-				_apply_area_damage(burst_center, radius * 0.7, skill2_chain_damage, &"skill2")
+				_apply_area_damage(burst_center, radius * 0.7, skill2_chain_damage, &"skill2_chain")
 		)
 	attack_finished.emit(&"skill2")
 
@@ -496,7 +517,9 @@ func start_skill3_cast() -> void:
 
 func apply_skill3_enchant() -> void:
 	attack_started.emit(&"skill3")
-	enchant_active = true
+	Sfx.play_event(&"player_mage_skill3_thunder", global_position)
+	thunder_empowerment_active = true
+	thunder_empowerment_remaining = skill3_duration
 	enchant_sigil.visible = true
 	enchant_sigil.rotation = 0.0
 	enchant_sigil.scale = Vector2.ONE
@@ -515,7 +538,8 @@ func clear_arcane_blades() -> void:
 	blade_orbit.visible = false
 
 func clear_skill3_enchant() -> void:
-	enchant_active = false
+	thunder_empowerment_active = false
+	thunder_empowerment_remaining = 0.0
 	enchant_sigil.visible = false
 
 func receive_hit(payload: Dictionary) -> void:
@@ -556,6 +580,8 @@ func heal(amount: float) -> void:
 	health_component.heal(amount)
 
 func get_current_move_speed() -> float:
+	if current_attack_name == &"attack" or state_machine.get_state_name() == &"Attack":
+		return attack_move_speed
 	return move_speed * slow_factor
 
 func get_effective_move_speed() -> float:
@@ -602,8 +628,19 @@ func _get_attack_direction() -> Vector2:
 func _get_current_crit_rate() -> float:
 	return crit_rate
 
-func _spawn_arcane_bolt(direction: Vector2, damage: float, hit_crit_rate: float, attack_label: StringName) -> void:
+func _spawn_arcane_bolt(
+	direction: Vector2,
+	damage: float,
+	hit_crit_rate: float,
+	attack_label: StringName,
+	projectile_speed: float = normal_attack_projectile_speed,
+	projectile_lifetime: float = normal_attack_projectile_lifetime,
+	projectile_hit_radius: float = normal_attack_projectile_hit_radius
+) -> void:
 	var bolt := ARCANE_BOLT_SCENE.instantiate()
+	bolt.speed = projectile_speed
+	bolt.lifetime = projectile_lifetime
+	bolt.hit_radius = projectile_hit_radius
 	bolt.global_position = projectile_spawner.global_position
 	get_tree().current_scene.add_child(bolt)
 	bolt.setup(self, direction, damage, hit_crit_rate, attack_label)
@@ -617,25 +654,15 @@ func _apply_area_damage(center: Vector2, radius: float, damage: float, attack_na
 			continue
 		if not target.has_method("receive_hit"):
 			continue
+		var final_damage := _get_scaled_outgoing_damage(damage)
 		target.receive_hit(AccessoryManager.build_hit_payload(
 			self,
 			attack_name,
-			damage,
+			final_damage,
 			_get_current_crit_rate()
 		))
 		on_attack_landed(attack_name, target)
 		attack_hit.emit(attack_name, target)
-
-func _build_control_payload() -> Dictionary:
-	var payload := {
-		"silence_duration": silence_duration
-	}
-	if skill3_slow_upgrade:
-		payload["slow_duration"] = slow_duration
-		payload["slow_multiplier"] = slow_multiplier
-	if skill3_root_upgrade:
-		payload["root_duration"] = root_duration
-	return payload
 
 func apply_control_effects(payload: Dictionary) -> void:
 	if payload.has("silence_duration"):
@@ -679,16 +706,24 @@ func _update_blades(delta: float) -> void:
 		if float(blade_hit_cooldowns.get(key, 0.0)) > 0.0:
 			continue
 		blade_hit_cooldowns[key] = blade_tick_interval
+		var blade_damage := _get_scaled_outgoing_damage(skill1_damage)
 		target.receive_hit(AccessoryManager.build_hit_payload(
 			self,
 			&"skill1",
-			skill1_damage,
+			blade_damage,
 			_get_current_crit_rate()
 		))
 		on_attack_landed(&"skill1", target)
 		attack_hit.emit(&"skill1", target)
 	if blade_time_remaining <= 0.0:
 		clear_arcane_blades()
+
+func _update_thunder_empowerment(delta: float) -> void:
+	if not thunder_empowerment_active:
+		return
+	thunder_empowerment_remaining = maxf(thunder_empowerment_remaining - delta, 0.0)
+	if thunder_empowerment_remaining <= 0.0:
+		clear_skill3_enchant()
 
 func _update_targeting_visuals(delta: float) -> void:
 	var pulse := 0.75 + 0.25 * sin(Time.get_ticks_msec() * 0.008)
@@ -699,7 +734,7 @@ func _update_targeting_visuals(delta: float) -> void:
 		focus_ring.modulate = Color(0.74, 0.88, 1.0, 0.45 + 0.25 * pulse)
 	else:
 		focus_ring.visible = false
-	if enchant_active:
+	if thunder_empowerment_active:
 		enchant_sigil.visible = true
 		enchant_sigil.rotation += delta * 2.4
 		enchant_sigil.scale = Vector2.ONE * (0.94 + 0.08 * pulse)
@@ -724,6 +759,56 @@ func spawn_damage_number(amount: float, is_critical: bool, world_position: Vecto
 	damage_number.position = to_local(world_position) + Vector2(0.0, -32.0)
 	damage_number.setup(amount, is_critical)
 	effects_layer.add_child(damage_number)
+
+func _get_scaled_outgoing_damage(base_damage: float) -> float:
+	var multiplier := 1.0
+	if thunder_empowerment_active:
+		if skill3_damage_upgrade_small:
+			multiplier += 0.20
+		if skill3_damage_upgrade_large:
+			multiplier += 0.40
+	return base_damage * multiplier
+
+func _infer_attack_damage_for_echo(attack_name: StringName) -> float:
+	match attack_name:
+		&"attack":
+			return normal_attack_projectile_damage
+		&"skill1":
+			return skill1_damage
+		&"skill1_bonus":
+			return skill1_attack_blades_damage
+		&"skill2":
+			return skill2_damage + (skill2_bonus_damage if skill2_extra_damage_upgrade else 0.0)
+		&"skill2_chain":
+			return skill2_chain_damage
+		_:
+			return 0.0
+
+func _emit_thunder_echo(primary_target: Node, base_damage: float) -> void:
+	if not thunder_empowerment_active:
+		return
+	if primary_target == null or not (primary_target is Node2D):
+		return
+	var echo_damage := _get_scaled_outgoing_damage(base_damage) * skill3_echo_damage_ratio
+	if echo_damage <= 0.0:
+		return
+	var center := (primary_target as Node2D).global_position
+	for candidate in get_tree().get_nodes_in_group("damageable"):
+		if candidate == self or candidate == primary_target or not (candidate is Node2D):
+			continue
+		if not candidate.has_method("receive_hit"):
+			continue
+		var node_2d: Node2D = candidate
+		if center.distance_to(node_2d.global_position) > skill3_echo_radius:
+			continue
+		candidate.receive_hit(AccessoryManager.build_hit_payload(
+			self,
+			&"skill3_echo",
+			echo_damage,
+			_get_current_crit_rate()
+		))
+		attack_hit.emit(&"skill3_echo", candidate)
+
 
 func _on_hurtbox_area_entered(area: Area2D) -> void:
 	if area != null and area.has_method("build_damage_payload"):
@@ -910,3 +995,6 @@ func _spawn_death_burst() -> void:
 		tween.tween_property(glyph, "position", direction * 24.0 + Vector2(0.0, -8.0), 0.22)
 		tween.parallel().tween_property(glyph, "modulate:a", 0.0, 0.22)
 		tween.finished.connect(glyph.queue_free)
+
+
+

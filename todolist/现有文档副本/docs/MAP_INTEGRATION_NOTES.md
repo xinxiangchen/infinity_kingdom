@@ -58,11 +58,11 @@ room_03_street_battle_2     -> town mob encounter
 room_04_central_plaza       -> town mob encounter
 room_09_elite_zone          -> town mob encounter
 room_10_palace_hall         -> Judicator boss
-room_11_palace_corridor     -> Royal Guard Formation
+room_11_palace_corridor     -> town mob encounter
 room_12_king_gate           -> Twin Princes boss
 ```
 
-The first five rooms are treated as outside/approach rooms and use the six soldier enemy types. The first palace room uses the first boss. The king gate / throne-front room uses the final twin boss.
+Approach and corridor rooms use the six soldier enemy types. The first palace boss room uses Judicator. The king gate / throne-front room uses the lineage final boss.
 
 The same demo also places six enemy material previews on top of the stitched route:
 

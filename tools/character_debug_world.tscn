@@ -3,7 +3,7 @@
 [ext_resource type="Script" path="res://tools/character_debug_world.gd" id="1"]
 [ext_resource type="PackedScene" path="res://ui/character_select.tscn" id="2"]
 [ext_resource type="PackedScene" path="res://ui/debug_enemy_select.tscn" id="3"]
-[ext_resource type="PackedScene" path="res://ui/character_debug_status.tscn" id="4"]
+[ext_resource type="PackedScene" path="res://ui/knight_hud.tscn" id="4"]
 
 [sub_resource type="RectangleShape2D" id="1"]
 size = Vector2(1360, 20)

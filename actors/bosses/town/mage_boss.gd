@@ -4,34 +4,57 @@ signal defeated
 
 const DAMAGE_NUMBER_SCENE := preload("res://effects/damage_number.tscn")
 const ARCANE_BOLT_SCENE := preload("res://effects/projectiles/arcane_bolt.tscn")
+const MAGE_RED_BOLT_SCENE := preload("res://effects/projectiles/mage_boss_red_bolt.tscn")
 const TEXTURE_LOADER := preload("res://combat/runtime_texture_loader.gd")
 const MAGE_BODY_TEXTURE_PATH := "res://actors/bosses/textures/mage_boss.png"
 const MAGE_WEAPON_TEXTURE_PATH := "res://art/final_materials/weapons/boss_weapon_mage_staff.png"
+const MAGE_SKILL1_BULLET_TEXTURE_PATH := "res://assets/effects/projectiles/boss_bullet_red.webp"
+const MAGE_LASER_BODY_TEXTURE_PATH := "res://assets/effects/projectiles/mage_boss_laser_body.webp"
+const MAGE_LASER_CORE_TEXTURE_PATH := "res://assets/effects/projectiles/mage_boss_laser_core.png"
 
 @export var max_hp: float = 3300.0
 @export var defense_value: float = 205.0
-@export var move_speed: float = 180.0
-@export var attack_damage: float = 44.0
-@export var attack_interval: float = 1.0
-@export var attack_targeting_range: float = 560.0
-@export var skill1_damage: float = 28.0
-@export var skill1_cooldown: float = 8.2
-@export var blade_duration: float = 7.0
-@export var blade_radius: float = 96.0
-@export var blade_tick_interval: float = 0.8
-@export var skill1_shield_value: float = 130.0
-@export var skill2_damage: float = 92.0
-@export var skill2_cooldown: float = 7.0
-@export var skill2_cast_duration: float = 0.42
-@export var burst_radius: float = 128.0
-@export var burst_targeting_range: float = 520.0
-@export var chain_burst_damage: float = 56.0
-@export var skill3_cooldown: float = 6.2
-@export var skill3_cast_duration: float = 0.26
-@export var silence_duration: float = 2.2
-@export var slow_duration: float = 3.5
-@export var slow_multiplier: float = 0.55
-@export var root_duration: float = 1.0
+@export var move_speed: float = 170.0
+
+@export var skill_cooldown_between_casts: float = 3.0
+
+@export var skill1_charge_duration: float = 0.85
+@export var skill1_radius_from_boss: float = 92.0
+@export var skill1_wave_count: int = 6
+@export var skill1_wave_interval: float = 0.34
+@export var skill1_projectiles_per_ring: int = 18
+@export var skill1_spiral_offset_degrees: float = 13.0
+@export var skill1_aimed_bullets_per_wave: int = 3
+@export var skill1_aimed_spread_degrees: float = 18.0
+@export var skill1_damage: float = 30.0
+@export var skill1_ring_projectile_speed: float = 235.0
+@export var skill1_aimed_projectile_speed: float = 380.0
+
+@export var skill2_marker_radius: float = 30.0
+@export var skill2_expand_speed: float = 230.0
+@export var skill2_expand_duration: float = 1.35
+@export var skill2_damage: float = 88.0
+
+@export var skill3_charge_duration: float = 1.0
+@export var skill3_laser_damage: float = 80.0
+@export var skill3_rotate_speed_degrees: float = 35.0
+@export var skill3_rotate_duration: float = 2.8
+@export var skill3_hold_duration: float = 0.55
+@export var skill3_laser_length: float = 1040.0
+@export var skill3_laser_width: float = 20.0
+
+@export var skill4_burst_spawn_radius: float = 300.0
+@export var skill4_burst_radius: float = 56.0
+@export var skill4_warning_duration: float = 1.0
+@export var skill4_damage: float = 50.0
+@export var skill4_burst_count: int = 9
+
+@export var skill5_projectiles_per_wave: int = 28
+@export var skill5_wave_count: int = 6
+@export var skill5_wave_interval: float = 0.38
+@export var skill5_angle_offset_degrees: float = 9.0
+@export var skill5_damage: float = 30.0
+@export var skill5_projectile_speed: float = 300.0
 
 @onready var body: Polygon2D = $Body
 @onready var focus_ring: Line2D = $FocusRing
@@ -45,51 +68,58 @@ const MAGE_WEAPON_TEXTURE_PATH := "res://art/final_materials/weapons/boss_weapon
 
 var target: Node2D = null
 var hp: float = 0.0
-var shield: float = 0.0
 var state: StringName = &"idle"
 var state_time: float = 0.0
 var recover_duration: float = 0.0
-var attack_cooldown: float = 0.0
-var skill1_cooldown_remaining: float = 1.2
-var skill2_cooldown_remaining: float = 3.0
-var skill3_cooldown_remaining: float = 4.8
+var skill_cooldown_remaining: float = 1.5
 var line_direction: Vector2 = Vector2.RIGHT
 var action_committed: bool = false
-var blades_active: bool = false
-var blade_time_remaining: float = 0.0
-var blade_hit_cooldowns: Dictionary = {}
-var blade_nodes: Array[Polygon2D] = []
-var enchant_active: bool = false
-var current_skill_target: Node2D = null
-var silenced_time_remaining: float = 0.0
-var root_time_remaining: float = 0.0
-var slow_time_remaining: float = 0.0
-var slow_factor: float = 1.0
+var current_skill_target: Vector2 = Vector2.ZERO
+var current_skill_id: int = -1
+var last_skill_id: int = -1
 var body_sprite: Sprite2D = null
 var weapon_sprite: Sprite2D = null
+var laser_body_sprite: Sprite2D = null
+var laser_core_sprite: Sprite2D = null
+var laser_line: Line2D = null
+var skill1_bullet_texture: Texture2D = null
+var skill3_laser_body_texture: Texture2D = null
+var skill3_laser_core_texture: Texture2D = null
 var weapon_angle_offset: float = deg_to_rad(98.0)
-var orbit_direction: float = 1.0
 var visual_last_position: Vector2 = Vector2.ZERO
 var visual_bob_time: float = 0.0
+var skill_rng := RandomNumberGenerator.new()
+var skill1_current_wave: int = 0
+var skill1_next_wave_time: float = 0.0
+var skill1_base_angle: float = 0.0
+var skill1_spin_direction: float = 1.0
+var skill2_ring_radius: float = 0.0
+var skill3_target_angle: float = 0.0
+var skill3_start_angle: float = 0.0
+var skill3_current_angle: float = 0.0
+var skill4_markers: Array[Dictionary] = []
+var skill5_current_wave: int = 0
+var skill5_next_wave_time: float = 0.0
 
 func _ready() -> void:
 	add_to_group("damageable")
+	skill_rng.randomize()
+	skill1_bullet_texture = TEXTURE_LOADER.load_texture(MAGE_SKILL1_BULLET_TEXTURE_PATH)
+	skill3_laser_body_texture = TEXTURE_LOADER.load_texture(MAGE_LASER_BODY_TEXTURE_PATH)
+	skill3_laser_core_texture = TEXTURE_LOADER.load_texture(MAGE_LASER_CORE_TEXTURE_PATH)
 	health_component.setup(max_hp, defense_value)
 	health_component.damaged.connect(_on_damaged)
-	health_component.healed.connect(_on_healed)
-	health_component.shield_changed.connect(_on_shield_changed)
 	health_component.died.connect(_on_died)
 	hp = max_hp
 	visual_last_position = global_position
 	_setup_body_visual()
 	_setup_weapon_visual()
-	for child in blade_orbit.get_children():
-		if child is Polygon2D:
-			blade_nodes.append(child)
+	_setup_laser_visuals()
 	focus_ring.visible = false
 	burst_ring.visible = false
 	enchant_sigil.visible = false
 	blade_orbit.visible = false
+	_clear_unused_visual_nodes()
 	_update_visuals()
 
 func bind_player(player: Node2D) -> void:
@@ -99,11 +129,9 @@ func get_status_title() -> String:
 	return "Grand Arcanist"
 
 func get_status_text() -> String:
-	var shield_text := " | Shield %d" % int(round(shield)) if shield > 0.0 else ""
-	return "HP %d / %d%s\nState: %s" % [
+	return "HP %d / %d\nState: %s" % [
 		int(round(hp)),
 		int(round(max_hp)),
-		shield_text,
 		String(state)
 	]
 
@@ -112,13 +140,8 @@ func _physics_process(delta: float) -> void:
 		return
 	if target == null or not _is_targetable_player(target):
 		_find_target()
-	_update_status_timers(delta)
-	attack_cooldown = maxf(attack_cooldown - delta, 0.0)
-	skill1_cooldown_remaining = maxf(skill1_cooldown_remaining - delta, 0.0)
-	skill2_cooldown_remaining = maxf(skill2_cooldown_remaining - delta, 0.0)
-	skill3_cooldown_remaining = maxf(skill3_cooldown_remaining - delta, 0.0)
+	skill_cooldown_remaining = maxf(skill_cooldown_remaining - delta, 0.0)
 	state_time += delta
-	_update_blades(delta)
 	_update_state(delta)
 	_update_visuals()
 
@@ -128,17 +151,7 @@ func receive_hit(payload: Dictionary) -> void:
 	var result: Dictionary = health_component.receive_hit(payload)
 	var final_damage := float(result.get("damage", 0.0))
 	if final_damage > 0.0:
-		apply_control_effects(payload)
 		_spawn_damage_number(final_damage, bool(result.get("is_critical", false)))
-
-func apply_control_effects(payload: Dictionary) -> void:
-	if payload.has("silence_duration"):
-		silenced_time_remaining = maxf(silenced_time_remaining, float(payload["silence_duration"]))
-	if payload.has("root_duration"):
-		root_time_remaining = maxf(root_time_remaining, float(payload["root_duration"]))
-	if payload.has("slow_duration"):
-		slow_time_remaining = maxf(slow_time_remaining, float(payload["slow_duration"]))
-		slow_factor = minf(slow_factor, float(payload.get("slow_multiplier", 1.0)))
 
 func _find_target() -> void:
 	for player in get_tree().get_nodes_in_group("player"):
@@ -158,26 +171,28 @@ func _is_targetable_player(candidate: Variant) -> bool:
 	var hp_value: Variant = actor.get("hp")
 	return hp_value == null or float(hp_value) > 0.0
 
-func _update_status_timers(delta: float) -> void:
-	silenced_time_remaining = maxf(silenced_time_remaining - delta, 0.0)
-	root_time_remaining = maxf(root_time_remaining - delta, 0.0)
-	if slow_time_remaining > 0.0:
-		slow_time_remaining = maxf(slow_time_remaining - delta, 0.0)
-	else:
-		slow_factor = 1.0
-
 func _update_state(delta: float) -> void:
 	match state:
 		&"idle":
 			_process_idle(delta)
-		&"basic_attack":
-			_process_basic_attack()
-		&"skill1_cast":
-			_process_skill1_cast()
-		&"skill2_cast":
-			_process_skill2_cast()
-		&"skill3_cast":
-			_process_skill3_cast()
+		&"skill1_charge":
+			_process_skill1_charge()
+		&"skill1_release":
+			_process_skill1_release()
+		&"skill2_charge":
+			_process_skill2_charge(delta)
+		&"skill2_resolve":
+			_process_skill2_resolve()
+		&"skill3_charge":
+			_process_skill3_charge()
+		&"skill3_rotate":
+			_process_skill3_rotate()
+		&"skill3_hold":
+			_process_skill3_hold()
+		&"skill4_cast":
+			_process_skill4_cast()
+		&"skill5_cast":
+			_process_skill5_cast()
 		&"recover":
 			_process_recover()
 
@@ -185,222 +200,307 @@ func _process_idle(delta: float) -> void:
 	if target == null or not is_instance_valid(target):
 		return
 	var to_target := target.global_position - global_position
-	var distance := to_target.length()
 	if to_target != Vector2.ZERO:
 		line_direction = to_target.normalized()
-	if _can_use_skills() and not enchant_active and skill3_cooldown_remaining <= 0.0:
-		_start_skill3_cast()
+	if skill_cooldown_remaining <= 0.0:
+		_start_random_skill()
 		return
-	if _can_use_skills() and skill2_cooldown_remaining <= 0.0 and distance <= burst_targeting_range:
-		_start_skill2_cast()
-		return
-	if _can_use_skills() and not blades_active and skill1_cooldown_remaining <= 0.0 and distance <= 240.0:
-		_start_skill1_cast()
-		return
-	if attack_cooldown <= 0.0 and distance <= attack_targeting_range:
-		_start_basic_attack()
-		return
-	if root_time_remaining > 0.0:
-		return
-	var tangent := Vector2(-line_direction.y, line_direction.x) * orbit_direction
-	var speed := move_speed * slow_factor
-	if distance < 180.0:
-		global_position -= line_direction * speed * 0.9 * delta
-	elif distance > 340.0:
-		global_position += line_direction * speed * 0.75 * delta
-	else:
-		if state_time >= 0.56:
-			state_time = 0.0
-			orbit_direction *= -1.0
-			tangent = Vector2(-line_direction.y, line_direction.x) * orbit_direction
-		global_position += tangent.normalized() * speed * 0.5 * delta
+	var orbit := Vector2(-line_direction.y, line_direction.x)
+	global_position += orbit.normalized() * move_speed * 0.45 * delta
 
-func _start_basic_attack() -> void:
-	state = &"basic_attack"
+func _start_random_skill() -> void:
+	var candidates := [1, 2, 3, 4, 5]
+	candidates.erase(last_skill_id)
+	current_skill_id = candidates[skill_rng.randi_range(0, candidates.size() - 1)]
+	last_skill_id = current_skill_id
+	skill_cooldown_remaining = skill_cooldown_between_casts
+	match current_skill_id:
+		1:
+			_start_skill1()
+		2:
+			_start_skill2()
+		3:
+			_start_skill3()
+		4:
+			_start_skill4()
+		5:
+			_start_skill5()
+
+func _start_skill1() -> void:
+	state = &"skill1_charge"
 	state_time = 0.0
 	action_committed = false
-	attack_cooldown = attack_interval
-	focus_ring.visible = true
-	_animate_weapon_swing(-56.0, 18.0, 0.24)
-	Sfx.play_event(&"mage_attack", global_position)
-
-func _process_basic_attack() -> void:
-	if not action_committed and state_time >= 0.24:
-		action_committed = true
-		_fire_arcane_bolt(attack_damage)
-	if state_time >= 0.48:
-		_enter_recover(0.16)
-
-func _start_skill1_cast() -> void:
-	state = &"skill1_cast"
-	state_time = 0.0
-	action_committed = false
-	skill1_cooldown_remaining = skill1_cooldown
-	_animate_weapon_swing(-34.0, 14.0, 0.28)
-	Sfx.play_event(&"mage_skill1_blades", global_position)
-
-func _process_skill1_cast() -> void:
-	if not action_committed and state_time >= 0.28:
-		action_committed = true
-		_activate_arcane_blades()
-	if state_time >= 0.46:
-		_enter_recover(0.16)
-
-func _activate_arcane_blades() -> void:
-	blades_active = true
-	blade_time_remaining = blade_duration
-	blade_hit_cooldowns.clear()
-	blade_orbit.visible = true
-	health_component.set_shield(skill1_shield_value)
-
-func _start_skill2_cast() -> void:
-	state = &"skill2_cast"
-	state_time = 0.0
-	action_committed = false
-	skill2_cooldown_remaining = skill2_cooldown
-	current_skill_target = target
+	skill1_current_wave = 0
+	skill1_next_wave_time = 0.0
+	skill1_base_angle = skill_rng.randf_range(0.0, TAU)
+	skill1_spin_direction = 1.0 if skill_rng.randi_range(0, 1) == 0 else -1.0
 	burst_ring.visible = true
-	burst_ring.scale = Vector2.ONE * 0.4
-	_animate_weapon_swing(-26.0, 12.0, skill2_cast_duration)
-	Sfx.play_event(&"mage_skill2_burst", global_position)
+	burst_ring.global_position = global_position
+	burst_ring.default_color = Color(1.0, 0.22, 0.12, 0.72)
+	burst_ring.points = _build_ring_points(skill1_radius_from_boss, 28)
+	_show_intent_text("!", Color(1.0, 0.95, 0.56, 1.0), global_position, 0.92)
 
-func _process_skill2_cast() -> void:
-	if current_skill_target != null and is_instance_valid(current_skill_target):
-		burst_ring.global_position = current_skill_target.global_position
-	if burst_ring.visible:
-		burst_ring.scale = Vector2.ONE * (0.4 + minf(state_time * 1.35, 0.72))
-	if not action_committed and state_time >= skill2_cast_duration * 0.62:
-		action_committed = true
-		var center := current_skill_target.global_position if current_skill_target != null and is_instance_valid(current_skill_target) else global_position + line_direction * 110.0
-		_release_arcane_burst(center)
-	if state_time >= skill2_cast_duration + 0.2:
-		burst_ring.visible = false
-		current_skill_target = null
-		_enter_recover(0.18)
+func _process_skill1_charge() -> void:
+	if state_time < skill1_charge_duration:
+		burst_ring.visible = true
+		burst_ring.global_position = global_position
+		burst_ring.points = _build_ring_points(skill1_radius_from_boss + sin(state_time * 18.0) * 6.0, 28)
+		return
+	state = &"skill1_release"
+	state_time = 0.0
+	burst_ring.visible = false
 
-func _release_arcane_burst(center: Vector2) -> void:
-	var extra_payload := _consume_enchant_payload()
-	_apply_burst_damage(center, burst_radius, skill2_damage, extra_payload)
-	_show_burst_effect(center, burst_radius)
-	if hp <= max_hp * 0.5:
-		var timer := get_tree().create_timer(0.18)
-		timer.timeout.connect(func() -> void:
-			if is_instance_valid(self) and state != &"dead":
-				_apply_burst_damage(center, burst_radius * 0.72, chain_burst_damage, {})
-				_show_burst_effect(center, burst_radius * 0.72)
-		)
+func _process_skill1_release() -> void:
+	while skill1_current_wave < skill1_wave_count and state_time >= skill1_next_wave_time:
+		_fire_skill1_wave()
+		skill1_current_wave += 1
+		skill1_next_wave_time += skill1_wave_interval
+	if skill1_current_wave >= skill1_wave_count and state_time >= skill1_next_wave_time + 0.2:
+		_enter_recover(0.12)
 
-func _start_skill3_cast() -> void:
-	state = &"skill3_cast"
+func _fire_skill1_wave() -> void:
+	var ring_offset := deg_to_rad(skill1_spiral_offset_degrees * float(skill1_current_wave)) * skill1_spin_direction
+	for index in range(skill1_projectiles_per_ring):
+		var angle := skill1_base_angle + TAU * float(index) / float(skill1_projectiles_per_ring) + ring_offset
+		var direction := Vector2.RIGHT.rotated(angle)
+		var spawn_position := global_position + direction * skill1_radius_from_boss
+		_spawn_red_bolt(spawn_position, direction, skill1_damage, skill1_ring_projectile_speed)
+	if target == null or not is_instance_valid(target):
+		return
+	var to_target := target.global_position - global_position
+	if to_target == Vector2.ZERO:
+		return
+	var aimed_center := to_target.normalized().angle()
+	var spread_start := -deg_to_rad(skill1_aimed_spread_degrees) * 0.5
+	var spread_step := deg_to_rad(skill1_aimed_spread_degrees) / maxf(float(skill1_aimed_bullets_per_wave - 1), 1.0)
+	for index in range(skill1_aimed_bullets_per_wave):
+		var aimed_angle := aimed_center + spread_start + spread_step * float(index)
+		var aimed_direction := Vector2.RIGHT.rotated(aimed_angle)
+		var spawn_position := global_position + aimed_direction * skill1_radius_from_boss
+		_spawn_red_bolt(spawn_position, aimed_direction, skill1_damage, skill1_aimed_projectile_speed)
+
+func _start_skill2() -> void:
+	state = &"skill2_charge"
 	state_time = 0.0
 	action_committed = false
-	skill3_cooldown_remaining = skill3_cooldown
-	_animate_weapon_swing(-42.0, 10.0, skill3_cast_duration)
-	Sfx.play_event(&"mage_skill3_enchant", global_position)
+	current_skill_target = target.global_position if target != null and is_instance_valid(target) else global_position
+	skill2_ring_radius = skill2_marker_radius
+	burst_ring.visible = true
+	burst_ring.global_position = current_skill_target
+	burst_ring.points = _build_ring_points(skill2_ring_radius, 24)
+	_show_intent_text("!", Color(1.0, 0.95, 0.56, 1.0), current_skill_target, 0.92)
 
-func _process_skill3_cast() -> void:
-	if not action_committed and state_time >= skill3_cast_duration * 0.55:
+func _process_skill2_charge(delta: float) -> void:
+	skill2_ring_radius = skill2_marker_radius + skill2_expand_speed * minf(state_time, skill2_expand_duration)
+	burst_ring.visible = true
+	burst_ring.global_position = current_skill_target
+	burst_ring.points = _build_ring_points(skill2_ring_radius, 28)
+	if state_time < skill2_expand_duration:
+		return
+	state = &"skill2_resolve"
+	state_time = 0.0
+	action_committed = false
+
+func _process_skill2_resolve() -> void:
+	if not action_committed:
 		action_committed = true
-		enchant_active = true
-		enchant_sigil.visible = true
-	if state_time >= skill3_cast_duration + 0.12:
+		_apply_radius_damage(current_skill_target, skill2_ring_radius, skill2_damage)
+		_show_burst_effect(current_skill_target, skill2_ring_radius, Color(0.78, 0.90, 1.0, 0.9))
+		burst_ring.visible = false
+	if state_time >= 0.18:
 		_enter_recover(0.12)
+
+func _start_skill3() -> void:
+	state = &"skill3_charge"
+	state_time = 0.0
+	action_committed = false
+	var target_direction := line_direction
+	if target != null and is_instance_valid(target):
+		var to_target := target.global_position - global_position
+		if to_target != Vector2.ZERO:
+			target_direction = to_target.normalized()
+	skill3_target_angle = target_direction.angle()
+	skill3_start_angle = skill_rng.randf_range(-PI, PI)
+	skill3_current_angle = skill3_start_angle
+	_show_laser_effect()
+	_show_intent_text("!", Color(1.0, 0.95, 0.56, 1.0), global_position, 0.92)
+
+func _process_skill3_charge() -> void:
+	skill3_current_angle = skill3_start_angle
+	_show_laser_effect()
+	if state_time < skill3_charge_duration:
+		return
+	state = &"skill3_rotate"
+	state_time = 0.0
+	action_committed = false
+
+func _process_skill3_rotate() -> void:
+	if not action_committed:
+		action_committed = true
+	_update_skill3_laser_angles(state_time)
+	_show_laser_effect()
+	if state_time > 0.18:
+		_apply_laser_damage()
+	if state_time >= skill3_rotate_duration:
+		state = &"skill3_hold"
+		state_time = 0.0
+
+func _process_skill3_hold() -> void:
+	_update_skill3_laser_angles(skill3_rotate_duration)
+	_show_laser_effect()
+	_apply_laser_damage()
+	if state_time >= skill3_hold_duration:
+		_set_laser_visuals_visible(false)
+		_enter_recover(0.15)
+
+func _start_skill4() -> void:
+	state = &"skill4_cast"
+	state_time = 0.0
+	action_committed = false
+	_clear_skill4_markers()
+	_show_intent_text("!", Color(1.0, 0.95, 0.56, 1.0), target.global_position if target != null and is_instance_valid(target) else global_position, 0.92)
+	var center := target.global_position if target != null and is_instance_valid(target) else global_position
+	for _index in range(skill4_burst_count):
+		var angle := skill_rng.randf_range(0.0, TAU)
+		var marker_position := center + Vector2.RIGHT.rotated(angle) * skill_rng.randf_range(0.0, skill4_burst_spawn_radius)
+		var marker := Line2D.new()
+		marker.width = 3.0
+		marker.closed = true
+		marker.default_color = Color(1.0, 0.72, 0.52, 0.92)
+		marker.points = _build_ring_points(skill4_burst_radius, 18)
+		marker.global_position = marker_position
+		get_tree().current_scene.add_child(marker)
+		skill4_markers.append({
+			"node": marker,
+			"position": marker_position
+		})
+
+func _process_skill4_cast() -> void:
+	if state_time < skill4_warning_duration:
+		return
+	if not action_committed:
+		action_committed = true
+		for marker_data in skill4_markers:
+			var marker_position := marker_data.get("position", Vector2.ZERO) as Vector2
+			_apply_radius_damage(marker_position, skill4_burst_radius, skill4_damage)
+			_show_burst_effect(marker_position, skill4_burst_radius, Color(1.0, 0.70, 0.50, 0.9))
+		_clear_skill4_markers()
+	if state_time >= skill4_warning_duration + 0.18:
+		_enter_recover(0.12)
+
+func _start_skill5() -> void:
+	state = &"skill5_cast"
+	state_time = 0.0
+	action_committed = false
+	skill5_current_wave = 0
+	skill5_next_wave_time = 0.0
+	_show_intent_text("!", Color(1.0, 0.95, 0.56, 1.0), global_position, 0.92)
+
+func _process_skill5_cast() -> void:
+	while skill5_current_wave < skill5_wave_count and state_time >= skill5_next_wave_time:
+		_fire_skill5_wave(skill5_current_wave)
+		skill5_current_wave += 1
+		skill5_next_wave_time += skill5_wave_interval
+	if skill5_current_wave >= skill5_wave_count and state_time >= skill5_next_wave_time + 0.18:
+		_enter_recover(0.12)
+
+func _fire_skill5_wave(wave_index: int) -> void:
+	var angle_offset := deg_to_rad(skill5_angle_offset_degrees * float(wave_index))
+	for index in range(skill5_projectiles_per_wave):
+		var angle := TAU * float(index) / float(skill5_projectiles_per_wave) + angle_offset
+		var direction := Vector2.RIGHT.rotated(angle)
+		_spawn_red_bolt(global_position, direction, skill5_damage, skill5_projectile_speed)
 
 func _enter_recover(duration: float) -> void:
 	state = &"recover"
 	state_time = 0.0
 	recover_duration = duration
-	focus_ring.visible = false
 
 func _process_recover() -> void:
 	if state_time >= recover_duration:
 		state = &"idle"
 		state_time = 0.0
 
-func _can_use_skills() -> bool:
-	return silenced_time_remaining <= 0.0
-
-func _fire_arcane_bolt(damage: float) -> void:
-	var direction := line_direction if line_direction != Vector2.ZERO else Vector2.RIGHT
+func _spawn_arcane_bolt(spawn_position: Vector2, direction: Vector2, damage: float) -> void:
 	var bolt := ARCANE_BOLT_SCENE.instantiate()
-	bolt.global_position = projectile_spawner.global_position
+	bolt.global_position = spawn_position
 	get_tree().current_scene.add_child(bolt)
-	bolt.setup(self, direction, damage, 0.0, &"attack", _consume_enchant_payload())
+	bolt.setup(self, direction, damage, 0.0, &"skill")
 
-func _consume_enchant_payload() -> Dictionary:
-	if not enchant_active:
-		return {}
-	enchant_active = false
-	enchant_sigil.visible = false
-	return _build_control_payload()
+func _spawn_skill1_bolt(spawn_position: Vector2, direction: Vector2, damage: float) -> void:
+	_spawn_red_bolt(spawn_position, direction, damage, skill1_ring_projectile_speed)
 
-func _apply_burst_damage(center: Vector2, radius: float, damage: float, extra_payload: Dictionary) -> void:
+func _spawn_red_bolt(spawn_position: Vector2, direction: Vector2, damage: float, speed: float) -> void:
+	var bolt: Area2D = MAGE_RED_BOLT_SCENE.instantiate()
+	bolt.global_position = spawn_position
+	get_tree().current_scene.add_child(bolt)
+	bolt.setup(self, direction, damage, speed)
+
+func _apply_radius_damage(center: Vector2, radius: float, damage: float) -> void:
 	for player in get_tree().get_nodes_in_group("player"):
 		if not _is_targetable_player(player):
 			continue
 		var node_2d: Node2D = player
 		if center.distance_to(node_2d.global_position) > radius:
 			continue
-		var payload := {
+		node_2d.receive_hit({
 			"source": self,
 			"damage": damage,
 			"crit_rate": 0.0
-		}
-		for key in extra_payload.keys():
-			payload[key] = extra_payload[key]
-		node_2d.receive_hit(payload)
+		})
 
-func _build_control_payload() -> Dictionary:
-	return {
-		"silence_duration": silence_duration,
-		"slow_duration": slow_duration,
-		"slow_multiplier": slow_multiplier,
-		"root_duration": root_duration
-	}
-
-func _update_blades(delta: float) -> void:
-	if not blades_active:
-		return
-	blade_time_remaining = maxf(blade_time_remaining - delta, 0.0)
-	blade_orbit.visible = true
-	blade_orbit.rotation += delta * 2.8
-	for key in blade_hit_cooldowns.keys():
-		blade_hit_cooldowns[key] = maxf(float(blade_hit_cooldowns[key]) - delta, 0.0)
-	for index in range(blade_nodes.size()):
-		var angle := blade_orbit.rotation + TAU * float(index) / float(max(blade_nodes.size(), 1))
-		blade_nodes[index].position = Vector2.RIGHT.rotated(angle) * 34.0
+func _apply_laser_damage() -> void:
+	var direction := Vector2.RIGHT.rotated(skill3_current_angle)
 	for player in get_tree().get_nodes_in_group("player"):
 		if not _is_targetable_player(player):
 			continue
-		var node_2d: Node2D = player
-		if global_position.distance_to(node_2d.global_position) > blade_radius:
-			continue
-		var key := node_2d.get_instance_id()
-		if float(blade_hit_cooldowns.get(key, 0.0)) > 0.0:
-			continue
-		blade_hit_cooldowns[key] = blade_tick_interval
-		node_2d.receive_hit({
-			"source": self,
-			"damage": skill1_damage,
-			"crit_rate": 0.0
-		})
-	if blade_time_remaining <= 0.0:
-		blades_active = false
-		blade_orbit.visible = false
-		blade_hit_cooldowns.clear()
+		var node_2d := player as Node2D
+		if _distance_to_segment(node_2d.global_position, global_position, global_position + direction * skill3_laser_length) <= skill3_laser_width:
+			node_2d.receive_hit({
+				"source": self,
+				"damage": skill3_laser_damage,
+				"crit_rate": 0.0
+			})
 
-func _show_burst_effect(center: Vector2, radius: float) -> void:
+func _show_laser_effect() -> void:
+	focus_ring.visible = false
+	enchant_sigil.visible = false
+	_update_laser_sprite_pair(
+		laser_body_sprite,
+		laser_core_sprite,
+		laser_line,
+		skill3_current_angle
+	)
+
+func _update_skill3_laser_angles(elapsed: float) -> void:
+	var rotate_amount := deg_to_rad(skill3_rotate_speed_degrees) * elapsed
+	skill3_current_angle = _move_angle_toward(skill3_start_angle, skill3_target_angle, rotate_amount)
+
+func _show_burst_effect(center: Vector2, radius: float, color: Color) -> void:
 	var ring := Line2D.new()
 	ring.width = 4.0
 	ring.closed = true
-	ring.default_color = Color(0.78, 0.9, 1.0, 0.88)
-	ring.points = _build_ring_points(radius, 18)
+	ring.default_color = color
+	ring.points = _build_ring_points(radius, 20)
 	ring.global_position = center
 	get_tree().current_scene.add_child(ring)
 	var tween := create_tween()
-	tween.tween_property(ring, "scale", Vector2.ONE * 1.18, 0.16)
+	tween.tween_property(ring, "scale", Vector2.ONE * 1.16, 0.16)
 	tween.parallel().tween_property(ring, "modulate:a", 0.0, 0.16)
 	tween.finished.connect(ring.queue_free)
+
+func _clear_skill4_markers() -> void:
+	for marker_data in skill4_markers:
+		var marker: Variant = marker_data.get("node", null)
+		if marker is Node and is_instance_valid(marker):
+			(marker as Node).queue_free()
+	skill4_markers.clear()
+
+func _clear_unused_visual_nodes() -> void:
+	enchant_sigil.visible = false
+	focus_ring.visible = false
+	blade_orbit.visible = false
+	_set_laser_visuals_visible(false)
 
 func _setup_body_visual() -> void:
 	body_sprite = Sprite2D.new()
@@ -426,33 +526,83 @@ func _setup_weapon_visual() -> void:
 	weapon_sprite.position = Vector2(-40.0, 4.0)
 	weapon.add_child(weapon_sprite)
 
-func _animate_weapon_swing(start_degrees: float, end_degrees: float, duration: float) -> void:
-	weapon_angle_offset = deg_to_rad(start_degrees)
-	var tween := create_tween()
-	tween.tween_property(self, "weapon_angle_offset", deg_to_rad(end_degrees), maxf(duration, 0.01))
+func _setup_laser_visuals() -> void:
+	laser_body_sprite = _create_laser_body_sprite("LaserBody")
+	laser_core_sprite = _create_laser_core_sprite("LaserCore")
+	laser_line = _create_laser_line("LaserLine")
+
+func _create_laser_body_sprite(node_name: String) -> Sprite2D:
+	var sprite := Sprite2D.new()
+	sprite.name = node_name
+	sprite.texture = skill3_laser_body_texture
+	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	sprite.centered = true
+	sprite.visible = false
+	sprite.modulate = Color(1.0, 1.0, 1.0, 0.94)
+	sprite.z_index = 80
+	effects_layer.add_child(sprite)
+	return sprite
+
+func _create_laser_core_sprite(node_name: String) -> Sprite2D:
+	var sprite := Sprite2D.new()
+	sprite.name = node_name
+	sprite.texture = skill3_laser_core_texture
+	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	sprite.centered = true
+	sprite.visible = false
+	sprite.modulate = Color(1.0, 1.0, 1.0, 0.96)
+	sprite.z_index = 81
+	effects_layer.add_child(sprite)
+	return sprite
+
+func _create_laser_line(node_name: String) -> Line2D:
+	var line := Line2D.new()
+	line.name = node_name
+	line.width = skill3_laser_width * 1.35
+	line.default_color = Color(1.0, 0.82, 0.42, 0.78)
+	line.visible = false
+	line.z_index = 82
+	line.closed = false
+	effects_layer.add_child(line)
+	return line
+
+func _update_laser_sprite_pair(body_sprite_ref: Sprite2D, core_sprite_ref: Sprite2D, line_ref: Line2D, angle: float) -> void:
+	if body_sprite_ref == null or core_sprite_ref == null:
+		return
+	var direction := Vector2.RIGHT.rotated(angle)
+	if line_ref != null:
+		line_ref.visible = true
+		line_ref.global_position = global_position
+		line_ref.points = PackedVector2Array([
+			Vector2.ZERO,
+			direction * skill3_laser_length
+		])
+	if skill3_laser_body_texture != null:
+		var body_size := skill3_laser_body_texture.get_size()
+		var body_scale_x := skill3_laser_length / maxf(body_size.x, 1.0)
+		var body_scale_y := maxf((skill3_laser_width * 2.2) / maxf(body_size.y, 1.0), 0.01)
+		body_sprite_ref.visible = true
+		body_sprite_ref.global_position = global_position + direction * (skill3_laser_length * 0.5)
+		body_sprite_ref.rotation = angle
+		body_sprite_ref.scale = Vector2(body_scale_x, body_scale_y)
+	if skill3_laser_core_texture != null:
+		core_sprite_ref.visible = true
+		core_sprite_ref.global_position = global_position
+		core_sprite_ref.scale = Vector2.ONE * 1.1
+		core_sprite_ref.rotation = 0.0
+
+func _set_laser_visuals_visible(visible_value: bool) -> void:
+	for item in [laser_body_sprite, laser_core_sprite, laser_line]:
+		if item != null:
+			item.visible = visible_value
 
 func _update_visuals() -> void:
 	if target != null and is_instance_valid(target):
 		var to_target := target.global_position - global_position
 		if to_target != Vector2.ZERO:
 			line_direction = to_target.normalized()
-	var body_tint := Color.WHITE
-	if silenced_time_remaining > 0.0:
-		body_tint = Color(0.9, 0.82, 1.0, 1.0)
-	elif enchant_active:
-		body_tint = Color(1.0, 0.95, 0.86, 1.0)
-	elif blades_active:
-		body_tint = Color(0.9, 0.96, 1.0, 1.0)
-	_set_body_tint(body_tint)
-	focus_ring.visible = state == &"basic_attack"
-	if focus_ring.visible:
-		focus_ring.rotation = line_direction.angle()
-		focus_ring.scale = Vector2.ONE * (0.9 + 0.08 * sin(Time.get_ticks_msec() * 0.008))
+	_set_body_tint(Color.WHITE)
 	burst_ring.default_color = Color(0.78, 0.9, 1.0, 0.9)
-	enchant_sigil.visible = enchant_active
-	if enchant_sigil.visible:
-		enchant_sigil.rotation += 0.08
-		enchant_sigil.scale = Vector2.ONE * (0.96 + 0.08 * sin(Time.get_ticks_msec() * 0.008))
 	_apply_float_body_motion(1.45, 0.055)
 	weapon.position = line_direction * 18.0 + Vector2(0.0, -4.0)
 	weapon.rotation = line_direction.angle() + weapon_angle_offset
@@ -478,6 +628,31 @@ func _build_ring_points(radius: float, steps: int = 16) -> PackedVector2Array:
 		points.append(Vector2.RIGHT.rotated(angle) * radius)
 	return points
 
+func _distance_to_segment(point: Vector2, segment_start: Vector2, segment_end: Vector2) -> float:
+	var segment := segment_end - segment_start
+	var length_sq := segment.length_squared()
+	if length_sq <= 0.0001:
+		return point.distance_to(segment_start)
+	var weight := clampf((point - segment_start).dot(segment) / length_sq, 0.0, 1.0)
+	var closest := segment_start + segment * weight
+	return point.distance_to(closest)
+
+func _move_angle_toward(from_angle: float, to_angle: float, max_delta: float) -> float:
+	var difference := angle_difference(from_angle, to_angle)
+	if absf(difference) <= max_delta:
+		return to_angle
+	return from_angle + signf(difference) * max_delta
+
+func _show_intent_text(label_text: String, color_value: Color, world_position: Vector2, scale_value: float = 0.84) -> void:
+	var popup := DAMAGE_NUMBER_SCENE.instantiate()
+	popup.position = to_local(world_position) + Vector2(-42.0, -100.0)
+	if popup.has_method("setup_text"):
+		popup.setup_text(label_text, color_value, scale_value)
+	if popup is CanvasItem:
+		(popup as CanvasItem).z_index = 60
+	popup.lifetime = 0.8
+	effects_layer.add_child(popup)
+
 func _spawn_damage_number(amount: float, is_critical: bool) -> void:
 	var damage_number := DAMAGE_NUMBER_SCENE.instantiate()
 	damage_number.position = Vector2(0.0, -40.0)
@@ -493,12 +668,6 @@ func _on_damaged(_amount: float, remaining_hp: float, _source: Node) -> void:
 			_update_visuals()
 	)
 
-func _on_healed(_amount: float, current_hp: float) -> void:
-	hp = current_hp
-
-func _on_shield_changed(current_shield: float) -> void:
-	shield = current_shield
-
 func _on_died() -> void:
 	if state == &"dead":
 		return
@@ -507,8 +676,10 @@ func _on_died() -> void:
 	focus_ring.visible = false
 	burst_ring.visible = false
 	enchant_sigil.visible = false
+	_set_laser_visuals_visible(false)
 	blade_orbit.visible = false
 	weapon.visible = false
+	_clear_skill4_markers()
 	Sfx.play_event(&"boss_generic_dead", global_position)
 	var timer := get_tree().create_timer(0.55)
 	timer.timeout.connect(func() -> void:

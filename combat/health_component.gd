@@ -76,7 +76,9 @@ func heal(amount: float) -> void:
 
 func receive_hit(payload: Dictionary) -> Dictionary:
 	var source_value: Variant = payload.get("source", null)
-	var source: Node = source_value if source_value is Node and is_instance_valid(source_value) else null
+	var source: Node = null
+	if is_instance_valid(source_value) and source_value is Node:
+		source = source_value
 	if _is_owner_cheat_protected():
 		return {
 			"damage": 0.0,
