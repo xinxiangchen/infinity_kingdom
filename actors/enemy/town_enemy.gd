@@ -1,4 +1,4 @@
-extends CharacterBody2D
+﻿extends CharacterBody2D
 
 signal defeated
 
@@ -250,11 +250,11 @@ func _update_swordsman(delta: float) -> void:
 	var distance := _refresh_target_direction()
 	if state == &"attack_slash":
 		velocity = Vector2.ZERO
-		if not action_committed and state_time >= 0.45:
+		if not action_committed and state_time >= 1.0:
 			action_committed = true
 			_spawn_melee_attack_effect(attack_range + 20.0, Color(1.0, 0.78, 0.5, 0.95), 24.0, 12.0)
 			_hit_target_radius(attack_range, attack_damage)
-		if state_time >= 0.9:
+		if state_time >= 1.45:
 			_enter_recover(0.3)
 		return
 	if state == &"recover":
@@ -277,11 +277,11 @@ func _update_shield(delta: float) -> void:
 	var distance := _refresh_target_direction()
 	if state == &"shield_bash":
 		velocity = Vector2.ZERO
-		if not action_committed and state_time >= 0.55:
+		if not action_committed and state_time >= 1.0:
 			action_committed = true
 			_spawn_melee_attack_effect(attack_range + 26.0, Color(0.92, 0.84, 0.64, 0.95), 30.0, 14.0, true)
 			_hit_target_radius(attack_range + 8.0, attack_damage)
-		if state_time >= 0.95:
+		if state_time >= 1.4:
 			_enter_recover(0.55)
 		return
 	if state == &"guard_hold":
@@ -298,7 +298,7 @@ func _update_shield(delta: float) -> void:
 		state_time = 0.0
 		action_committed = false
 		attack_cooldown = attack_interval
-		_show_intent_text("Shield Bash", Color(0.98, 0.86, 0.66, 1.0), 0.86)
+		_show_intent_text("!", Color(1.0, 0.95, 0.56, 1.0), 0.92)
 		Sfx.play_event(&"enemy_shield_bash", global_position)
 		return
 	if skill_cooldown <= 0.0 and distance <= attack_range + 40.0:
@@ -319,10 +319,10 @@ func _update_archer(delta: float) -> void:
 		line_direction = to_target.normalized()
 	if state == &"draw_bow":
 		velocity = Vector2.ZERO
-		if not action_committed and state_time >= 0.55:
+		if not action_committed and state_time >= 1.0:
 			action_committed = true
 			_fire_projectile(attack_damage, Color(0.8, 0.92, 0.66, 1.0), 540.0)
-		if state_time >= 0.82:
+		if state_time >= 1.35:
 			_enter_recover(0.28)
 		return
 	if state == &"recover":
@@ -333,7 +333,7 @@ func _update_archer(delta: float) -> void:
 		state_time = 0.0
 		action_committed = false
 		attack_cooldown = attack_interval
-		_show_intent_text("Arrow Shot", Color(0.82, 0.96, 0.72, 1.0), 0.8)
+		_show_intent_text("!", Color(1.0, 0.95, 0.56, 1.0), 0.92)
 		return
 	state = &"reposition"
 	_set_ranged_spacing_velocity(distance, 150.0, attack_range + 120.0, 0.7, 0.7)
@@ -375,7 +375,7 @@ func _update_hunter(delta: float) -> void:
 		state = &"dash_in"
 		state_time = 0.0
 		skill_cooldown = 3.0
-		_show_intent_text("Pounce", Color(1.0, 0.74, 0.70, 1.0), 0.84)
+		_show_intent_text("!", Color(1.0, 0.95, 0.56, 1.0), 0.92)
 		Sfx.play_event(&"enemy_hunter_dash", global_position)
 		return
 	state = &"stalk"
@@ -390,10 +390,10 @@ func _update_apprentice(delta: float) -> void:
 		line_direction = to_target.normalized()
 	if state == &"cast_bolt":
 		velocity = Vector2.ZERO
-		if not action_committed and state_time >= 0.55:
+		if not action_committed and state_time >= 1.0:
 			action_committed = true
 			_fire_projectile(attack_damage, Color(0.72, 0.84, 1.0, 1.0), 420.0)
-		if state_time >= 0.9:
+		if state_time >= 1.45:
 			_enter_recover(0.45)
 		return
 	if state == &"recover":
@@ -404,7 +404,7 @@ func _update_apprentice(delta: float) -> void:
 		state_time = 0.0
 		action_committed = false
 		attack_cooldown = attack_interval
-		_show_intent_text("Frost Bolt", Color(0.78, 0.88, 1.0, 1.0), 0.8)
+		_show_intent_text("!", Color(1.0, 0.95, 0.56, 1.0), 0.92)
 		return
 	state = &"move"
 	_set_ranged_spacing_velocity(distance, 180.0, 280.0, 0.62, 0.54)
@@ -418,11 +418,11 @@ func _update_arcanist(delta: float) -> void:
 		line_direction = to_target.normalized()
 	if state == &"basic_cast":
 		velocity = Vector2.ZERO
-		if not action_committed and state_time >= 0.48:
+		if not action_committed and state_time >= 1.0:
 			action_committed = true
 			_fire_projectile(attack_damage, Color(1.0, 0.78, 0.48, 1.0), 500.0)
 			basic_attack_counter += 1
-		if state_time >= 0.78:
+		if state_time >= 1.3:
 			_enter_recover(0.22)
 		return
 	if state == &"skill_mark":
@@ -632,9 +632,12 @@ func _show_intent_text(label_text: String, color_value: Color, scale_value: floa
 	if effects_layer == null:
 		return
 	var popup := DAMAGE_NUMBER_SCENE.instantiate()
-	popup.position = Vector2(-38.0, -56.0)
+	popup.position = Vector2(-38.0, -96.0)
 	if popup.has_method("setup_text"):
 		popup.setup_text(label_text, color_value, scale_value)
+	if popup is CanvasItem:
+		(popup as CanvasItem).z_index = 60
+	popup.lifetime = 0.8
 	effects_layer.add_child(popup)
 
 func _hit_target_radius(radius: float, damage: float) -> void:
@@ -971,3 +974,4 @@ func _spawn_death_burst() -> void:
 		tween.parallel().tween_property(shard, "rotation", direction.angle(), 0.18)
 		tween.parallel().tween_property(shard, "modulate:a", 0.0, 0.18)
 		tween.finished.connect(shard.queue_free)
+

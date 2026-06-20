@@ -1,0 +1,21 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://effects/projectiles/mage_boss_red_bolt.gd" id="1"]
+
+[sub_resource type="CapsuleShape2D" id="1"]
+radius = 7.0
+height = 32.0
+
+[node name="MageBossRedBolt" type="Area2D"]
+script = ExtResource("1")
+collision_layer = 0
+collision_mask = 1
+monitoring = true
+monitorable = false
+
+[node name="Bolt" type="Sprite2D" parent="."]
+texture_filter = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+rotation = 1.5708
+shape = SubResource("1")

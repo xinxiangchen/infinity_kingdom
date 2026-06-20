@@ -72,11 +72,9 @@
 - `actors/encounters/empty_encounter.gd`
 - `actors/encounters/town_mob_encounter.gd`
 - `actors/bosses/town/emperor_boss.gd`
-- `actors/bosses/town/guard_unit.gd`
 - `actors/bosses/town/judicator_boss.gd`
 - `actors/bosses/town/mage_boss.gd`
 - `actors/bosses/town/ranger_boss.gd`
-- `actors/bosses/town/royal_guard_formation.gd`
 - `actors/bosses/town/twin_princes_boss.gd`
 
 ## 效果与投射物

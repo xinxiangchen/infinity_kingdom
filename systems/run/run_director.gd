@@ -84,6 +84,8 @@ var reward_history: Array[int] = []
 var hero_level: int = 1
 var hero_xp: int = 0
 var hero_xp_to_next: int = 45
+var skill_points: int = 0
+var max_skill_points: int = 6
 var total_kills: int = 0
 var town_service_consumed: bool = false
 var rng := RandomNumberGenerator.new()
@@ -106,6 +108,7 @@ func reset_run() -> void:
 	hero_level = 1
 	hero_xp = 0
 	hero_xp_to_next = _xp_needed_for_level(hero_level)
+	skill_points = 0
 	total_kills = 0
 	town_service_consumed = false
 	_emit_state()
@@ -150,6 +153,7 @@ func grant_experience(amount: int) -> Dictionary:
 			"previous_level": previous_level,
 			"current_level": hero_level,
 			"levels_gained": 0,
+			"skill_points_gained": 0,
 			"xp": hero_xp,
 			"xp_to_next": hero_xp_to_next
 		}
@@ -160,15 +164,38 @@ func grant_experience(amount: int) -> Dictionary:
 		hero_level += 1
 		levels_gained += 1
 		hero_xp_to_next = _xp_needed_for_level(hero_level)
+	var skill_points_gained := grant_skill_points(levels_gained)
 	_emit_state()
 	return {
 		"granted": granted,
 		"previous_level": previous_level,
 		"current_level": hero_level,
 		"levels_gained": levels_gained,
+		"skill_points_gained": skill_points_gained,
 		"xp": hero_xp,
 		"xp_to_next": hero_xp_to_next
 	}
+
+func grant_skill_points(amount: int) -> int:
+	var granted := maxi(amount, 0)
+	if granted <= 0:
+		return 0
+	var previous_points := skill_points
+	skill_points = mini(skill_points + granted, max_skill_points)
+	return skill_points - previous_points
+
+func spend_skill_point(amount: int = 1) -> bool:
+	var cost := maxi(amount, 0)
+	if cost <= 0:
+		return true
+	if skill_points < cost:
+		return false
+	skill_points -= cost
+	_emit_state()
+	return true
+
+func can_spend_skill_point(amount: int = 1) -> bool:
+	return skill_points >= maxi(amount, 0)
 
 func record_kill(amount: int = 1) -> void:
 	var granted := maxi(amount, 0)
@@ -331,6 +358,8 @@ func get_state() -> Dictionary:
 		"hero_level": hero_level,
 		"hero_xp": hero_xp,
 		"hero_xp_to_next": hero_xp_to_next,
+		"skill_points": skill_points,
+		"max_skill_points": max_skill_points,
 		"total_kills": total_kills,
 		"town_service_consumed": town_service_consumed
 	}

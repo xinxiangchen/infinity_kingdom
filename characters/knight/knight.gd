@@ -408,6 +408,7 @@ func start_attack() -> void:
 	current_attack_targets.clear()
 	current_attack_name = &"attack"
 	attack_started.emit(current_attack_name)
+	Sfx.play_event(&"player_knight_attack", global_position)
 	slash_arc.visible = true
 	slash_arc.position = _attack_visual_offset()
 	slash_arc.rotation = _attack_facing().angle()
@@ -452,6 +453,7 @@ func start_dash_from_skill() -> void:
 	if dash_direction == Vector2.ZERO:
 		dash_direction = facing if facing != Vector2.ZERO else Vector2.RIGHT
 	dash_direction = dash_direction.normalized()
+	Sfx.play_event(&"player_knight_skill1_dash", global_position)
 	play_animation(&"dash")
 	_animate_weapon_swing(-36.0, 16.0, 0.08, 0.12)
 
@@ -555,6 +557,7 @@ func finish_dodge() -> void:
 func trigger_shockwave() -> void:
 	var shockwave_targets: Array[Node] = []
 	attack_started.emit(&"skill2")
+	Sfx.play_event(&"player_knight_skill2_shockwave", global_position)
 	_show_shockwave()
 	var payload := {}
 	if skill2_knock_up_upgrade:
@@ -601,6 +604,7 @@ func apply_sanctuary() -> void:
 	sanctuary_time_remaining = buff_duration
 	sanctuary_heal_tick_elapsed = 0.0
 	attack_started.emit(&"skill3")
+	Sfx.play_event(&"player_knight_skill3_sanctuary", global_position)
 	_show_sanctuary_activation()
 	attack_finished.emit(&"skill3")
 

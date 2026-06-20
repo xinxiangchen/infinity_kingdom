@@ -12,6 +12,7 @@ const WORLD_HEALTH_BAR_SCRIPT := preload("res://ui/world_health_bar.gd")
 const INVENTORY_PANEL_SCRIPT := preload("res://ui/inventory_panel.gd")
 const CONSUMABLE_BAR_SCRIPT := preload("res://ui/consumable_bar.gd")
 const STAGE_REWARD_PANEL_SCRIPT := preload("res://ui/stage_reward_panel.gd")
+const SKILL_TREE_PANEL_SCRIPT := preload("res://ui/skill_tree_panel.gd")
 const LINEAGE_HUD_SCRIPT := preload("res://ui/lineage_hud.gd")
 const HEIR_SELECT_PANEL_SCRIPT := preload("res://ui/heir_select_panel.gd")
 const CROWN_DROP_TEXTURE_PATH := "res://assets/effects/pickups/crown_drop_cutout.png"
@@ -106,6 +107,7 @@ var door_transition_backdrop: ColorRect = null
 var inventory_panel: CanvasLayer = null
 var consumable_bar: CanvasLayer = null
 var stage_reward_panel: CanvasLayer = null
+var skill_tree_panel: CanvasLayer = null
 var lineage_hud: CanvasLayer = null
 var heir_select_panel: CanvasLayer = null
 var pending_lineage_respawn: Dictionary = {}
@@ -142,6 +144,7 @@ func _ready() -> void:
 	_build_inventory_panel()
 	_build_consumable_bar()
 	_build_stage_reward_panel()
+	_build_skill_tree_panel()
 	_build_lineage_hud()
 	_build_heir_select_panel()
 	if get_tree() != null and not get_tree().node_added.is_connected(_on_tree_node_added):
@@ -165,6 +168,8 @@ func _ready() -> void:
 		stage_reward_panel.reward_chosen.connect(_on_stage_reward_chosen)
 		if stage_reward_panel.has_signal("pause_requested"):
 			stage_reward_panel.pause_requested.connect(_on_stage_reward_pause_requested)
+	if skill_tree_panel != null and skill_tree_panel.has_signal("pause_requested"):
+		skill_tree_panel.pause_requested.connect(_on_skill_tree_pause_requested)
 	if pause_menu != null:
 		if pause_menu.has_method("bind_world"):
 			pause_menu.bind_world(self)
@@ -350,6 +355,11 @@ func _build_stage_reward_panel() -> void:
 	stage_reward_panel.name = "StageRewardPanel"
 	add_child(stage_reward_panel)
 
+func _build_skill_tree_panel() -> void:
+	skill_tree_panel = SKILL_TREE_PANEL_SCRIPT.new()
+	skill_tree_panel.name = "SkillTreePanel"
+	add_child(skill_tree_panel)
+
 func _build_lineage_hud() -> void:
 	lineage_hud = LINEAGE_HUD_SCRIPT.new()
 	lineage_hud.name = "LineageHud"
@@ -491,6 +501,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			_toggle_inventory_panel()
 			get_viewport().set_input_as_handled()
 			return
+		if event.keycode == KEY_U:
+			_toggle_skill_tree_panel()
+			get_viewport().set_input_as_handled()
+			return
 		if event.keycode >= KEY_1 and event.keycode < KEY_1 + (ConsumableManager.MAX_SLOTS if ConsumableManager != null else 4):
 			var used := ConsumableManager.use_slot(event.keycode - KEY_1, player_character) if ConsumableManager != null else false
 			if used:
@@ -559,6 +573,10 @@ func _on_character_selected(character_id: StringName) -> void:
 	_update_screen_layers()
 	if character_hud != null and character_hud.has_method("bind_character"):
 		character_hud.bind_character(player_character)
+	if character_hud != null and character_hud.has_signal("skill_tree_requested") and not character_hud.skill_tree_requested.is_connected(_on_skill_tree_requested):
+		character_hud.skill_tree_requested.connect(_on_skill_tree_requested)
+	if skill_tree_panel != null and skill_tree_panel.has_method("bind_actor"):
+		skill_tree_panel.bind_actor(player_character)
 	AccessoryManager.apply_to_actor(player_character)
 	RunEffects.refresh_persistent_modifiers(player_character)
 	LineageDirector.apply_aptitude_to_actor(player_character)
@@ -1282,6 +1300,7 @@ func _begin_crown_choice(ending_kind: String) -> void:
 	if character_select != null:
 		character_select.visible = false
 	_update_screen_layers()
+	_show_victory_result(ending_kind)
 
 func _process_crown_choice(delta: float) -> void:
 	if not crown_awaiting_choice:
@@ -1541,6 +1560,7 @@ func _on_encounter_actor_defeated(actor: Node) -> void:
 		var levels_gained := int(xp_result.get("levels_gained", 0))
 		if levels_gained > 0:
 			_apply_level_up_rewards(player_character, levels_gained)
+			_update_skill_tree_panel_binding()
 			var level_value := int(xp_result.get("current_level", 1))
 			_spawn_world_text(
 				player_character.global_position + Vector2(0.0, -54.0),
@@ -1553,6 +1573,8 @@ func _on_encounter_actor_defeated(actor: Node) -> void:
 				LEVEL_UP_FLASH_COLOR,
 				1.08
 			)
+		if xp_amount > 0 and int(RunDirector.get_state().get("skill_points", 0)) > 0:
+			_open_skill_tree_if_available()
 	_spawn_reward_pickups(reward_position, reward.get("drops", []) as Array)
 
 func _build_defeat_rewards(actor: Node) -> Dictionary:
@@ -2267,30 +2289,6 @@ func _encounter_threat_hint(encounter: Node) -> String:
 			"盯住他的技能冷却，把位移留给跃击和直线裁决。",
 			"盯住他的技能冷卻，把位移留給躍擊和直線裁決。"
 		)
-	if script_path.ends_with("royal_guard_formation.gd"):
-		var coverage := float(encounter.get("coverage_progress")) if _has_property(encounter, "coverage_progress") else 0.0
-		var guard_count := 0
-		if _has_property(encounter, "all_guards"):
-			var guards_value: Variant = encounter.get("all_guards")
-			if guards_value is Array:
-				guard_count = (guards_value as Array).size()
-		if coverage < 1.0:
-			return _ui_text(
-				"The formation stays immune until coverage fills. Survive and isolate exposed guards.",
-				"覆盖条填满前阵列都处于免疫，先活下来并单抓露头的近卫。",
-				"覆蓋條填滿前陣列都處於免疫，先活下來並單抓露頭的近衛。"
-			)
-		if guard_count > 2:
-			return _ui_text(
-				"Coverage is broken. Collapse the mobile guards before the crossfire settles.",
-				"覆盖已被打破，在交叉火力重新站稳前先收掉机动近卫。",
-				"覆蓋已被打破，在交叉火力重新站穩前先收掉機動近衛。"
-			)
-		return _ui_text(
-			"The formation is vulnerable. Clean up the remaining guards quickly.",
-			"阵列已经可破，尽快清掉剩余近卫。",
-			"陣列已經可破，盡快清掉剩餘近衛。"
-		)
 	if script_path.ends_with("twin_princes_boss.gd"):
 		var phase := int(encounter.get("current_phase")) if _has_property(encounter, "current_phase") else 1
 		var state_name := String(encounter.get("state")) if _has_property(encounter, "state") else ""
@@ -2520,6 +2518,31 @@ func _on_battle_status_debug_requested() -> void:
 		return
 	debug_panel.toggle()
 
+func _on_skill_tree_pause_requested() -> void:
+	if skill_tree_panel != null and skill_tree_panel.has_method("close") and bool(skill_tree_panel.visible):
+		skill_tree_panel.close()
+
+func _on_skill_tree_requested() -> void:
+	_toggle_skill_tree_panel()
+
+func _update_skill_tree_panel_binding() -> void:
+	if skill_tree_panel == null or not skill_tree_panel.has_method("bind_actor"):
+		return
+	skill_tree_panel.bind_actor(player_character)
+
+func _toggle_skill_tree_panel() -> void:
+	if skill_tree_panel == null or not skill_tree_panel.has_method("toggle"):
+		return
+	_update_skill_tree_panel_binding()
+	skill_tree_panel.toggle()
+
+func _open_skill_tree_if_available() -> void:
+	if skill_tree_panel == null or not skill_tree_panel.has_method("has_available_upgrades"):
+		return
+	_update_skill_tree_panel_binding()
+	if bool(skill_tree_panel.has_available_upgrades()):
+		skill_tree_panel.open()
+
 func _on_audio_settings_panel_closed() -> void:
 	if return_pause_after_audio_panel:
 		return_pause_after_audio_panel = false
@@ -2581,6 +2604,10 @@ func _respawn_lineage_heir() -> void:
 	_update_screen_layers()
 	if character_hud != null and character_hud.has_method("bind_character"):
 		character_hud.bind_character(player_character)
+	if character_hud != null and character_hud.has_signal("skill_tree_requested") and not character_hud.skill_tree_requested.is_connected(_on_skill_tree_requested):
+		character_hud.skill_tree_requested.connect(_on_skill_tree_requested)
+	if skill_tree_panel != null and skill_tree_panel.has_method("bind_actor"):
+		skill_tree_panel.bind_actor(player_character)
 	AccessoryManager.reset_run()
 	if ConsumableManager != null:
 		ConsumableManager.reset_run()
@@ -2614,6 +2641,8 @@ func _reset_to_character_select() -> void:
 	if player_character != null and is_instance_valid(player_character):
 		player_character.queue_free()
 	player_character = null
+	if skill_tree_panel != null and skill_tree_panel.has_method("bind_actor"):
+		skill_tree_panel.bind_actor(null)
 	encounter_index = -1
 	waiting_for_accessory_choice = false
 	active_accessory_reason = ""

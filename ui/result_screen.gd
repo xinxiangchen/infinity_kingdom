@@ -127,11 +127,15 @@ func _unhandled_input(event: InputEvent) -> void:
 		match event.keycode:
 			KEY_ESCAPE, KEY_ENTER, KEY_KP_ENTER, KEY_SPACE:
 				_close_result()
-				get_viewport().set_input_as_handled()
+				var viewport := get_viewport()
+				if viewport != null:
+					viewport.set_input_as_handled()
 			KEY_Q:
 				get_tree().paused = false
 				quit_requested.emit()
-				get_viewport().set_input_as_handled()
+				var viewport := get_viewport()
+				if viewport != null:
+					viewport.set_input_as_handled()
 
 func _queue_layout_refresh() -> void:
 	call_deferred("_refresh_layout")

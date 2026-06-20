@@ -5,7 +5,7 @@ const PLAYER_ORB_TEXTURE_PATH := "res://assets/effects/projectiles/player_staff_
 
 @export var speed: float = 620.0
 @export var lifetime: float = 1.5
-@export var hit_radius: float = 18.0
+@export var hit_radius: float = 10.0
 
 @onready var bolt: Sprite2D = $Bolt
 @onready var collision_shape: CollisionShape2D = $CollisionShape2D

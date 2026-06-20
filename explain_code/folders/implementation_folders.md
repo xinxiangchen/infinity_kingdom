@@ -122,7 +122,6 @@
 - `judicator_boss.gd`：审判者 Boss，跳劈、直线斩、弹幕，低血狂暴。
 - `emperor_boss.gd`：皇帝 Boss，二阶段、影步、冲锋、爆裂、齐射。
 - `twin_princes_boss.gd`：双王子 Boss，半血换相、传送、直线斩、弹幕、冲刺失误自眩。
-- `royal_guard_formation.gd` / `guard_unit.gd`：守卫阵型和守卫单位。
 
 ## `ui/`
 

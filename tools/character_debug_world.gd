@@ -57,6 +57,8 @@ var active_enemy_elite: bool = false
 func _ready() -> void:
 	if AccessoryManager != null:
 		AccessoryManager.reset_run()
+	if RunDirector != null:
+		RunDirector.reset_run()
 	if character_select != null:
 		character_select.character_selected.connect(_on_character_selected)
 		if character_select.has_signal("quit_requested"):
@@ -95,6 +97,7 @@ func _build_debug_overlay_controls() -> void:
 	var upgrade_button := Button.new()
 	upgrade_button.text = "升级"
 	upgrade_button.custom_minimum_size = Vector2(120.0, 34.0)
+	upgrade_button.focus_mode = Control.FOCUS_NONE
 	upgrade_button.tooltip_text = "打开升级面板"
 	upgrade_button.pressed.connect(_on_upgrade_requested)
 	control_row.add_child(upgrade_button)
@@ -142,6 +145,7 @@ func _on_character_selected(character_id: StringName) -> void:
 		enemy_select.open()
 	if debug_status != null and debug_status.has_method("bind_character"):
 		debug_status.bind_character(player_character)
+		debug_status.visible = true
 	_spawn_debug_target(active_enemy_id, active_enemy_elite)
 	_refresh_help_text()
 
@@ -223,6 +227,8 @@ func _return_to_character_select() -> void:
 		enemy_select.close()
 	if debug_status != null and debug_status.has_method("clear"):
 		debug_status.clear()
+	elif debug_status != null:
+		debug_status.visible = false
 	if character_select != null:
 		character_select.visible = true
 	_refresh_help_text()

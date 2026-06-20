@@ -1,4 +1,4 @@
-extends CharacterBody2D
+﻿extends CharacterBody2D
 
 signal defeated
 
@@ -7,7 +7,7 @@ signal defeated
 @export var move_speed: float = 110.0
 @export var attack_damage: float = 22.0
 @export var attack_range: float = 62.0
-@export var attack_interval: float = 1.3
+@export var attack_interval: float = 1.9
 @export var detection_range: float = 320.0
 
 @onready var body: Polygon2D = $Body
@@ -15,12 +15,16 @@ signal defeated
 @onready var effects_layer: Node2D = $EffectsLayer
 
 const DAMAGE_NUMBER_SCENE := preload("res://effects/damage_number.tscn")
+const BASIC_ATTACK_WARNING_DELAY := 1.0
+const BASIC_ATTACK_WARNING_VISIBLE_TIME := 0.8
 
 var target: Node2D = null
 var attack_cooldown: float = 0.0
 var base_position: Vector2 = Vector2.ZERO
 var knock_up_remaining: float = 0.0
 var knock_up_total: float = 0.0
+var attack_windup_remaining: float = 0.0
+var attack_warning_spawned: bool = false
 
 func _ready() -> void:
 	base_position = position
@@ -44,10 +48,20 @@ func _physics_process(delta: float) -> void:
 	var distance := global_position.distance_to(target.global_position)
 	if distance <= attack_range:
 		velocity = Vector2.ZERO
-		if attack_cooldown <= 0.0:
+		if attack_windup_remaining > 0.0:
+			if not attack_warning_spawned:
+				_show_attack_warning()
+				attack_warning_spawned = true
+			attack_windup_remaining = maxf(attack_windup_remaining - delta, 0.0)
+			if attack_windup_remaining <= 0.0:
+				attack_target()
+		elif attack_cooldown <= 0.0:
 			attack_cooldown = attack_interval
-			attack_target()
+			attack_windup_remaining = BASIC_ATTACK_WARNING_DELAY
+			attack_warning_spawned = false
 	else:
+		attack_windup_remaining = 0.0
+		attack_warning_spawned = false
 		if distance <= detection_range:
 			var direction := (target.global_position - global_position).normalized()
 			velocity = direction * move_speed
@@ -117,3 +131,11 @@ func _spawn_damage_number(amount: float, is_critical: bool) -> void:
 	damage_number.position = Vector2(0.0, -34.0)
 	damage_number.setup(amount, is_critical)
 	effects_layer.add_child(damage_number)
+
+func _show_attack_warning() -> void:
+	var popup := DAMAGE_NUMBER_SCENE.instantiate()
+	popup.position = Vector2(-8.0, -52.0)
+	if popup.has_method("setup_text"):
+		popup.setup_text("!", Color(1.0, 0.95, 0.56, 1.0), 0.92)
+	popup.lifetime = BASIC_ATTACK_WARNING_VISIBLE_TIME
+	effects_layer.add_child(popup)

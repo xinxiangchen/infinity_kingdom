@@ -7,7 +7,7 @@ Infinity Kingdom is a Godot 4 action prototype centered on a short town boss-rus
 1. `world.tscn` loads the title UI, audio managers, HUD, character select, and accessory choice UI.
 2. The player selects Knight, Ranger, or Mage.
 3. `AccessoryManager` resets the run and opens the first relic choice.
-4. Encounters advance in order: a variable town enemy sweep, Judicator, Royal Guard Formation, Twin Princes.
+4. Encounters advance through variable town enemy sweeps, Judicator, and a lineage final boss.
 5. `RunDirector` awards gold, then deals a short event deck of shop plus shuffled rest/training/pact/attunement branches.
 
 ## Main Folders
